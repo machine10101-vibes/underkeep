@@ -81,7 +81,11 @@ if (
     params.get('shot') === '6.1c' ||
     params.get('shot') === '61c' ||
     params.get('shot') === '6.1c-pick' ||
-    params.get('shot') === '6.1c-slap')
+    params.get('shot') === '6.1c-slap' ||
+    params.get('shot') === '6.2a' ||
+    params.get('shot') === '62a' ||
+    params.get('shot') === '6.2' ||
+    params.get('shot') === '62')
 ) {
   // Auto-arrange evidence shots
   setTimeout(() => {
@@ -94,10 +98,14 @@ if (
       preparePass61Shot?: () => void;
       preparePass61bShot?: (focus?: 'both' | 'slap' | 'efficiency') => void;
       preparePass61cShot?: (focus?: 'pick' | 'slap' | 'both') => void;
+      preparePass62aStabShot?: () => void;
+      preparePass62Shot?: () => void;
     };
     g.hud.hideOverlay();
     const shot = params.get('shot');
-    if (shot === '6.1c-slap') g.preparePass61cShot?.('slap');
+    if (shot === '6.2a' || shot === '62a') g.preparePass62aStabShot?.();
+    else if (shot === '6.2' || shot === '62') g.preparePass62Shot?.();
+    else if (shot === '6.1c-slap') g.preparePass61cShot?.('slap');
     else if (shot === '6.1c-pick') g.preparePass61cShot?.('pick');
     else if (shot === '6.1c' || shot === '61c') g.preparePass61cShot?.('both');
     else if (shot === '6.1b-slap') g.preparePass61bShot?.('slap');

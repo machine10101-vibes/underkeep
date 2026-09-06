@@ -84,6 +84,18 @@ export class DungeonRenderer {
   onContextLost: (() => void) | null = null;
   onContextRestored: (() => void) | null = null;
 
+  /** Shared FX geos — never dispose these. */
+  private fxDebrisGeo = new THREE.BoxGeometry(0.1, 0.08, 0.1);
+  private fxSparkGeo = new THREE.SphereGeometry(0.2, 8, 8);
+  private fxGlowGeo = new THREE.SphereGeometry(0.4, 10, 10);
+  private readonly FX_CAP = 64;
+  private digLoad = false;
+  private basePixelRatio = 1;
+  private dirLight: THREE.DirectionalLight | null = null;
+  private markOverlay = new THREE.Group();
+  private markPlaneGeo = new THREE.PlaneGeometry(TILE_SIZE * 0.7, TILE_SIZE * 0.7);
+  private digWireGeo = new THREE.EdgesGeometry(new THREE.BoxGeometry(TILE_SIZE * 0.92, 2.2, TILE_SIZE * 0.92));
+
   constructor(canvas: HTMLCanvasElement) {
     this.scene = new THREE.Scene();
     this.scene.background = new THREE.Color(0x221c24);
@@ -103,11 +115,12 @@ export class DungeonRenderer {
     });
     // Cap DPR hard — high ratios + bloom rebuilds were a common white-screen path on phones
     const coarse = typeof window !== 'undefined' && window.matchMedia?.('(pointer: coarse)').matches;
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, coarse ? 1.25 : 1.75));
+    this.basePixelRatio = Math.min(window.devicePixelRatio || 1, coarse ? 1.15 : 1.5);
+    this.renderer.setPixelRatio(this.basePixelRatio);
     // Never clear to white if something fails mid-frame
     this.renderer.setClearColor(0x221c24, 1);
     this.renderer.shadowMap.enabled = true;
-    this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    this.renderer.shadowMap.type = THREE.BasicShadowMap;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
     this.renderer.toneMappingExposure = 1.6;
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
@@ -122,7 +135,8 @@ export class DungeonRenderer {
     const dir = new THREE.DirectionalLight(0xfff2e0, 1.25);
     dir.position.set(22, 48, 14);
     dir.castShadow = true;
-    dir.shadow.mapSize.set(1024, 1024);
+    dir.shadow.mapSize.set(512, 512);
+    this.dirLight = dir;
     dir.shadow.camera.near = 5;
     dir.shadow.camera.far = 120;
     dir.shadow.camera.left = -55;
@@ -152,6 +166,7 @@ export class DungeonRenderer {
     this.scene.add(ground);
 
     this.scene.add(this.gridGroup);
+    this.scene.add(this.markOverlay);
     this.scene.add(this.entityGroup);
     this.scene.add(this.fxGroup);
 
@@ -364,31 +379,7 @@ export class DungeonRenderer {
           tile.kind === TileKind.Gold ? this.goldEdgeMat : this.earthEdgeMat
         );
         this.tileMeshes.set(key, mesh);
-        if (tile.mark) {
-          const markGeo = new THREE.PlaneGeometry(TILE_SIZE * 0.7, TILE_SIZE * 0.7);
-          markGeo.userData.disposeGeo = true;
-          const markMat = new THREE.MeshBasicMaterial({
-            color: tile.mark === 1 ? 0xff3322 : tile.mark === 2 ? 0x44aaff : 0xccccaa,
-            transparent: true,
-            opacity: 0.7,
-            depthWrite: false,
-          });
-          markMat.userData.disposeMat = true;
-          const mark = new THREE.Mesh(markGeo, markMat);
-          mark.userData.disposeGeo = true;
-          mark.rotation.x = -Math.PI / 2;
-          mark.position.set(w.x, Math.max(0.5, 2.42 * sy + mesh.position.y), w.z);
-          this.gridGroup.add(mark);
-          // Red wireframe cube like DK dig tags
-          if (tile.mark === 1) {
-            const wire = new THREE.LineSegments(
-              new THREE.EdgesGeometry(new THREE.BoxGeometry(TILE_SIZE * 0.92, 2.2 * sy, TILE_SIZE * 0.92)),
-              new THREE.LineBasicMaterial({ color: 0xff4422, transparent: true, opacity: 0.85 })
-            );
-            wire.position.set(w.x, 1.1 * sy + mesh.position.y, w.z);
-            this.gridGroup.add(wire);
-          }
-        }
+        // Marks drawn via markOverlay — avoid per-rebuild Plane/Edges allocations
         continue;
       }
 
@@ -433,24 +424,9 @@ export class DungeonRenderer {
         this.gridGroup.add(props);
       }
 
-      if (tile.mark) {
-        const mark = new THREE.Mesh(
-          new THREE.PlaneGeometry(TILE_SIZE * 0.75, TILE_SIZE * 0.75),
-          new THREE.MeshBasicMaterial({
-            color: tile.mark === 1 ? 0xff4422 : tile.mark === 2 ? 0x44aaff : 0xccccaa,
-            transparent: true,
-            opacity: 0.55,
-            depthWrite: false,
-          })
-        );
-        mark.rotation.x = -Math.PI / 2;
-        mark.position.set(w.x, 0.2, w.z);
-        this.gridGroup.add(mark);
-      }
-
       if (tile.torch) {
         // Denser warm pools — more real lights
-        const withLight = this.torches.filter((x) => x.torchLight).length < 22;
+        const withLight = this.torches.filter((x) => x.torchLight).length < 12;
         const torch = makeTorchMesh(withLight) as THREE.Group & {
           flame?: THREE.Mesh;
           torchLight?: THREE.PointLight;
@@ -474,6 +450,48 @@ export class DungeonRenderer {
         torch.position.set(w.x + ox, 0, w.z + oz);
         this.gridGroup.add(torch);
         this.torches.push(torch);
+      }
+    }
+    this.syncMarkOverlay(grid);
+  }
+
+  /** Lightweight dig/claim/fortify tags — no terrain rebuild required. */
+  syncMarkOverlay(grid: Grid): void {
+    while (this.markOverlay.children.length) {
+      const c = this.markOverlay.children.pop()!;
+      this.markOverlay.remove(c);
+      const mesh = c as THREE.Mesh;
+      if (mesh.material && (mesh.material as THREE.Material).userData?.disposeMat) {
+        (mesh.material as THREE.Material).dispose();
+      }
+    }
+    for (const tile of grid.tiles) {
+      if (!tile.mark) continue;
+      const w = grid.tileToWorld(tile.x, tile.y);
+      const dig = Math.max(0, Math.min(0.95, tile.digProgress || 0));
+      const sy = 1 - dig * 0.85;
+      const yBase =
+        tile.kind === TileKind.Earth || tile.kind === TileKind.Gold
+          ? Math.max(0.5, 2.42 * sy - dig * 1.15)
+          : 0.2;
+      const markMat = new THREE.MeshBasicMaterial({
+        color: tile.mark === 1 ? 0xff3322 : tile.mark === 2 ? 0x44aaff : 0xccccaa,
+        transparent: true,
+        opacity: 0.7,
+        depthWrite: false,
+      });
+      markMat.userData.disposeMat = true;
+      const mark = new THREE.Mesh(this.markPlaneGeo, markMat);
+      mark.rotation.x = -Math.PI / 2;
+      mark.position.set(w.x, yBase, w.z);
+      this.markOverlay.add(mark);
+      if (tile.mark === 1 && (tile.kind === TileKind.Earth || tile.kind === TileKind.Gold)) {
+        const wireMat = new THREE.LineBasicMaterial({ color: 0xff4422, transparent: true, opacity: 0.85 });
+        wireMat.userData.disposeMat = true;
+        const wire = new THREE.LineSegments(this.digWireGeo, wireMat);
+        wire.position.set(w.x, 1.1 * sy - dig * 1.15, w.z);
+        wire.scale.set(1, Math.max(0.25, sy), 1);
+        this.markOverlay.add(wire);
       }
     }
   }
@@ -542,11 +560,61 @@ export class DungeonRenderer {
     return makeCreatureMesh(color, scale, kind);
   }
 
+  private trimFx(): void {
+    while (this.fxGroup.children.length > this.FX_CAP) {
+      const c = this.fxGroup.children[0];
+      this.disposeFxChild(c);
+      this.fxGroup.remove(c);
+    }
+  }
+
+  private disposeFxChild(c: THREE.Object3D): void {
+    const mesh = c as THREE.Mesh;
+    if (mesh.isMesh) {
+      const mats = Array.isArray(mesh.material) ? mesh.material : mesh.material ? [mesh.material] : [];
+      for (const m of mats) {
+        if (m && (m as THREE.Material).userData?.disposeMat) (m as THREE.Material).dispose();
+      }
+      // shared geos only — never dispose
+    }
+    const line = c as THREE.Line;
+    if (line.isLine && line.geometry && line.geometry.userData?.disposeGeo) {
+      line.geometry.dispose();
+    }
+    if (line.isLine) {
+      const mats = Array.isArray(line.material) ? line.material : line.material ? [line.material] : [];
+      for (const m of mats) {
+        if (m && (m as THREE.Material).userData?.disposeMat) (m as THREE.Material).dispose();
+      }
+    }
+  }
+
+  /** Shed bloom/shadows/DPR while many tiles are being dug — STABILITY > flash. */
+  setDigLoad(active: boolean): void {
+    if (this.digLoad === active) return;
+    this.digLoad = active;
+    if (active) {
+      this.useComposer = false;
+      this.bloomPass.enabled = false;
+      this.renderer.setPixelRatio(Math.min(this.basePixelRatio, 1.0));
+      this.renderer.shadowMap.enabled = false;
+      if (this.dirLight) this.dirLight.castShadow = false;
+      this.trimFx();
+    } else {
+      this.bloomPass.enabled = true;
+      this.useComposer = !this.contextLost;
+      this.renderer.setPixelRatio(this.basePixelRatio);
+      this.renderer.shadowMap.enabled = true;
+      if (this.dirLight) this.dirLight.castShadow = true;
+      this.onResize();
+    }
+  }
+
   spawnFx(pos: THREE.Vector3, color: number, life = 0.6): void {
-    const m = new THREE.Mesh(
-      new THREE.SphereGeometry(0.2, 8, 8),
-      new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.9 })
-    );
+    if (this.fxGroup.children.length >= this.FX_CAP) return;
+    const mat = new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.9 });
+    mat.userData.disposeMat = true;
+    const m = new THREE.Mesh(this.fxSparkGeo, mat);
     m.position.copy(pos);
     m.position.y += 0.5;
     this.fxGroup.add(m);
@@ -560,22 +628,24 @@ export class DungeonRenderer {
    * More particles, brighter emissive colors, larger size, ~1.5–2.5s visible.
    */
   spawnCareSparks(wx: number, wz: number, mode: 'heal' | 'feast', burst = false): void {
+    if (this.fxGroup.children.length > this.FX_CAP - 8) this.trimFx();
     const primary = mode === 'heal' ? 0x55ffaa : 0xffcc33;
     const secondary = mode === 'heal' ? 0xc8ffe8 : 0xffeebb;
     const tertiary = mode === 'heal' ? 0x2aff88 : 0xffaa22;
-    const count = burst ? 22 : 10;
+    const count = burst ? (this.digLoad ? 6 : 10) : (this.digLoad ? 3 : 5);
     for (let i = 0; i < count; i++) {
-      const size = 0.16 + Math.random() * 0.32;
+      if (this.fxGroup.children.length >= this.FX_CAP) break;
+      const size = 0.7 + Math.random() * 0.6;
       const col = i % 3 === 0 ? secondary : i % 3 === 1 ? primary : tertiary;
-      const m = new THREE.Mesh(
-        new THREE.SphereGeometry(size, 10, 10),
-        new THREE.MeshBasicMaterial({
-          color: col,
-          transparent: true,
-          opacity: 1,
-          depthWrite: false,
-        })
-      );
+      const mat = new THREE.MeshBasicMaterial({
+        color: col,
+        transparent: true,
+        opacity: 1,
+        depthWrite: false,
+      });
+      mat.userData.disposeMat = true;
+      const m = new THREE.Mesh(this.fxSparkGeo, mat);
+      m.scale.setScalar(size);
       m.position.set(
         wx + (Math.random() - 0.5) * 0.85,
         0.45 + Math.random() * 0.7,
@@ -590,52 +660,57 @@ export class DungeonRenderer {
         _fxFloat?: boolean;
       };
       obj._fxStart = this.clock;
-      obj._fxLife = 1.55 + Math.random() * 0.95; // 1.55–2.5s
+      obj._fxLife = 1.2 + Math.random() * 0.7;
       obj._vx = (Math.random() - 0.5) * 1.4;
       obj._vy = 0.9 + Math.random() * 1.6;
       obj._vz = (Math.random() - 0.5) * 1.4;
       obj._fxFloat = true;
       this.fxGroup.add(m);
     }
-    const glowSize = burst ? 0.55 : 0.38;
-    const glow = new THREE.Mesh(
-      new THREE.SphereGeometry(glowSize, 12, 12),
-      new THREE.MeshBasicMaterial({
+    if (this.fxGroup.children.length < this.FX_CAP) {
+      const mat = new THREE.MeshBasicMaterial({
         color: primary,
         transparent: true,
         opacity: 0.85,
         depthWrite: false,
-      })
-    );
-    glow.position.set(wx, 0.7, wz);
-    const gObj = glow as THREE.Mesh & {
-      _fxStart?: number;
-      _fxLife?: number;
-      _vx?: number;
-      _vy?: number;
-      _vz?: number;
-      _fxFloat?: boolean;
-    };
-    gObj._fxStart = this.clock;
-    gObj._fxLife = burst ? 2.2 : 1.8;
-    gObj._vx = 0;
-    gObj._vy = 0.55;
-    gObj._vz = 0;
-    gObj._fxFloat = true;
-    this.fxGroup.add(glow);
+      });
+      mat.userData.disposeMat = true;
+      const glow = new THREE.Mesh(this.fxGlowGeo, mat);
+      glow.scale.setScalar(burst ? 1.3 : 0.95);
+      glow.position.set(wx, 0.7, wz);
+      const gObj = glow as THREE.Mesh & {
+        _fxStart?: number;
+        _fxLife?: number;
+        _vx?: number;
+        _vy?: number;
+        _vz?: number;
+        _fxFloat?: boolean;
+      };
+      gObj._fxStart = this.clock;
+      gObj._fxLife = burst ? 1.8 : 1.4;
+      gObj._vx = 0;
+      gObj._vy = 0.55;
+      gObj._vz = 0;
+      gObj._fxFloat = true;
+      this.fxGroup.add(glow);
+    }
   }
 
-  /** Dirt/rock chip burst while digging. */
+  /** Dirt/rock chip burst while digging — shared geo, hard cap. */
   spawnDigDebris(wx: number, wz: number, color = 0xc08040): void {
-    for (let i = 0; i < 7; i++) {
-      const m = new THREE.Mesh(
-        new THREE.BoxGeometry(0.08 + Math.random() * 0.1, 0.06 + Math.random() * 0.08, 0.08 + Math.random() * 0.1),
-        new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.95 })
-      );
+    if (this.fxGroup.children.length > this.FX_CAP - 4) this.trimFx();
+    const count = this.digLoad ? 2 : 4;
+    for (let i = 0; i < count; i++) {
+      if (this.fxGroup.children.length >= this.FX_CAP) break;
+      const mat = new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.95 });
+      mat.userData.disposeMat = true;
+      const m = new THREE.Mesh(this.fxDebrisGeo, mat);
+      const s = 0.7 + Math.random() * 0.8;
+      m.scale.set(s, s * 0.8, s);
       m.position.set(wx + (Math.random() - 0.5) * 0.6, 0.6 + Math.random() * 0.8, wz + (Math.random() - 0.5) * 0.6);
       const obj = m as THREE.Mesh & { _fxStart?: number; _fxLife?: number; _vx?: number; _vy?: number; _vz?: number };
       obj._fxStart = this.clock;
-      obj._fxLife = 0.45 + Math.random() * 0.35;
+      obj._fxLife = 0.35 + Math.random() * 0.25;
       obj._vx = (Math.random() - 0.5) * 3;
       obj._vy = 1.5 + Math.random() * 2.5;
       obj._vz = (Math.random() - 0.5) * 3;
@@ -674,10 +749,10 @@ export class DungeonRenderer {
     mid.x += (Math.random() - 0.5) * 2;
     points.splice(1, 0, mid);
     const geo = new THREE.BufferGeometry().setFromPoints(points);
-    const line = new THREE.Line(
-      geo,
-      new THREE.LineBasicMaterial({ color: 0xaaddff, transparent: true, opacity: 0.95 })
-    );
+    geo.userData.disposeGeo = true;
+    const lmat = new THREE.LineBasicMaterial({ color: 0xaaddff, transparent: true, opacity: 0.95 });
+    lmat.userData.disposeMat = true;
+    const line = new THREE.Line(geo, lmat);
     this.fxGroup.add(line);
     const obj = line as THREE.Line & { _fxStart?: number; _fxLife?: number };
     obj._fxStart = this.clock;
@@ -715,6 +790,7 @@ export class DungeonRenderer {
         const age = this.clock - c._fxStart;
         const life = c._fxLife;
         if (age > life) {
+          this.disposeFxChild(c);
           this.fxGroup.remove(c);
         } else if ((c as THREE.Mesh).material) {
           const mat = (c as THREE.Mesh).material as THREE.MeshBasicMaterial;

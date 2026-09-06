@@ -47,7 +47,10 @@ export interface SaveData {
   gold: number;
   mana: number;
   creatures: SavedCreature[];
-  attracted: { skitterwing: boolean; rattlekin: boolean; emberling: boolean };
+  attracted: { skitterwing: boolean; rattlekin: boolean; emberling: boolean; gravemage?: boolean };
+  researchProgress?: number;
+  researchRank?: number;
+  healUnlocked?: boolean;
   heroWaveSpawned: boolean;
   heroWaveTimer: number;
   workerCostScale: number;

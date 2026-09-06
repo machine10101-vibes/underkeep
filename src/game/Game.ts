@@ -45,7 +45,7 @@ export class Game {
   private time = 0;
   private workerCostScale = 0;
   private portalCooldown = 0;
-  private attracted = { skitterwing: false, rattlekin: false, emberling: false };
+  private attracted = { skitterwing: false, rattlekin: false, emberling: false, gravemage: false };
   private heroWaveSpawned = false;
   private heroWaveTimer = 90; // seconds until heroes
   private gameOver = false;
@@ -74,6 +74,15 @@ export class Game {
   /** Lair bed occupancy: "x,y" -> creature id */
   private bedOwners = new Map<string, number>();
   private contextRecoveryShown = false;
+  /** Mark paint without structural rebuild (overlay only). */
+  private marksDirty = false;
+  /** Coalesce expensive rebuildGrid calls. */
+  private rebuildCooldown = 0;
+  private pendingStructuralRebuild = false;
+  /** Research progress 0–100 per rank; unlocks spell potency. */
+  private researchProgress = 0;
+  private researchRank = 0;
+  private healUnlocked = false;
 
   constructor(canvas: HTMLCanvasElement) {
     // HUD first so New Game / sheets stay wired even if boot later fails
@@ -192,7 +201,7 @@ export class Game {
     this.time = 0;
     this.workerCostScale = 0;
     this.portalCooldown = 0;
-    this.attracted = { skitterwing: false, rattlekin: false, emberling: false };
+    this.attracted = { skitterwing: false, rattlekin: false, emberling: false, gravemage: false };
     this.heroWaveSpawned = false;
     this.heroWaveTimer = 90;
     this.gameOver = false;
@@ -205,6 +214,12 @@ export class Game {
     this.foodRegenAcc = 0;
     this.bedOwners.clear();
     this.contextRecoveryShown = false;
+    this.researchProgress = 0;
+    this.researchRank = 0;
+    this.healUnlocked = false;
+    this.marksDirty = false;
+    this.pendingStructuralRebuild = false;
+    this.rebuildCooldown = 0;
     this.grid = new Grid(40, 40);
   }
 
@@ -333,6 +348,9 @@ export class Game {
           isHero: c.isHero,
         })),
       attracted: { ...this.attracted },
+      researchProgress: this.researchProgress,
+      researchRank: this.researchRank,
+      healUnlocked: this.healUnlocked,
       heroWaveSpawned: this.heroWaveSpawned,
       heroWaveTimer: this.heroWaveTimer,
       workerCostScale: this.workerCostScale,
@@ -372,7 +390,11 @@ export class Game {
       skitterwing: !!data.attracted?.skitterwing,
       rattlekin: !!data.attracted?.rattlekin,
       emberling: !!data.attracted?.emberling,
+      gravemage: !!(data.attracted as { gravemage?: boolean } | undefined)?.gravemage,
     };
+    this.researchProgress = (data as SaveData & { researchProgress?: number }).researchProgress ?? 0;
+    this.researchRank = (data as SaveData & { researchRank?: number }).researchRank ?? 0;
+    this.healUnlocked = !!(data as SaveData & { healUnlocked?: boolean }).healUnlocked;
     this.heroWaveSpawned = !!data.heroWaveSpawned;
     this.heroWaveTimer = data.heroWaveTimer ?? 90;
     this.workerCostScale = data.workerCostScale ?? 0;
@@ -449,6 +471,21 @@ export class Game {
     this.grid.refreshTorches();
     this.renderer.rebuildGrid(this.grid);
     this.gridDirty = false;
+    this.marksDirty = false;
+    this.pendingStructuralRebuild = false;
+    this.rebuildCooldown = 0.22;
+  }
+
+  /** Structural terrain change — coalesced to avoid context-loss during dig/claim storms. */
+  private requestStructuralRebuild(): void {
+    this.pendingStructuralRebuild = true;
+    this.gridDirty = true;
+  }
+
+  private flushMarks(): void {
+    if (!this.marksDirty) return;
+    this.renderer.syncMarkOverlay(this.grid);
+    this.marksDirty = false;
   }
 
   private bindInput(canvas: HTMLCanvasElement): void {
@@ -473,6 +510,7 @@ export class Game {
       if (e.key.toLowerCase() === 'q') this.castSpell('createWorker');
       if (e.key.toLowerCase() === 'e') this.castSpell('speed');
       if (e.key.toLowerCase() === 'r') this.castSpell('lightning');
+      if (e.key.toLowerCase() === 't') this.castSpell('heal');
       if (e.key.toLowerCase() === ' ' && this.held) {
         e.preventDefault();
         this.dropHeld();
@@ -508,6 +546,7 @@ export class Game {
       if (performance.now() < this.ignoreMouseUntil) return;
       this.paint = false;
       this.lastPaint = null;
+      this.flushMarks();
     });
 
     canvas.addEventListener('mousemove', (e) => {
@@ -817,7 +856,8 @@ export class Game {
       const tile = this.grid.get(tx, ty);
       if (tile && tile.mark !== MarkType.None) {
         tile.mark = MarkType.None;
-        this.gridDirty = true;
+        this.marksDirty = true;
+        this.flushMarks();
       }
     } catch (err) {
       console.warn('[underkeep] secondary input failed', err);
@@ -980,6 +1020,7 @@ export class Game {
         skitterwing: 'Skitterwing',
         rattlekin: 'Rattlekin',
         emberling: 'Emberling',
+        gravemage: 'Gravemage',
         hero_knight: 'Hero Knight',
         hero_archer: 'Hero Archer',
       };
@@ -1011,12 +1052,12 @@ export class Game {
       if (this.grid.isDiggable(x, y)) {
         tile.mark = MarkType.Dig;
         if (tile.digProgress <= 0) tile.digProgress = 0;
-        this.gridDirty = true;
+        this.marksDirty = true;
       }
     } else if (this.tool === 'claim') {
       if (tile.kind === TileKind.Dirt) {
         tile.mark = MarkType.Claim;
-        this.gridDirty = true;
+        this.marksDirty = true;
       }
     } else if (this.tool === 'fortify') {
       if (
@@ -1024,7 +1065,7 @@ export class Game {
         this.grid.hasAdjacentClaimed(x, y)
       ) {
         tile.mark = MarkType.Fortify;
-        this.gridDirty = true;
+        this.marksDirty = true;
       }
     } else {
       const roomMap: Partial<Record<ToolMode, RoomType>> = {
@@ -1041,7 +1082,7 @@ export class Game {
         if (this.gold >= cost) {
           this.gold -= cost;
           tile.room = room;
-          this.gridDirty = true;
+          this.requestStructuralRebuild();
           this.mentioneOnce('firstRoom', MENTOR_LINES.firstRoom);
           if (room === RoomType.Portal) this.mentioneOnce('portal', MENTOR_LINES.portal);
           if (room === RoomType.Lair) {
@@ -1217,7 +1258,6 @@ export class Game {
     }
     if (spell === 'lightning') {
       if (this.mana < LIGHTNING_COST) return;
-      // strike nearest hero to cursor/heart
       const heroes = this.creatures.filter((c) => c.alive && c.isHero);
       if (!heroes.length) return;
       this.mana -= LIGHTNING_COST;
@@ -1226,7 +1266,8 @@ export class Game {
         const db = Math.hypot(b.x - this.grid.heartPos.x, b.y - this.grid.heartPos.y);
         return da < db ? a : b;
       });
-      target.takeDamage(45);
+      const dmg = 45 + this.researchRank * 12;
+      target.takeDamage(dmg);
       const from = new THREE.Vector3(
         this.grid.tileToWorld(this.grid.heartPos.x, this.grid.heartPos.y).x,
         4,
@@ -1234,6 +1275,27 @@ export class Game {
       );
       this.renderer.spawnLightning(from, new THREE.Vector3(target.wx, 1, target.wz));
       this.hud.say(MENTOR_LINES.lightning);
+      return;
+    }
+    if (spell === 'heal') {
+      if (!this.healUnlocked) {
+        this.hud.say('Heal is sealed. Staff a Library with Gravemages to research it.');
+        return;
+      }
+      const cost = 30;
+      if (this.mana < cost) return;
+      this.mana -= cost;
+      let healed = 0;
+      for (const c of this.creatures) {
+        if (!c.alive || c.isHero) continue;
+        if (c.hp < c.maxHp) {
+          c.hp = Math.min(c.maxHp, c.hp + 35 + this.researchRank * 8);
+          c.pulseTint('heal', 1.1);
+          this.renderer.spawnCareSparks(c.wx, c.wz, 'heal', false);
+          healed++;
+        }
+      }
+      this.hud.say(healed ? MENTOR_LINES.heal : 'No wounds to mend — for now.');
     }
   }
 
@@ -1708,6 +1770,150 @@ export class Game {
     this.renderer.camera.lookAt(this.camTarget);
   }
 
+  /** QA: sustained dig load — many marks + diggers, no context-loss expected. */
+  preparePass62aStabShot(): void {
+    this.hud.hideOverlay();
+    const hx = this.grid.heartPos.x;
+    const hy = this.grid.heartPos.y;
+    // Claim a work yard
+    for (let y = hy - 5; y <= hy + 2; y++) {
+      for (let x = hx - 4; x <= hx + 4; x++) {
+        const t = this.grid.get(x, y);
+        if (!t || t.kind === TileKind.Heart || t.kind === TileKind.Rock) continue;
+        if (t.kind === TileKind.Earth || t.kind === TileKind.Gold || t.kind === TileKind.Dirt) {
+          t.kind = TileKind.Claimed;
+          t.claimedProgress = 1;
+          t.mark = MarkType.None;
+          t.digProgress = 0;
+        }
+      }
+    }
+    // Ring of dig marks
+    const digs: Array<{ x: number; y: number }> = [];
+    for (let x = hx - 5; x <= hx + 5; x++) {
+      digs.push({ x, y: hy - 6 });
+      digs.push({ x, y: hy + 4 });
+    }
+    for (let y = hy - 5; y <= hy + 3; y++) {
+      digs.push({ x: hx - 5, y });
+      digs.push({ x: hx + 5, y });
+    }
+    for (const pos of digs) {
+      const t = this.grid.get(pos.x, pos.y);
+      if (!t || t.kind === TileKind.Heart || t.kind === TileKind.Rock) continue;
+      t.kind = TileKind.Earth;
+      t.fortified = false;
+      t.mark = MarkType.Dig;
+      t.digProgress = 0.15 + Math.random() * 0.35;
+      t.room = RoomType.None;
+    }
+    // Extra workers for dig pressure
+    while (this.creatures.filter((c) => c.alive && c.isWorker).length < 6) {
+      this.spawnCreature(CreatureKind.Scrabbler, hx + 1, hy + 1);
+    }
+    const workers = this.creatures.filter((c) => c.alive && c.isWorker);
+    for (let i = 0; i < workers.length; i++) {
+      const w = workers[i];
+      const target = digs[i % digs.length];
+      const stand = this.grid.findPathAdjacent(hx, hy, target.x, target.y);
+      const world = this.grid.tileToWorld(hx + (i % 3) - 1, hy - 1);
+      w.wx = world.x;
+      w.wz = world.z;
+      w.x = hx + (i % 3) - 1;
+      w.y = hy - 1;
+      w.job = JobType.Dig;
+      w.jobTarget = target;
+      w.workTimer = 0.1;
+      if (stand) w.setPath(stand);
+      w.mood = 80;
+    }
+    this.requestStructuralRebuild();
+    this.rebuild();
+    this.renderer.setDigLoad(true);
+    this.hud.sayNow('Stab dig load — watch for Graphics hiccup. Should stay solid.');
+    const focus = this.grid.tileToWorld(hx, hy - 3);
+    this.camTarget.set(focus.x, 0, focus.z);
+    this.renderer.camera.position.set(focus.x + 6, 28, focus.z + 18);
+    this.renderer.camera.lookAt(this.camTarget);
+  }
+
+  /** QA: portal composition + Gravemage research + fighter training. */
+  preparePass62Shot(): void {
+    this.hud.hideOverlay();
+    const hx = this.grid.heartPos.x;
+    const hy = this.grid.heartPos.y;
+    const claim = (x: number, y: number, room = RoomType.None) => {
+      const t = this.grid.get(x, y);
+      if (!t || t.kind === TileKind.Heart) return;
+      t.kind = TileKind.Claimed;
+      t.claimedProgress = 1;
+      t.room = room;
+      t.mark = MarkType.None;
+      t.digProgress = 0;
+    };
+    for (let y = hy - 2; y <= hy + 3; y++) {
+      for (let x = hx - 3; x <= hx + 5; x++) claim(x, y);
+    }
+    claim(hx - 2, hy + 1, RoomType.Lair);
+    claim(hx - 1, hy + 1, RoomType.Lair);
+    claim(hx, hy + 1, RoomType.Lair);
+    claim(hx + 1, hy + 1, RoomType.Lair);
+    claim(hx - 2, hy + 2, RoomType.Hatchery);
+    claim(hx - 1, hy + 2, RoomType.Hatchery);
+    claim(hx + 2, hy + 1, RoomType.Training);
+    claim(hx + 3, hy + 1, RoomType.Training);
+    claim(hx + 2, hy + 2, RoomType.Training);
+    claim(hx + 3, hy + 2, RoomType.Training);
+    claim(hx + 4, hy + 1, RoomType.Library);
+    claim(hx + 5, hy + 1, RoomType.Library);
+    claim(hx + 4, hy + 2, RoomType.Library);
+    claim(hx + 5, hy + 2, RoomType.Library);
+    claim(hx + 4, hy - 1, RoomType.Portal);
+    claim(hx + 5, hy - 1, RoomType.Portal);
+    this.hatcheryFood = 12;
+    this.gold = 400;
+    // Force composition recruits
+    const portalSpawn = this.grid.tileToWorld(hx + 4, hy);
+    void portalSpawn;
+    if (!this.creatures.some((c) => c.kind === CreatureKind.Skitterwing && c.alive)) {
+      this.spawnCreature(CreatureKind.Skitterwing, hx + 3, hy);
+      this.attracted.skitterwing = true;
+    }
+    if (!this.creatures.some((c) => c.kind === CreatureKind.Rattlekin && c.alive)) {
+      const r = this.spawnCreature(CreatureKind.Rattlekin, hx + 2, hy + 1);
+      r.trainNeed = 60;
+      r.job = JobType.Train;
+      r.jobTarget = { x: hx + 2, y: hy + 1 };
+      r.workTimer = 7.2;
+      r.level = 1;
+      this.attracted.rattlekin = true;
+    }
+    if (!this.creatures.some((c) => c.kind === CreatureKind.Emberling && c.alive)) {
+      this.spawnCreature(CreatureKind.Emberling, hx + 3, hy + 2);
+      this.attracted.emberling = true;
+    }
+    if (!this.creatures.some((c) => c.kind === CreatureKind.Gravemage && c.alive)) {
+      const g = this.spawnCreature(CreatureKind.Gravemage, hx + 4, hy + 1);
+      g.job = JobType.Research;
+      g.jobTarget = { x: hx + 4, y: hy + 1 };
+      this.attracted.gravemage = true;
+    }
+    this.researchProgress = 88;
+    this.researchRank = 0;
+    this.healUnlocked = false;
+    this.requestStructuralRebuild();
+    this.rebuild();
+    this.hud.sayNow('A Gravemage has entered the Underkeep.');
+    this.hud.say(MENTOR_LINES.gravemage);
+    const focus = this.grid.tileToWorld(hx + 2, hy + 1);
+    this.camTarget.set(focus.x, 0, focus.z);
+    this.renderer.camera.position.set(focus.x + 4, 24, focus.z + 14);
+    this.renderer.camera.lookAt(this.camTarget);
+    // Select training fighter for inspector
+    const fighter = this.creatures.find((c) => c.alive && c.kind === CreatureKind.Rattlekin);
+    if (fighter) this.selectCreature(fighter);
+  }
+
   update(dt: number): void {
     if (this.renderer.contextLost) {
       // Still tick HUD so reload overlay stays usable
@@ -1740,7 +1946,19 @@ export class Game {
         }
       }
 
-      if (this.gridDirty) this.rebuild();
+      // Dig load shedding: pause bloom/shadows when many diggers or dig marks active
+      const digMarks = this.grid.tiles.reduce((n, t) => n + (t.mark === MarkType.Dig ? 1 : 0), 0);
+      const activeDiggers = this.creatures.filter(
+        (c) => c.alive && (c.job === JobType.Dig || c.job === JobType.Mine)
+      ).length;
+      this.renderer.setDigLoad(digMarks >= 6 || activeDiggers >= 2);
+
+      if (this.rebuildCooldown > 0) this.rebuildCooldown -= dt;
+      if (this.pendingStructuralRebuild || this.gridDirty) {
+        if (this.rebuildCooldown <= 0) this.rebuild();
+      } else if (this.marksDirty && !this.paint) {
+        this.flushMarks();
+      }
 
       for (const c of this.creatures) {
         try {
@@ -1768,6 +1986,7 @@ export class Game {
       this.hud.setSpellAffordable('createWorker', this.gold >= this.workerCost());
       this.hud.setSpellAffordable('speed', this.mana >= SPEED_COST);
       this.hud.setSpellAffordable('lightning', this.mana >= LIGHTNING_COST);
+      this.hud.setSpellAffordable('heal', this.healUnlocked && this.mana >= 30);
 
       // cleanup dead meshes periodically
       this.creatures = this.creatures.filter((c) => {
@@ -2060,10 +2279,14 @@ export class Game {
       c.sleepNeed = Math.min(100, c.sleepNeed + (hasLair ? 7.0 : 3.0) * dt);
       c.trainNeed = Math.min(100, c.trainNeed + 2.2 * dt);
 
-      // Already committed to eat/sleep/train — keep path, do not re-roll target every frame
-      if (c.job === JobType.Eat || c.job === JobType.Sleep || c.job === JobType.Train) {
+      // Already committed to eat/sleep/train/research — keep path
+      if (
+        c.job === JobType.Eat ||
+        c.job === JobType.Sleep ||
+        c.job === JobType.Train ||
+        c.job === JobType.Research
+      ) {
         if (c.job === JobType.Sleep && c.jobTarget) {
-          // Ensure bed still owned
           const key = `${c.jobTarget.x},${c.jobTarget.y}`;
           if (c.bedKey !== key) c.bedKey = key;
           if (!this.bedOwners.has(key)) this.bedOwners.set(key, c.id);
@@ -2079,7 +2302,7 @@ export class Game {
         c.job = JobType.Idle;
       }
 
-      // Hurt creatures seek Lair to rest/heal
+      // Hurt creatures seek Lair to rest/heal (interrupts class jobs)
       const hurt = c.hp < c.maxHp * 0.65;
       if (c.hunger > (hasHatch ? 24 : 40) && hasHatch) {
         if (this.assignEat(c)) continue;
@@ -2087,7 +2310,45 @@ export class Game {
       if ((c.sleepNeed > (hasLair ? 28 : 50) || hurt) && hasLair) {
         if (this.assignSleep(c)) continue;
       }
-      if (c.trainNeed > 35 && this.grid.countRoom(RoomType.Training) > 0 && c.level < 4) {
+
+      const isResearcher = c.kind === CreatureKind.Gravemage;
+      const isFighter =
+        c.kind === CreatureKind.Rattlekin || c.kind === CreatureKind.Emberling;
+
+      // Researchers → Library (spell research over time)
+      if (isResearcher && this.grid.countRoom(RoomType.Library) > 0) {
+        const t = this.findRoomTile(RoomType.Library);
+        if (t) {
+          c.job = JobType.Research;
+          c.jobTarget = t;
+          c.setPath(this.grid.findPath(c.x, c.y, t.x, t.y));
+          continue;
+        }
+      }
+
+      // Fighters → Training Room levels (timer + level-up)
+      if (
+        isFighter &&
+        c.trainNeed > 28 &&
+        this.grid.countRoom(RoomType.Training) > 0 &&
+        c.level < 4
+      ) {
+        const t = this.findRoomTile(RoomType.Training);
+        if (t) {
+          c.job = JobType.Train;
+          c.jobTarget = t;
+          c.setPath(this.grid.findPath(c.x, c.y, t.x, t.y));
+          continue;
+        }
+      }
+
+      // Soft train need for non-fighters too (Skitterwing scouts)
+      if (
+        !isResearcher &&
+        c.trainNeed > 45 &&
+        this.grid.countRoom(RoomType.Training) > 0 &&
+        c.level < 4
+      ) {
         const t = this.findRoomTile(RoomType.Training);
         if (t) {
           c.job = JobType.Train;
@@ -2371,7 +2632,7 @@ export class Game {
         c.workTimer = 0;
         const wpos = this.grid.tileToWorld(t.x, t.y);
         this.renderer.spawnDigDebris(wpos.x, wpos.z, t.kind === TileKind.Gold ? 0xe0b040 : 0xc08040);
-        this.renderer.spawnFx(new THREE.Vector3(c.wx, 0.4, c.wz), 0xd0a060, 0.25);
+        // Skip extra spark under dig load (debris alone is enough)
 
         if (t.kind === TileKind.Gold) {
           const mined = Math.min(40, t.goldAmount);
@@ -2386,7 +2647,7 @@ export class Game {
             t.mark = MarkType.None;
             t.goldAmount = 0;
             t.digProgress = 0;
-            this.gridDirty = true; // kind change needs rebuild
+            this.requestStructuralRebuild();
             c.job = JobType.Idle;
             c.jobTarget = null;
           } else if (c.goldCarried >= 120) {
@@ -2402,7 +2663,7 @@ export class Game {
             t.kind = TileKind.Dirt;
             t.mark = MarkType.None;
             t.digProgress = 0;
-            this.gridDirty = true;
+            this.requestStructuralRebuild();
             c.job = JobType.Idle;
             c.jobTarget = null;
             this.saveNow();
@@ -2412,7 +2673,7 @@ export class Game {
           t.digProgress = 0;
           c.job = JobType.Idle;
           c.jobTarget = null;
-          this.gridDirty = true;
+          this.marksDirty = true;
         }
       }
     } else if (c.job === JobType.Claim) {
@@ -2430,7 +2691,7 @@ export class Game {
         t.mark = MarkType.None;
         c.job = JobType.Idle;
         c.jobTarget = null;
-        this.gridDirty = true;
+        this.marksDirty = true;
         return;
       }
       c.workTimer += dt;
@@ -2439,7 +2700,7 @@ export class Game {
         t.kind = TileKind.Claimed;
         t.claimedProgress = 1;
         t.mark = MarkType.None;
-        this.gridDirty = true;
+        this.requestStructuralRebuild();
         c.job = JobType.Idle;
         c.jobTarget = null;
         const wpos = this.grid.tileToWorld(t.x, t.y);
@@ -2454,7 +2715,7 @@ export class Game {
         t.fortified = true;
         t.mark = MarkType.None;
         // keep kind as earth visually via fortified flag
-        this.gridDirty = true;
+        this.requestStructuralRebuild();
         c.job = JobType.Idle;
         c.jobTarget = null;
       }
@@ -2528,9 +2789,30 @@ export class Game {
         c.jobTarget = null;
         // Keep bed reservation for attraction/capacity; release only if leaving dungeon
       }
+    } else if (c.job === JobType.Research && arrived) {
+      // Gravemage (and library researchers) unlock/improve spells over time
+      this.researchProgress = Math.min(100, this.researchProgress + 12 * dt);
+      c.workTimer += dt;
+      if (Math.random() < dt * 0.35) {
+        this.renderer.spawnFx(new THREE.Vector3(c.wx, 0.9, c.wz), 0x8866ff, 0.35);
+      }
+      if (this.researchProgress >= 100) {
+        this.researchProgress = 0;
+        this.researchRank = Math.min(3, this.researchRank + 1);
+        if (this.researchRank >= 1 && !this.healUnlocked) {
+          this.healUnlocked = true;
+          this.hud.sayNow(MENTOR_LINES.researchHeal);
+        } else {
+          this.hud.sayNow(
+            MENTOR_LINES.researchDone.replace('%r', String(this.researchRank))
+          );
+        }
+        this.renderer.spawnFx(new THREE.Vector3(c.wx, 1.2, c.wz), 0xaa88ff, 0.8);
+      }
     } else if (c.job === JobType.Train && arrived) {
       c.trainNeed = Math.max(0, c.trainNeed - 30 * dt);
       c.workTimer += dt;
+      // Training timer — ~8s per level at the Training Room
       if (c.workTimer > 8 && c.level < 4) {
         c.level++;
         c.maxHp += 15;
@@ -2538,6 +2820,15 @@ export class Game {
         c.damage += 3;
         c.workTimer = 0;
         this.renderer.spawnFx(new THREE.Vector3(c.wx, 1, c.wz), 0xffaa44, 0.6);
+        const names: Record<string, string> = {
+          rattlekin: 'Rattlekin',
+          emberling: 'Emberling',
+          skitterwing: 'Skitterwing',
+          gravemage: 'Gravemage',
+        };
+        this.hud.sayNow(
+          `${names[c.kind] ?? 'Minion'} reaches training level ${c.level}!`
+        );
       }
       if (c.trainNeed < 5) c.job = JobType.Idle;
     } else if (c.job === JobType.Fight) {
@@ -2593,20 +2884,34 @@ export class Game {
     this.renderer.spawnFx(new THREE.Vector3(target.wx, 0.8, target.wz), 0xff4040, 0.25);
   }
 
+  private announceSpecies(kind: CreatureKind, mentorLine: string): void {
+    const names: Record<string, string> = {
+      skitterwing: 'Skitterwing',
+      rattlekin: 'Rattlekin',
+      emberling: 'Emberling',
+      gravemage: 'Gravemage',
+    };
+    const label = names[kind] ?? 'minion';
+    this.hud.sayNow(`A ${label} has entered the Underkeep.`);
+    this.hud.say(mentorLine);
+  }
+
   private updatePortal(dt: number): void {
     this.portalCooldown -= dt;
     if (this.portalCooldown > 0) return;
     const portals = this.grid.countRoom(RoomType.Portal);
     if (portals <= 0) return;
 
+    // Recruitment driven by dungeon composition (room tiles)
     const lair = this.grid.countRoom(RoomType.Lair);
     const hatch = this.grid.countRoom(RoomType.Hatchery);
     const train = this.grid.countRoom(RoomType.Training);
+    const library = this.grid.countRoom(RoomType.Library);
+    const treasury = this.grid.countRoom(RoomType.Treasury);
     const claimed = this.grid.countClaimed();
 
     const portalTile = this.grid.tiles.find((t) => t.room === RoomType.Portal);
     if (!portalTile) return;
-    // spawn on adjacent claimed
     let sx = portalTile.x;
     let sy = portalTile.y;
     for (const n of this.grid.neighbors4(portalTile.x, portalTile.y)) {
@@ -2617,34 +2922,64 @@ export class Game {
       }
     }
 
-    if (!this.attracted.skitterwing && claimed >= 20 && portals >= 1) {
+    // Skitterwing — Portal + claimed land (scouts)
+    if (!this.attracted.skitterwing && claimed >= 16 && portals >= 1) {
       this.spawnCreature(CreatureKind.Skitterwing, sx, sy);
       this.attracted.skitterwing = true;
       this.portalCooldown = 8;
-      this.hud.say(MENTOR_LINES.skitterwing);
+      this.announceSpecies(CreatureKind.Skitterwing, MENTOR_LINES.skitterwing);
       return;
     }
+    // Rattlekin — Lair + Hatchery composition
     if (!this.attracted.rattlekin && lair >= 4 && hatch >= 2) {
       this.spawnCreature(CreatureKind.Rattlekin, sx, sy);
       this.attracted.rattlekin = true;
       this.portalCooldown = 10;
-      this.hud.say(MENTOR_LINES.rattlekin);
+      this.announceSpecies(CreatureKind.Rattlekin, MENTOR_LINES.rattlekin);
       return;
     }
+    // Emberling — Training + Lair + gold reserves
     if (!this.attracted.emberling && train >= 4 && lair >= 6 && this.gold >= 200) {
       this.spawnCreature(CreatureKind.Emberling, sx, sy);
       this.attracted.emberling = true;
       this.portalCooldown = 12;
-      this.hud.say(MENTOR_LINES.emberling);
+      this.announceSpecies(CreatureKind.Emberling, MENTOR_LINES.emberling);
+      return;
+    }
+    // Gravemage — Library + Lair (researchers)
+    if (!this.attracted.gravemage && library >= 4 && lair >= 4) {
+      this.spawnCreature(CreatureKind.Gravemage, sx, sy);
+      this.attracted.gravemage = true;
+      this.portalCooldown = 12;
+      this.announceSpecies(CreatureKind.Gravemage, MENTOR_LINES.gravemage);
       return;
     }
 
-    // periodic extra minions if thresholds remain met
-    if (this.attracted.rattlekin && lair >= 4 && Math.random() < 0.15) {
+    // Periodic extras while composition remains attractive
+    if (this.attracted.rattlekin && lair >= 4 && hatch >= 2 && Math.random() < 0.12) {
       const count = this.creatures.filter((c) => c.alive && c.kind === CreatureKind.Rattlekin).length;
       if (count < 4) {
         this.spawnCreature(CreatureKind.Rattlekin, sx, sy);
-        this.portalCooldown = 20;
+        this.portalCooldown = 22;
+        this.hud.sayNow('A Rattlekin has entered the Underkeep.');
+        return;
+      }
+    }
+    if (this.attracted.gravemage && library >= 4 && Math.random() < 0.1) {
+      const count = this.creatures.filter((c) => c.alive && c.kind === CreatureKind.Gravemage).length;
+      if (count < 2) {
+        this.spawnCreature(CreatureKind.Gravemage, sx, sy);
+        this.portalCooldown = 28;
+        this.hud.sayNow('A Gravemage has entered the Underkeep.');
+        return;
+      }
+    }
+    if (this.attracted.emberling && train >= 4 && treasury >= 2 && Math.random() < 0.08) {
+      const count = this.creatures.filter((c) => c.alive && c.kind === CreatureKind.Emberling).length;
+      if (count < 2) {
+        this.spawnCreature(CreatureKind.Emberling, sx, sy);
+        this.portalCooldown = 30;
+        this.hud.sayNow('An Emberling has entered the Underkeep.');
       }
     }
   }

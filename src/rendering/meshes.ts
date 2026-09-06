@@ -678,7 +678,61 @@ export function makeCreatureMesh(color: number, scale: number, kind: string): TH
     );
     skirt.position.y = 0.28;
     g.add(skirt);
+  } else if (kind === 'gravemage') {
+    // Hooded researcher: robes, staff, violet glow
+    const robe = new THREE.MeshStandardMaterial({
+      color: 0x4a3080,
+      metalness: 0.2,
+      roughness: 0.55,
+      emissive: 0x301860,
+      emissiveIntensity: 0.25,
+    });
+    const body = new THREE.Mesh(new THREE.CapsuleGeometry(0.24, 0.5, 5, 10), robe);
+    body.position.y = 0.7;
+    body.castShadow = true;
+    g.add(body);
+    const hood = new THREE.Mesh(
+      new THREE.SphereGeometry(0.22, 10, 8),
+      new THREE.MeshStandardMaterial({ color: 0x2a1848, roughness: 0.7, emissive: 0x402080, emissiveIntensity: 0.2 })
+    );
+    hood.position.y = 1.22;
+    g.add(hood);
+    const face = new THREE.Mesh(
+      new THREE.SphereGeometry(0.12, 8, 6),
+      new THREE.MeshStandardMaterial({ color: 0xc8b8d8, roughness: 0.5 })
+    );
+    face.position.set(0, 1.18, 0.12);
+    g.add(face);
+    const eyeMat = new THREE.MeshStandardMaterial({ color: 0xaa66ff, emissive: 0x8844ff, emissiveIntensity: 0.9 });
+    for (const sx of [-1, 1]) {
+      const eye = new THREE.Mesh(new THREE.SphereGeometry(0.035, 6, 6), eyeMat);
+      eye.position.set(sx * 0.06, 1.2, 0.2);
+      g.add(eye);
+    }
+    for (const sx of [-1, 1]) {
+      g.add(limb(new THREE.CylinderGeometry(0.045, 0.035, 0.4, 5), robe, sx * 0.28, 0.7, 0, 0, 0, sx * 0.2));
+      g.add(limb(new THREE.CylinderGeometry(0.05, 0.04, 0.38, 5), robe, sx * 0.1, 0.28, 0));
+    }
+    const staff = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.03, 0.04, 1.3, 6),
+      new THREE.MeshStandardMaterial({ color: 0x6a4828, roughness: 0.7 })
+    );
+    staff.position.set(0.38, 0.75, 0.05);
+    g.add(staff);
+    const orb = new THREE.Mesh(
+      new THREE.SphereGeometry(0.1, 10, 8),
+      new THREE.MeshStandardMaterial({
+        color: 0x8866ff,
+        emissive: 0xaa66ff,
+        emissiveIntensity: 0.85,
+        metalness: 0.3,
+        roughness: 0.35,
+      })
+    );
+    orb.position.set(0.38, 1.45, 0.05);
+    g.add(orb);
   } else if (kind === 'hero_knight' || kind === 'hero') {
+
     const armor = new THREE.MeshStandardMaterial({
       color: color || 0xc0c8d8,
       metalness: 0.75,

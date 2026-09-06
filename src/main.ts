@@ -1,23 +1,56 @@
 import { Game } from './game/Game';
+import { clearSave } from './game/Save';
 
 const canvas = document.getElementById('game-canvas') as HTMLCanvasElement;
-const game = new Game(canvas);
+
+function showBootRecovery(message: string): void {
+  const overlay = document.getElementById('overlay');
+  const title = document.getElementById('overlay-title');
+  const msg = document.getElementById('overlay-msg');
+  const btn = document.getElementById('overlay-btn');
+  const sec = document.getElementById('overlay-btn-secondary');
+  if (!overlay || !title || !msg || !btn) return;
+  title.textContent = 'Underkeep';
+  msg.textContent = message;
+  btn.textContent = 'New Game';
+  sec?.classList.add('hidden');
+  overlay.classList.remove('hidden');
+  const restart = () => {
+    clearSave();
+    location.reload();
+  };
+  btn.onclick = restart;
+  document.getElementById('btn-new-game')?.addEventListener('click', restart, { once: true });
+}
+
+let game: Game | null = null;
+try {
+  game = new Game(canvas);
+} catch (err) {
+  console.error('[underkeep] fatal boot error — clearing save', err);
+  clearSave();
+  showBootRecovery(
+    'Something went wrong loading your dungeon. Your save was cleared. Tap New Game to begin again.'
+  );
+}
 
 // Expose for QA / screenshot harness
-(window as unknown as { __underkeep?: Game }).__underkeep = game;
+(window as unknown as { __underkeep?: Game | null }).__underkeep = game;
 
 let last = performance.now();
 function frame(now: number): void {
   const dt = Math.min(0.05, (now - last) / 1000);
   last = now;
-  game.update(dt);
-  game.render();
+  if (game) {
+    game.update(dt);
+    game.render();
+  }
   requestAnimationFrame(frame);
 }
 requestAnimationFrame(frame);
 
 const params = new URLSearchParams(location.search);
-if (params.get('shot') === '1' || params.get('shot') === '4') {
+if (game && (params.get('shot') === '1' || params.get('shot') === '4')) {
   // Auto-arrange Pass-4 evidence: rooms + rock/earth/gold + pickaxe
   setTimeout(() => {
     const g = game as unknown as {

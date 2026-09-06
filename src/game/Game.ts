@@ -22,6 +22,7 @@ import {
   loadSave,
   packTiles,
   unpackTiles,
+  validateSaveReason,
   writeSave,
 } from './Save';
 
@@ -68,8 +69,7 @@ export class Game {
   private restoredFromSave = false;
 
   constructor(canvas: HTMLCanvasElement) {
-    this.grid = new Grid(40, 40);
-    this.renderer = new DungeonRenderer(canvas);
+    // HUD first so New Game / sheets stay wired even if boot later fails
     this.hud = new HUD();
     this.hud.onToolChange = (t) => {
       this.tool = t;
@@ -83,35 +83,145 @@ export class Game {
     };
     this.hud.onNewGame = () => this.confirmNewGame();
 
-    const saved = loadSave();
-    if (saved) {
+    this.grid = new Grid(40, 40);
+    this.renderer = new DungeonRenderer(canvas);
+
+    let restored = false;
+    try {
+      restored = this.bootFromSaveOrFresh();
+    } catch (err) {
+      console.error('[underkeep] boot failed — clearing save and starting Intro', err);
+      clearSave();
+      this.resetRuntimeState();
+      this.startFresh(true);
+      restored = false;
+    }
+
+    this.bindInput(canvas);
+    this.rebuild();
+    this.syncAllEntityMeshes();
+
+    // Only persist a validated playable (or game-over) session — never re-save voids
+    if (restored && this.isPlayableOrEnded()) {
+      this.saveNow();
+    }
+  }
+
+  /** True when dungeon has heart + diggable earth + ≥1 Scrabbler, or match ended. */
+  private isPlayableOrEnded(): boolean {
+    if (this.gameOver) return true;
+    const heart = this.grid.get(this.grid.heartPos.x, this.grid.heartPos.y);
+    if (!heart || heart.kind !== TileKind.Heart) return false;
+    const diggable = this.grid.tiles.some(
+      (t) => t.kind === TileKind.Earth || t.kind === TileKind.Gold
+    );
+    if (!diggable) return false;
+    const scrabblers = this.creatures.filter((c) => c.alive && c.isWorker).length;
+    return scrabblers >= 1;
+  }
+
+  private syncAllEntityMeshes(): void {
+    for (const c of this.creatures) {
+      if (c.alive) c.syncMesh(this.time);
+    }
+  }
+
+  private resetRuntimeState(): void {
+    for (const c of this.creatures) {
+      try {
+        this.renderer?.removeEntityMesh(c.mesh);
+        if (c.mesh?.parent) c.mesh.parent.remove(c.mesh);
+      } catch {
+        /* ignore */
+      }
+    }
+    this.creatures = [];
+    this.gold = 600;
+    this.mana = 50;
+    this.tool = 'select';
+    this.held = null;
+    this.time = 0;
+    this.workerCostScale = 0;
+    this.portalCooldown = 0;
+    this.attracted = { skitterwing: false, rattlekin: false, emberling: false };
+    this.heroWaveSpawned = false;
+    this.heroWaveTimer = 90;
+    this.gameOver = false;
+    this.won = false;
+    this.mentored = new Set();
+    this.wageAcc = 0;
+    this.heartHp = 500;
+    this.restoredFromSave = false;
+    this.grid = new Grid(40, 40);
+  }
+
+  private bootFromSaveOrFresh(): boolean {
+    const saved = loadSave(this.grid.width, this.grid.height);
+    if (!saved) {
+      this.startFresh(true);
+      return false;
+    }
+
+    const reason = validateSaveReason(saved, this.grid.width, this.grid.height);
+    if (reason) {
+      console.warn('[underkeep] invalid save on boot:', reason);
+      clearSave();
+      this.startFresh(true);
+      return false;
+    }
+
+    try {
       this.applySave(saved);
-      this.restoredFromSave = true;
-      this.hud.say(MENTOR_LINES.resume);
-      // Skip intro — dungeon restored from localStorage
+    } catch (err) {
+      console.error('[underkeep] applySave threw', err);
+      clearSave();
+      this.resetRuntimeState();
+      this.startFresh(true);
+      return false;
+    }
+
+    if (!this.isPlayableOrEnded()) {
+      console.warn('[underkeep] restored state not playable — falling back to Intro');
+      clearSave();
+      this.resetRuntimeState();
+      this.startFresh(true);
+      return false;
+    }
+
+    this.restoredFromSave = true;
+    if (this.gameOver) {
+      this.hud.showOverlay(
+        this.won ? 'Victory' : 'Defeat',
+        this.won ? MENTOR_LINES.win + ' The Underkeep stands.' : MENTOR_LINES.lose,
+        'Try Again'
+      );
     } else {
-      // starting workers
+      this.hud.say(MENTOR_LINES.resume);
+    }
+    return true;
+  }
+
+  private startFresh(showIntro: boolean): void {
+    // Ensure starting workers on a generated grid
+    if (this.creatures.length === 0) {
       this.spawnCreature(CreatureKind.Scrabbler, this.grid.heartPos.x + 1, this.grid.heartPos.y);
       this.spawnCreature(CreatureKind.Scrabbler, this.grid.heartPos.x - 1, this.grid.heartPos.y);
       this.spawnCreature(CreatureKind.Scrabbler, this.grid.heartPos.x, this.grid.heartPos.y + 1);
+    }
 
-      // ~55° elevated camera for DK2-style overview readability
-      const hw = this.grid.tileToWorld(this.grid.heartPos.x, this.grid.heartPos.y);
-      this.camTarget.set(hw.x, 0, hw.z);
-      this.renderer.camera.position.set(hw.x + 4, 28, hw.z + 18);
-      this.renderer.camera.lookAt(this.camTarget);
+    const hw = this.grid.tileToWorld(this.grid.heartPos.x, this.grid.heartPos.y);
+    this.camTarget.set(hw.x, 0, hw.z);
+    this.renderer.camera.position.set(hw.x + 4, 28, hw.z + 18);
+    this.renderer.camera.lookAt(this.camTarget);
 
-      this.hud.say(MENTOR_LINES.start);
+    this.hud.say(MENTOR_LINES.start);
+    if (showIntro) {
       this.hud.showOverlay(
         'Underkeep',
         'You are the Keeper of the Underkeep. Dig earth, claim territory, raise rooms, and crush the heroes who dare enter. The Dungeon Heart must not fall.',
         'Begin'
       );
     }
-
-    this.bindInput(canvas);
-    this.rebuild();
-    if (saved) this.saveNow();
   }
 
   private mentioneOnce(key: string, line: string): void {
@@ -127,7 +237,6 @@ export class Game {
       'Keep Playing',
       'Erase & Restart'
     );
-    // Secondary button already wired to onNewGame — temporarily rebind
     const prev = this.hud.onNewGame;
     const prevCont = this.hud.onOverlayContinue;
     this.hud.onOverlayContinue = () => {
@@ -135,8 +244,12 @@ export class Game {
       this.hud.onOverlayContinue = prevCont;
     };
     this.hud.onNewGame = () => {
+      // Wipe save then full reload so grid/renderer/entities re-init cleanly
       clearSave();
-      location.reload();
+      const url = new URL(location.href);
+      url.searchParams.delete('shot');
+      url.searchParams.delete('pass');
+      location.replace(url.pathname + url.search + url.hash);
     };
   }
 
@@ -188,19 +301,25 @@ export class Game {
 
   private saveNow(): void {
     if (this.gameOver) return;
+    if (!this.isPlayableOrEnded()) return;
     writeSave(this.buildSave());
   }
 
   private applySave(data: SaveData): void {
+    // Validated before call — still refuse size drift
     if (data.width !== this.grid.width || data.height !== this.grid.height) {
-      // size mismatch — ignore tiles but still try resources
-    } else {
-      unpackTiles(this.grid.tiles, data.tiles);
-      this.grid.heartPos = { ...data.heartPos };
+      throw new Error('save size mismatch');
     }
+    unpackTiles(this.grid.tiles, data.tiles);
+    this.grid.heartPos = { x: data.heartPos.x, y: data.heartPos.y };
+
     this.gold = data.gold;
     this.mana = data.mana;
-    this.attracted = { ...data.attracted };
+    this.attracted = {
+      skitterwing: !!data.attracted?.skitterwing,
+      rattlekin: !!data.attracted?.rattlekin,
+      emberling: !!data.attracted?.emberling,
+    };
     this.heroWaveSpawned = !!data.heroWaveSpawned;
     this.heroWaveTimer = data.heroWaveTimer ?? 90;
     this.workerCostScale = data.workerCostScale ?? 0;
@@ -211,16 +330,17 @@ export class Game {
     this.gameOver = !!data.gameOver;
     this.won = !!data.won;
 
-    // Clear default creatures then respawn from save
     for (const c of this.creatures) {
       this.renderer.removeEntityMesh(c.mesh);
       if (c.mesh.parent) c.mesh.parent.remove(c.mesh);
     }
     this.creatures = [];
-    for (const sc of data.creatures ?? []) {
+    for (const sc of data.creatures) {
       const c = this.spawnCreature(sc.kind, sc.x, sc.y);
-      c.wx = sc.wx;
-      c.wz = sc.wz;
+      if (Number.isFinite(sc.wx) && Number.isFinite(sc.wz)) {
+        c.wx = sc.wx;
+        c.wz = sc.wz;
+      }
       c.hp = sc.hp;
       c.maxHp = sc.maxHp;
       c.level = sc.level ?? 1;
@@ -230,16 +350,27 @@ export class Game {
       c.trainNeed = sc.trainNeed ?? 0;
       c.syncMesh(this.time);
     }
-    if (data.cam) {
+
+    const hw = this.grid.tileToWorld(this.grid.heartPos.x, this.grid.heartPos.y);
+    if (
+      data.cam &&
+      Number.isFinite(data.cam.tx) &&
+      Number.isFinite(data.cam.tz) &&
+      Number.isFinite(data.cam.cx) &&
+      Number.isFinite(data.cam.cy) &&
+      Number.isFinite(data.cam.cz) &&
+      data.cam.cy > 5
+    ) {
       this.camTarget.set(data.cam.tx, 0, data.cam.tz);
       this.renderer.camera.position.set(data.cam.cx, data.cam.cy, data.cam.cz);
       this.renderer.camera.lookAt(this.camTarget);
     } else {
-      const hw = this.grid.tileToWorld(this.grid.heartPos.x, this.grid.heartPos.y);
       this.camTarget.set(hw.x, 0, hw.z);
       this.renderer.camera.position.set(hw.x + 4, 28, hw.z + 18);
       this.renderer.camera.lookAt(this.camTarget);
     }
+
+    this.gridDirty = true;
   }
 
   private spawnCreature(kind: CreatureKind, x: number, y: number): Creature {

@@ -227,8 +227,11 @@ export const MENTOR_LINES = {
   claim: "Claimed land feeds your mana. Ambition has a wattage.",
   lairBuilt: "A Lair. Beds for the weary and the wounded. Capacity equals tiles.",
   lairUse: "Minions claim their bedrolls. Tired claws seek the Lair.",
+  bedClaim: "A minion claims a Lair bed.",
+  lairResting: "A minion is resting in the Lair…",
   lairFull: "Every bed is taken. Expand the Lair or expect cranky minions.",
   hatcheryBuilt: "A Hatchery. Nest-food grows while you scheme — hungry mouths will come.",
   hatcheryUse: "Feast! The Hatchery soothes rumbling guts. Work resumes after.",
+  feasting: "Feasting at the Hatchery.",
   hatcheryHungry: "The nests are bare. Wait for more Hatchery food… or build more nests.",
 };

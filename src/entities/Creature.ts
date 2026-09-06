@@ -45,6 +45,12 @@ export class Creature {
   mesh: THREE.Group;
   private bobPhase: number;
   digAnim = 0;
+  /** Peck/bob phase while eating at Hatchery. */
+  eatAnim = 0;
+  /** True once this meal session announced a feast toast. */
+  eatAnnounced = false;
+  /** Acc for periodic lair heal mentor toasts. */
+  restHealAcc = 0;
   /** Smooth facing yaw (radians, Y axis). */
   facing = 0;
   private facingTarget = 0;
@@ -87,6 +93,7 @@ export class Creature {
     const digging = this.job === JobType.Dig || this.job === JobType.Mine || this.job === JobType.Claim || this.job === JobType.Fortify;
     const sleeping = this.job === JobType.Sleep;
     const eating = this.job === JobType.Eat;
+    if (eating) this.eatAnim += 0.35;
     const bob =
       this.kind === CreatureKind.Skitterwing
         ? Math.sin(time * 6 + this.bobPhase) * 0.25 + 0.4
@@ -94,8 +101,10 @@ export class Creature {
           ? Math.sin(time * 14 + this.bobPhase) * 0.06
           : sleeping
             ? Math.sin(time * 2 + this.bobPhase) * 0.02
-            : Math.sin(time * 8 + this.bobPhase) * 0.04;
-    const yOff = sleeping ? 0.12 : eating ? 0.02 : 0;
+            : eating
+              ? Math.sin(this.eatAnim * 14 + this.bobPhase) * 0.1
+              : Math.sin(time * 8 + this.bobPhase) * 0.04;
+    const yOff = sleeping ? 0.12 : eating ? 0.05 + Math.abs(Math.sin(this.eatAnim * 14)) * 0.08 : 0;
     this.mesh.position.set(this.wx, bob + yOff, this.wz);
     // Smooth Y facing — avoid lookAt snap/jitter
     let face = this.facing;
@@ -109,8 +118,14 @@ export class Creature {
       this.mesh.rotation.z = Math.sin(time * 20) * 0.3;
     } else if (sleeping) {
       this.mesh.rotation.z = 0.35;
+      this.mesh.rotation.x = 0.05;
+    } else if (eating) {
+      // Brief peck/bob pose while feasting
+      this.mesh.rotation.x = Math.sin(this.eatAnim * 14) * 0.35;
+      this.mesh.rotation.z = Math.sin(this.eatAnim * 10) * 0.12;
     } else {
       this.mesh.rotation.z = 0;
+      this.mesh.rotation.x = 0;
     }
     if (this.pickaxe) {
       const swinging = this.job === JobType.Dig || this.job === JobType.Mine;

@@ -285,17 +285,17 @@ export function fortifiedTex(): THREE.CanvasTexture {
 }
 
 export function goldVeinTex(): THREE.CanvasTexture {
-  // Obvious glitter veins readable at overview zoom
+  // Bright yellow-gold veins — unmistakable vs earth at overview zoom
   return paintNoise(64, {
     seed: 66,
-    base: [140, 95, 36],
-    dark: [70, 42, 14],
-    light: [230, 190, 70],
-    scale: 4.2,
-    contrast: 1.35,
-    veins: { color: [255, 230, 90], scale: 1.35, thresh: 0.48, seed: 99 },
-    speck: 0.12,
-    speckColor: [255, 245, 140],
+    base: [180, 120, 28],
+    dark: [90, 50, 10],
+    light: [255, 220, 90],
+    scale: 4.0,
+    contrast: 1.5,
+    veins: { color: [255, 240, 110], scale: 1.25, thresh: 0.42, seed: 99 },
+    speck: 0.18,
+    speckColor: [255, 250, 180],
   });
 }
 

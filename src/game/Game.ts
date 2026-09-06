@@ -105,6 +105,21 @@ export class Game {
     if (restored && this.isPlayableOrEnded()) {
       this.saveNow();
     }
+
+    // First real HUD numbers before revealing UI (kills zero-on-black flash)
+    this.hud.updateStats(
+      this.gold,
+      this.mana,
+      this.maxMana(),
+      this.creatures.filter((c) => c.alive && c.isWorker).length,
+      this.creatures.filter((c) => c.alive && !c.isWorker && !c.isHero).length
+    );
+    this.markReady();
+  }
+
+  /** Dismiss boot splash and reveal HUD once meshes + stats are ready. */
+  markReady(): void {
+    document.body.classList.remove('booting');
   }
 
   /** True when dungeon has heart + diggable earth + ≥1 Scrabbler, or match ended. */
@@ -754,7 +769,15 @@ export class Game {
       const room =
         tile.room !== RoomType.None ? ` · ${['', 'Treasury', 'Lair', 'Hatchery', 'Training', 'Library', 'Portal'][tile.room]}` : '';
       const dig = tile.digProgress > 0 ? ` · dig ${Math.floor(tile.digProgress * 100)}%` : '';
-      this.hud.setTooltip(`(${tp.x},${tp.y}) ${TileKind[tile.kind]}${tile.fortified ? ' [fortified]' : ''}${room}${dig}`);
+      const kindLabel =
+        tile.kind === TileKind.Gold
+          ? 'Gold'
+          : tile.kind === TileKind.Earth
+            ? 'Earth'
+            : tile.kind === TileKind.Rock
+              ? 'Rock'
+              : TileKind[tile.kind];
+      this.hud.setTooltip(`(${tp.x},${tp.y}) ${kindLabel}${tile.fortified ? ' [fortified]' : ''}${room}${dig}`);
     }
   }
 

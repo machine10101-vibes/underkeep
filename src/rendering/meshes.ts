@@ -975,12 +975,12 @@ export function tileMaterial(kind: TileKind, fortified: boolean, _room: RoomType
         vertexColors: true,
       });
     case TileKind.Gold:
-      return texturedMat('gold-v2', goldVeinTex(), {
-        metalness: 0.82,
-        roughness: 0.26,
-        emissive: 0xa07010,
-        emissiveIntensity: 0.55,
-        bump: 0.1,
+      return texturedMat('gold-v3', goldVeinTex(), {
+        metalness: 0.88,
+        roughness: 0.2,
+        emissive: 0xe0a018,
+        emissiveIntensity: 0.95,
+        bump: 0.08,
         vertexColors: true,
       });
     case TileKind.Dirt:
@@ -1149,11 +1149,11 @@ export function makeRoomProps(room: RoomType): THREE.Group | null {
 export function makeGoldGlitter(): THREE.Group {
   const g = new THREE.Group();
   const mat = new THREE.MeshStandardMaterial({
-    color: 0xffe080,
-    emissive: 0xffcc40,
-    emissiveIntensity: 1.1,
-    metalness: 0.95,
-    roughness: 0.15,
+    color: 0xfff0a0,
+    emissive: 0xffd040,
+    emissiveIntensity: 1.65,
+    metalness: 0.98,
+    roughness: 0.1,
   });
   const spots = [
     [0.35, 1.7, 0.2],
@@ -1162,24 +1162,26 @@ export function makeGoldGlitter(): THREE.Group {
     [-0.25, 1.9, 0.4],
     [0.45, 1.1, 0.35],
     [-0.5, 2.15, 0.05],
+    [0.0, 2.35, 0.15],
+    [0.55, 1.55, -0.2],
   ];
   for (const [x, y, z] of spots) {
-    const s = new THREE.Mesh(new THREE.OctahedronGeometry(0.09 + (Math.abs(x) % 0.05), 0), mat);
+    const s = new THREE.Mesh(new THREE.OctahedronGeometry(0.11 + (Math.abs(x) % 0.05), 0), mat);
     s.position.set(x, y, z);
     g.add(s);
   }
-  // Vertical glitter streak
+  // Vertical glitter streak — brighter for overview readability
   const streak = new THREE.Mesh(
-    new THREE.BoxGeometry(0.12, 1.6, 0.12),
+    new THREE.BoxGeometry(0.14, 1.85, 0.14),
     new THREE.MeshStandardMaterial({
-      color: 0xffd060,
-      emissive: 0xe0a020,
-      emissiveIntensity: 0.85,
-      metalness: 0.9,
-      roughness: 0.2,
+      color: 0xffe070,
+      emissive: 0xffb020,
+      emissiveIntensity: 1.35,
+      metalness: 0.95,
+      roughness: 0.15,
     })
   );
-  streak.position.set(0.15, 1.4, -0.1);
+  streak.position.set(0.15, 1.45, -0.1);
   streak.rotation.z = 0.2;
   g.add(streak);
   return g;

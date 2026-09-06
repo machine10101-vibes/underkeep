@@ -145,6 +145,32 @@ export class Grid {
       }
     }
 
+    // Guaranteed gold vein on diggable faces adjacent to the starting claimed area
+    // (south + east of heart) so new games always show bright gold without wandering.
+    const paintGold = (x: number, y: number, amount: number) => {
+      const t = this.get(x, y);
+      if (!t) return;
+      if (t.kind === TileKind.Earth || t.kind === TileKind.Gold) {
+        t.kind = TileKind.Gold;
+        t.goldAmount = Math.max(t.goldAmount, amount);
+        t.fortified = false;
+      }
+    };
+    // South dig face (chamber wall at cy+3) + one tile deeper
+    for (let i = 0; i < 5; i++) {
+      paintGold(cx - 1 + i, cy + 3, 380 + i * 30);
+    }
+    for (let i = 0; i < 4; i++) {
+      paintGold(cx + i, cy + 4, 320 + i * 40);
+    }
+    // East dig face (chamber wall at cx+3)
+    for (let i = 0; i < 4; i++) {
+      paintGold(cx + 3, cy - 1 + i, 360 + i * 25);
+    }
+    for (let i = 0; i < 3; i++) {
+      paintGold(cx + 4, cy + i, 300 + i * 35);
+    }
+
     // Place a few torches on claimed tiles near walls
     this.refreshTorches();
   }

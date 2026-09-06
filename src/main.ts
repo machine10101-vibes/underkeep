@@ -29,6 +29,7 @@ try {
 } catch (err) {
   console.error('[underkeep] fatal boot error — clearing save', err);
   clearSave();
+  document.body.classList.remove('booting');
   showBootRecovery(
     'Something went wrong loading your dungeon. Your save was cleared. Tap New Game to begin again.'
   );

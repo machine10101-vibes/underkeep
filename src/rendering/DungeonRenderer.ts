@@ -154,9 +154,9 @@ export class DungeonRenderer {
       opacity: 0.85,
     });
     this.goldEdgeMat = new THREE.LineBasicMaterial({
-      color: 0xffcc44,
+      color: 0xffe066,
       transparent: true,
-      opacity: 0.95,
+      opacity: 1,
     });
     this.rockEdgeMat = new THREE.LineBasicMaterial({
       color: 0x8890a8,

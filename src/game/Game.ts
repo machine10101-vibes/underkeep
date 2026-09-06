@@ -1208,6 +1208,104 @@ export class Game {
     this.renderer.camera.lookAt(this.camTarget);
   }
 
+  /** QA/screenshot: Lair beds N/M>0 + Hatchery feast toast/pose. */
+  preparePass5bShot(): void {
+    const hx = this.grid.heartPos.x;
+    const hy = this.grid.heartPos.y;
+    const claim = (x: number, y: number, room = RoomType.None) => {
+      const t = this.grid.get(x, y);
+      if (!t || t.kind === TileKind.Heart) return;
+      t.kind = TileKind.Claimed;
+      t.claimedProgress = 1;
+      t.mark = MarkType.None;
+      t.digProgress = 0;
+      t.fortified = false;
+      t.room = room;
+    };
+    for (let x = hx - 1; x <= hx + 5; x++) {
+      for (let y = hy - 1; y <= hy + 4; y++) {
+        claim(x, y);
+      }
+    }
+    claim(hx + 2, hy + 1, RoomType.Lair);
+    claim(hx + 3, hy + 1, RoomType.Lair);
+    claim(hx + 4, hy, RoomType.Hatchery);
+    claim(hx + 4, hy + 1, RoomType.Hatchery);
+    this.hatcheryFood = 6;
+    this.spikeNeedsForRoom(RoomType.Lair);
+    this.spikeNeedsForRoom(RoomType.Hatchery);
+
+    const workers = this.creatures.filter((c) => c.isWorker && c.alive);
+    // Bed sleeper — occupies Lair, regenerating
+    if (workers[0]) {
+      const w = workers[0];
+      const bx = hx + 2;
+      const by = hy + 1;
+      const world = this.grid.tileToWorld(bx, by);
+      w.x = bx;
+      w.y = by;
+      w.wx = world.x;
+      w.wz = world.z;
+      w.hp = w.maxHp * 0.45;
+      w.sleepNeed = 80;
+      w.hunger = 10;
+      const key = `${bx},${by}`;
+      this.bedOwners.set(key, w.id);
+      w.bedKey = key;
+      w.job = JobType.Sleep;
+      w.jobTarget = { x: bx, y: by };
+      w.restHealAcc = 1.7;
+      w.setPath(null);
+      w.syncMesh(this.time);
+    }
+    // Feaster at Hatchery
+    if (workers[1]) {
+      const w = workers[1];
+      const ex = hx + 4;
+      const ey = hy;
+      const world = this.grid.tileToWorld(ex, ey);
+      w.x = ex;
+      w.y = ey;
+      w.wx = world.x;
+      w.wz = world.z;
+      w.hunger = 60;
+      w.job = JobType.Eat;
+      w.jobTarget = { x: ex, y: ey };
+      w.eatAnnounced = true;
+      w.eatAnim = 2.5;
+      w.setPath(null);
+      w.syncMesh(this.time);
+      this.renderer.spawnFx(new THREE.Vector3(w.wx, 0.7, w.wz), 0xd0f060, 0.55);
+    }
+    // Third worker still diggable nearby so dig marks don't starve needs demo
+    if (workers[2]) {
+      const w = workers[2];
+      const world = this.grid.tileToWorld(hx + 1, hy + 2);
+      w.x = hx + 1;
+      w.y = hy + 2;
+      w.wx = world.x;
+      w.wz = world.z;
+      w.hunger = 5;
+      w.sleepNeed = 5;
+      w.job = JobType.Idle;
+      w.setPath(null);
+    }
+
+    this.gold = Math.max(this.gold, 800);
+    this.grid.refreshTorches();
+    this.gridDirty = true;
+    this.rebuild();
+    this.hud.setTooltip(`(${hx + 2},${hy + 1}) Claimed · Lair · beds ${this.countOccupiedBeds()}/2`);
+    this.hud.say(MENTOR_LINES.feasting);
+    this.hud.say(MENTOR_LINES.bedClaim);
+    this.hud.say(MENTOR_LINES.lairResting);
+
+    const focus = this.grid.tileToWorld(hx + 3, hy + 1);
+    this.camTarget.set(focus.x, 0, focus.z);
+    this.renderer.camera.position.set(focus.x + 2, 22, focus.z + 12);
+    this.renderer.camera.lookAt(this.camTarget);
+  }
+
   /** QA/screenshot: dig-in-progress + claimed stone + Treasury props in frame. */
   preparePass3Shot(): void {
     const hx = this.grid.heartPos.x;

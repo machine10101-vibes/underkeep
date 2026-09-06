@@ -401,6 +401,8 @@ export class Game {
       c.hunger = sc.hunger ?? 0;
       c.sleepNeed = sc.sleepNeed ?? 0;
       c.trainNeed = sc.trainNeed ?? 0;
+      c.mood = 72;
+      c.clampStats();
       c.syncMesh(this.time);
     }
 
@@ -520,10 +522,14 @@ export class Game {
         }
       }
       if (this.held) {
-        const hit = this.pointerToWorld(e, canvas);
-        if (hit) {
-          this.held.wx = hit.x;
-          this.held.wz = hit.z;
+        try {
+          const hit = this.pointerToWorld(e, canvas);
+          if (hit && Number.isFinite(hit.x) && Number.isFinite(hit.z)) {
+            this.held.wx = hit.x;
+            this.held.wz = hit.z;
+          }
+        } catch (err) {
+          console.warn('[underkeep] held follow failed', err);
         }
       }
     });
@@ -667,11 +673,13 @@ export class Game {
         this.panAccum.y = dy;
         this.panCameraByScreen(-moveDx, -moveDy);
       } else if (this.held) {
-        const hit = this.pointerToWorld(p, canvas);
-        if (hit) {
-          this.held.wx = hit.x;
-          this.held.wz = hit.z;
-        }
+        try {
+          const hit = this.pointerToWorld(p, canvas);
+          if (hit && Number.isFinite(hit.x) && Number.isFinite(hit.z)) {
+            this.held.wx = hit.x;
+            this.held.wz = hit.z;
+          }
+        } catch { /* ignore held follow */ }
         this.updatePointerHover(p, canvas);
       } else {
         this.updatePointerHover(p, canvas);
@@ -759,52 +767,60 @@ export class Game {
   }
 
   private handlePrimaryAt(tx: number, ty: number, hit: THREE.Vector3): void {
-    if (this.tool === 'select') {
-      if (this.held) {
-        this.dropHeldAt(tx, ty);
-        return;
+    try {
+      if (this.tool === 'select') {
+        if (this.held) {
+          this.dropHeldAt(tx, ty);
+          return;
+        }
+        const c = this.creatureAt(tx, ty, hit);
+        if (c && !c.isHero) {
+          this.selectCreature(c);
+          this.pickUp(c);
+          return;
+        }
+        // Empty tile — deselect
+        this.clearSelection();
+      } else {
+        this.paint = true;
+        this.applyTool(tx, ty);
+        this.lastPaint = { x: tx, y: ty };
       }
-      const c = this.creatureAt(tx, ty, hit);
-      if (c && !c.isHero) {
-        this.selectCreature(c);
-        this.pickUp(c);
-        return;
-      }
-      // Empty tile — deselect
-      this.clearSelection();
-    } else {
-      this.paint = true;
-      this.applyTool(tx, ty);
-      this.lastPaint = { x: tx, y: ty };
+    } catch (err) {
+      console.warn('[underkeep] primary input failed', err);
     }
   }
 
   private handleSecondaryAt(tx: number, ty: number, worldHit?: THREE.Vector3): void {
-    // Hand tool: right-click / long-press = conclusive slap (hovered, selected, or held)
-    if (this.tool === 'select') {
-      let c: Creature | null = null;
-      if (this.held && !this.held.isHero) {
-        c = this.held;
-      } else {
-        c = this.creatureAt(tx, ty, worldHit);
-        if ((!c || c.isHero) && this.selected && this.selected.alive && !this.selected.isHero) {
-          c = this.selected;
+    try {
+      // Hand tool: right-click / long-press = conclusive slap (hovered, selected, or held)
+      if (this.tool === 'select') {
+        let c: Creature | null = null;
+        if (this.held && !this.held.isHero) {
+          c = this.held;
+        } else {
+          c = this.creatureAt(tx, ty, worldHit);
+          if ((!c || c.isHero) && this.selected && this.selected.alive && !this.selected.isHero) {
+            c = this.selected;
+          }
         }
-      }
-      if (c && !c.isHero) {
-        if (!c.held) this.selectCreature(c);
-        this.slap(c);
+        if (c && !c.isHero) {
+          if (!c.held) this.selectCreature(c);
+          this.slap(c);
+          return;
+        }
+      } else if (this.held) {
+        // Non-hand tools: secondary still drops held creature
+        this.dropHeld();
         return;
       }
-    } else if (this.held) {
-      // Non-hand tools: secondary still drops held creature
-      this.dropHeld();
-      return;
-    }
-    const tile = this.grid.get(tx, ty);
-    if (tile && tile.mark !== MarkType.None) {
-      tile.mark = MarkType.None;
-      this.gridDirty = true;
+      const tile = this.grid.get(tx, ty);
+      if (tile && tile.mark !== MarkType.None) {
+        tile.mark = MarkType.None;
+        this.gridDirty = true;
+      }
+    } catch (err) {
+      console.warn('[underkeep] secondary input failed', err);
     }
   }
 
@@ -952,30 +968,39 @@ export class Game {
   }
 
   private refreshInspector(): void {
-    const c = this.held ?? this.selected;
-    if (!c || !c.alive) {
-      this.hud.hideInspector();
-      return;
+    try {
+      const c = this.held ?? this.selected;
+      if (!c || !c.alive) {
+        this.hud.hideInspector();
+        return;
+      }
+      c.clampStats();
+      const kindNames: Record<string, string> = {
+        scrabbler: 'Scrabbler',
+        skitterwing: 'Skitterwing',
+        rattlekin: 'Rattlekin',
+        emberling: 'Emberling',
+        hero_knight: 'Hero Knight',
+        hero_archer: 'Hero Archer',
+      };
+      const jobRaw = typeof c.job === 'string' && c.job.length > 0 ? c.job : 'idle';
+      const jobLabel = c.held
+        ? 'Held'
+        : jobRaw.charAt(0).toUpperCase() + jobRaw.slice(1);
+      this.hud.showInspector({
+        kind: kindNames[c.kind] ?? String(c.kind),
+        job: jobLabel,
+        hp: c.hp,
+        maxHp: c.maxHp,
+        hunger: c.hunger,
+        tired: c.sleepNeed,
+        mood: c.mood,
+        efficiency: c.workEfficiency(),
+        held: c.held,
+      });
+    } catch (err) {
+      console.warn('[underkeep] refreshInspector failed', err);
     }
-    const kindNames: Record<string, string> = {
-      scrabbler: 'Scrabbler',
-      skitterwing: 'Skitterwing',
-      rattlekin: 'Rattlekin',
-      emberling: 'Emberling',
-      hero_knight: 'Hero Knight',
-      hero_archer: 'Hero Archer',
-    };
-    this.hud.showInspector({
-      kind: kindNames[c.kind] ?? c.kind,
-      job: c.held ? 'Held' : c.job.charAt(0).toUpperCase() + c.job.slice(1),
-      hp: c.hp,
-      maxHp: c.maxHp,
-      hunger: c.hunger,
-      tired: c.sleepNeed,
-      mood: c.mood,
-      efficiency: c.workEfficiency(),
-      held: c.held,
-    });
   }
 
   private applyTool(x: number, y: number): void {
@@ -1036,21 +1061,36 @@ export class Game {
   }
 
   private pickUp(c: Creature): void {
-    // Release bed if carried off
-    if (c.bedKey && this.bedOwners.get(c.bedKey) === c.id) {
-      this.bedOwners.delete(c.bedKey);
+    try {
+      if (!c || !c.alive || c.isHero) return;
+      // Release bed if carried off
+      if (c.bedKey && this.bedOwners.get(c.bedKey) === c.id) {
+        this.bedOwners.delete(c.bedKey);
+      }
+      c.bedKey = null;
+      c.clampStats();
+      c.held = true;
+      c.setPath(null);
+      c.job = JobType.Idle;
+      c.jobTarget = null;
+      c.workTimer = 0;
+      this.held = c;
+      this.selectCreature(c);
+      const wx = Number.isFinite(c.wx) ? c.wx : 0;
+      const wz = Number.isFinite(c.wz) ? c.wz : 0;
+      this.renderer.spawnFx(new THREE.Vector3(wx, 1.0, wz), 0xffdd88, 0.45);
+      this.mentioneOnce('pickUp', MENTOR_LINES.pickUp);
+      this.refreshInspector();
+    } catch (err) {
+      console.warn('[underkeep] pickUp failed', err);
+      // Never leave a half-held creature that desyncs the Hand
+      try {
+        if (c) {
+          c.held = false;
+          if (this.held === c) this.held = null;
+        }
+      } catch { /* ignore */ }
     }
-    c.bedKey = null;
-    c.held = true;
-    c.setPath(null);
-    c.job = JobType.Idle;
-    c.jobTarget = null;
-    c.workTimer = 0;
-    this.held = c;
-    this.selectCreature(c);
-    this.renderer.spawnFx(new THREE.Vector3(c.wx, 1.0, c.wz), 0xffdd88, 0.45);
-    this.mentioneOnce('pickUp', MENTOR_LINES.pickUp);
-    this.refreshInspector();
   }
 
   private dropHeld(): void {
@@ -1103,26 +1143,35 @@ export class Game {
   }
 
   private slap(c: Creature): void {
-    // Stun + interrupt current job (DK2-like Hand slap)
-    c.stunTimer = Math.max(c.stunTimer, 1.35);
-    c.speedBuff = Math.max(c.speedBuff, 2.8);
-    c.sleepNeed = Math.max(0, c.sleepNeed - 12);
-    c.hunger = Math.max(0, c.hunger - 4);
-    c.mood = Math.min(100, c.mood + 8);
-    c.setPath(null);
-    c.workTimer = 0;
-    if (c.job !== JobType.Sleep && c.job !== JobType.Eat) {
-      c.job = JobType.Idle;
-      c.jobTarget = null;
+    try {
+      if (!c || !c.alive || c.isHero) return;
+      c.clampStats();
+      // Stun + interrupt current job (DK2-like Hand slap)
+      c.stunTimer = Math.max(c.stunTimer, 1.35);
+      c.speedBuff = Math.max(c.speedBuff, 2.8);
+      c.sleepNeed = Math.max(0, Math.min(100, c.sleepNeed - 12));
+      c.hunger = Math.max(0, Math.min(100, c.hunger - 4));
+      c.mood = Math.max(0, Math.min(100, c.mood + 8));
+      c.setPath(null);
+      c.workTimer = 0;
+      if (c.job !== JobType.Sleep && c.job !== JobType.Eat) {
+        c.job = JobType.Idle;
+        c.jobTarget = null;
+      }
+      const wx = Number.isFinite(c.wx) ? c.wx : 0;
+      const wz = Number.isFinite(c.wz) ? c.wz : 0;
+      // Brief slap VFX (capped — excess particles contributed to context-loss blackouts)
+      this.renderer.spawnFx(new THREE.Vector3(wx, 0.7, wz), 0xffee88, 0.7);
+      this.renderer.spawnFx(new THREE.Vector3(wx, 1.15, wz), 0xffaa44, 0.55);
+      this.renderer.spawnDigDebris(wx, wz, 0xffdd88);
+      // Conclusive toast on EVERY successful slap — before any further UI work
+      this.hud.sayNow(MENTOR_LINES.slap);
+      this.refreshInspector();
+    } catch (err) {
+      console.warn('[underkeep] slap failed', err);
+      // Still show the toast even if VFX/inspector blows up
+      try { this.hud.sayNow(MENTOR_LINES.slap); } catch { /* ignore */ }
     }
-    // Brief slap VFX (impact + flash)
-    this.renderer.spawnFx(new THREE.Vector3(c.wx, 0.7, c.wz), 0xffee88, 0.7);
-    this.renderer.spawnFx(new THREE.Vector3(c.wx, 1.15, c.wz), 0xffaa44, 0.55);
-    this.renderer.spawnFx(new THREE.Vector3(c.wx + 0.25, 0.9, c.wz), 0xffffff, 0.35);
-    this.renderer.spawnDigDebris(c.wx, c.wz, 0xffdd88);
-    // Conclusive toast on EVERY successful slap
-    this.hud.sayNow(MENTOR_LINES.slap);
-    this.refreshInspector();
   }
 
   private workerCost(): number {
@@ -1476,6 +1525,46 @@ export class Game {
     }
   }
 
+  /** QA/screenshot: Pass 6.1c — pick+inspector Efficiency + slap toast, no blackout. */
+  preparePass61cShot(focus: 'pick' | 'slap' | 'both' = 'both'): void {
+    this.preparePass5bShot();
+    this.tool = 'select';
+    this.hud.setActiveTool('select');
+    const workers = this.creatures.filter((c) => c.isWorker && c.alive);
+    const target = workers.find((c) => c.job !== JobType.Sleep && c.job !== JobType.Eat) ?? workers[0];
+    if (!target) return;
+    // Prove clamps: briefly force garbage then clamp before UI
+    target.mood = 24;
+    target.hunger = 70;
+    target.sleepNeed = 55;
+    target.hp = target.maxHp * 0.65;
+    target.efficiencyWarned = true;
+    target.clampStats();
+    this.mana = Math.max(0, this.mana);
+    this.held = null;
+    for (const c of this.creatures) c.held = false;
+    this.pickUp(target);
+    const focusW = this.grid.tileToWorld(target.x, target.y);
+    target.wx = focusW.x + 0.8;
+    target.wz = focusW.z + 0.3;
+    target.syncMesh(this.time);
+    this.camTarget.set(focusW.x, 0, focusW.z);
+    this.renderer.camera.position.set(focusW.x + 2, 17, focusW.z + 10);
+    this.renderer.camera.lookAt(this.camTarget);
+    this.refreshInspector();
+    if (focus === 'pick') {
+      this.hud.sayNow(MENTOR_LINES.sluggishDig);
+      this.refreshInspector();
+      return;
+    }
+    const moodKeep = target.mood;
+    this.slap(target);
+    target.mood = moodKeep;
+    target.clampStats();
+    this.refreshInspector();
+    this.hud.sayNow(MENTOR_LINES.slap);
+  }
+
   /** QA/screenshot: Pass 5c louder heal + feast sparks (also usable as heal-only / feast-only). */
   preparePass5cShot(focus: 'both' | 'heal' | 'feast' = 'both'): void {
     this.preparePass5bShot();
@@ -1622,57 +1711,82 @@ export class Game {
   update(dt: number): void {
     if (this.renderer.contextLost) {
       // Still tick HUD so reload overlay stays usable
-      this.hud.update(dt);
+      try { this.hud.update(dt); } catch { /* ignore */ }
       return;
     }
-    if (!this.gameOver) {
-      this.time += dt;
-      this.updateCamera(dt);
-      this.regenMana(dt);
-      this.regenHatcheryFood(dt);
-      this.assignJobs(dt);
-      this.updateMoods(dt);
-      this.updateCreatures(dt);
-      this.updatePortal(dt);
-      this.updateHeroWave(dt);
-      this.checkHeart();
-      this.payWages(dt);
-      this.saveAcc += dt;
-      if (this.saveAcc >= 4) {
-        this.saveAcc = 0;
-        this.saveNow();
+    try {
+      // Global resource clamps every frame (negative mana was observed in beta inspector)
+      if (!Number.isFinite(this.mana)) this.mana = 0;
+      this.mana = Math.max(0, Math.min(this.maxMana(), this.mana));
+      if (!Number.isFinite(this.gold)) this.gold = 0;
+      this.gold = Math.max(0, this.gold);
+
+      if (!this.gameOver) {
+        this.time += dt;
+        this.updateCamera(dt);
+        this.regenMana(dt);
+        this.regenHatcheryFood(dt);
+        this.assignJobs(dt);
+        this.updateMoods(dt);
+        this.updateCreatures(dt);
+        this.updatePortal(dt);
+        this.updateHeroWave(dt);
+        this.checkHeart();
+        this.payWages(dt);
+        this.saveAcc += dt;
+        if (this.saveAcc >= 4) {
+          this.saveAcc = 0;
+          this.saveNow();
+        }
       }
-    }
 
-    if (this.gridDirty) this.rebuild();
+      if (this.gridDirty) this.rebuild();
 
-    for (const c of this.creatures) {
-      if (c.alive) c.syncMesh(this.time);
-      else c.mesh.visible = false;
-    }
-
-    this.renderer.update(dt);
-    this.hud.update(dt);
-    if (this.selected || this.held) this.refreshInspector();
-    this.hud.updateStats(
-      this.gold,
-      this.mana,
-      this.maxMana(),
-      this.creatures.filter((c) => c.alive && c.isWorker).length,
-      this.creatures.filter((c) => c.alive && !c.isWorker && !c.isHero).length
-    );
-    this.hud.setSpellAffordable('createWorker', this.gold >= this.workerCost());
-    this.hud.setSpellAffordable('speed', this.mana >= SPEED_COST);
-    this.hud.setSpellAffordable('lightning', this.mana >= LIGHTNING_COST);
-
-    // cleanup dead meshes periodically
-    this.creatures = this.creatures.filter((c) => {
-      if (!c.alive) {
-        this.renderer.removeEntityMesh(c.mesh);
-        return false;
+      for (const c of this.creatures) {
+        try {
+          if (c.alive) {
+            c.clampStats();
+            c.syncMesh(this.time);
+          } else if (c.mesh) {
+            c.mesh.visible = false;
+          }
+        } catch (err) {
+          console.warn('[underkeep] creature sync failed', c?.id, err);
+        }
       }
-      return true;
-    });
+
+      this.renderer.update(dt);
+      this.hud.update(dt);
+      if (this.selected || this.held) this.refreshInspector();
+      this.hud.updateStats(
+        this.gold,
+        this.mana,
+        this.maxMana(),
+        this.creatures.filter((c) => c.alive && c.isWorker).length,
+        this.creatures.filter((c) => c.alive && !c.isWorker && !c.isHero).length
+      );
+      this.hud.setSpellAffordable('createWorker', this.gold >= this.workerCost());
+      this.hud.setSpellAffordable('speed', this.mana >= SPEED_COST);
+      this.hud.setSpellAffordable('lightning', this.mana >= LIGHTNING_COST);
+
+      // cleanup dead meshes periodically
+      this.creatures = this.creatures.filter((c) => {
+        if (!c.alive) {
+          try { this.renderer.removeEntityMesh(c.mesh); } catch { /* ignore */ }
+          return false;
+        }
+        return true;
+      });
+      // Drop stale held/selected refs
+      if (this.held && !this.held.alive) this.held = null;
+      if (this.selected && !this.selected.alive) {
+        this.selected = null;
+        this.hud.hideInspector();
+      }
+    } catch (err) {
+      console.error('[underkeep] update failed', err);
+      throw err; // let main.ts frame guard count toward recovery
+    }
   }
 
   private wageAcc = 0;
@@ -1714,7 +1828,8 @@ export class Game {
   private regenMana(dt: number): void {
     const claimed = this.grid.countClaimed();
     const rate = 2 + claimed * 0.08;
-    this.mana = Math.min(this.maxMana(), this.mana + rate * dt);
+    const m = Number.isFinite(this.mana) ? this.mana : 0;
+    this.mana = Math.max(0, Math.min(this.maxMana(), m + rate * dt));
   }
 
   private regenHatcheryFood(dt: number): void {
@@ -1894,12 +2009,12 @@ export class Game {
 
     // Scrabblers: always accrue needs (even while digging) so dig marks cannot starve rest/eat
     for (const w of workers) {
-      if (w.job === JobType.Flee) continue;
+      if (w.job === JobType.Flee || w.held) continue;
       const hasHatch = this.grid.countRoom(RoomType.Hatchery) > 0;
       const hasLair = this.grid.countRoom(RoomType.Lair) > 0;
       // Faster when rooms exist so beta sees eat/rest within ~60–90s; milder otherwise
-      w.hunger += (hasHatch ? 7.5 : 2.8) * dt;
-      w.sleepNeed += (hasLair ? 6.5 : 1.5) * dt;
+      w.hunger = Math.min(100, w.hunger + (hasHatch ? 7.5 : 2.8) * dt);
+      w.sleepNeed = Math.min(100, w.sleepNeed + (hasLair ? 6.5 : 1.5) * dt);
       if (w.job === JobType.Eat || w.job === JobType.Sleep) continue;
 
       const hungry = w.hunger > (hasHatch ? 26 : 55);
@@ -1941,9 +2056,9 @@ export class Game {
       // Needs accumulate in real time; faster when Hatchery/Lair exist (demo-provable)
       const hasHatch = this.grid.countRoom(RoomType.Hatchery) > 0;
       const hasLair = this.grid.countRoom(RoomType.Lair) > 0;
-      c.hunger += (hasHatch ? 8.0 : 4.5) * dt;
-      c.sleepNeed += (hasLair ? 7.0 : 3.0) * dt;
-      c.trainNeed += 2.2 * dt;
+      c.hunger = Math.min(100, c.hunger + (hasHatch ? 8.0 : 4.5) * dt);
+      c.sleepNeed = Math.min(100, c.sleepNeed + (hasLair ? 7.0 : 3.0) * dt);
+      c.trainNeed = Math.min(100, c.trainNeed + 2.2 * dt);
 
       // Already committed to eat/sleep/train — keep path, do not re-roll target every frame
       if (c.job === JobType.Eat || c.job === JobType.Sleep || c.job === JobType.Train) {

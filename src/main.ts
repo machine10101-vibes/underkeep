@@ -51,8 +51,8 @@ function frame(now: number): void {
     } catch (err) {
       frameErrors++;
       console.error('[underkeep] frame error', err);
-      // After repeated uncaught update/render exceptions, offer recovery (never stuck white)
-      if (frameErrors >= 5) {
+      // Recover fast — never leave a stuck black/white canvas on Hand/inspector exceptions
+      if (frameErrors >= 2) {
         const g = game as unknown as { handleContextLost?: () => void };
         g.handleContextLost?.();
         frameErrors = 0;
@@ -77,7 +77,11 @@ if (
     params.get('shot') === '6.1b' ||
     params.get('shot') === '61b' ||
     params.get('shot') === '6.1b-slap' ||
-    params.get('shot') === '6.1b-eff')
+    params.get('shot') === '6.1b-eff' ||
+    params.get('shot') === '6.1c' ||
+    params.get('shot') === '61c' ||
+    params.get('shot') === '6.1c-pick' ||
+    params.get('shot') === '6.1c-slap')
 ) {
   // Auto-arrange evidence shots
   setTimeout(() => {
@@ -89,10 +93,14 @@ if (
       preparePass5cShot?: (focus?: 'both' | 'heal' | 'feast') => void;
       preparePass61Shot?: () => void;
       preparePass61bShot?: (focus?: 'both' | 'slap' | 'efficiency') => void;
+      preparePass61cShot?: (focus?: 'pick' | 'slap' | 'both') => void;
     };
     g.hud.hideOverlay();
     const shot = params.get('shot');
-    if (shot === '6.1b-slap') g.preparePass61bShot?.('slap');
+    if (shot === '6.1c-slap') g.preparePass61cShot?.('slap');
+    else if (shot === '6.1c-pick') g.preparePass61cShot?.('pick');
+    else if (shot === '6.1c' || shot === '61c') g.preparePass61cShot?.('both');
+    else if (shot === '6.1b-slap') g.preparePass61bShot?.('slap');
     else if (shot === '6.1b-eff') g.preparePass61bShot?.('efficiency');
     else if (shot === '6.1b' || shot === '61b') g.preparePass61bShot?.('both');
     else if (shot === '6.1' || shot === '61') g.preparePass61Shot?.();

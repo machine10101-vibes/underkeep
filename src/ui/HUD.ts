@@ -164,11 +164,15 @@ export class HUD {
   }
 
   updateStats(gold: number, mana: number, maxMana: number, workers: number, creatures: number): void {
-    this.goldEl.textContent = String(Math.floor(gold));
-    this.manaEl.textContent = `${Math.floor(mana)}/${maxMana}`;
-    this.manaBar.style.width = `${Math.max(0, Math.min(100, (mana / maxMana) * 100))}%`;
-    this.workersEl.textContent = String(workers);
-    this.creaturesEl.textContent = String(creatures);
+    const g = Number.isFinite(gold) ? Math.max(0, gold) : 0;
+    const mm = Number.isFinite(maxMana) && maxMana > 0 ? maxMana : 1;
+    const m = Number.isFinite(mana) ? Math.max(0, Math.min(mm, mana)) : 0;
+    this.goldEl.textContent = String(Math.floor(g));
+    this.manaEl.textContent = `${Math.floor(m)}/${Math.floor(mm)}`;
+    const manaPct = Math.max(0, Math.min(100, (m / mm) * 100));
+    this.manaBar.style.width = `${Number.isFinite(manaPct) ? manaPct : 0}%`;
+    this.workersEl.textContent = String(Math.max(0, workers | 0));
+    this.creaturesEl.textContent = String(Math.max(0, creatures | 0));
   }
 
   setSpellAffordable(spell: SpellId, ok: boolean): void {
@@ -230,17 +234,33 @@ export class HUD {
     efficiency: number;
     held?: boolean;
   }): void {
+    const clamp01 = (n: number, lo: number, hi: number, fb = lo) => {
+      if (!Number.isFinite(n)) return fb;
+      return Math.max(lo, Math.min(hi, n));
+    };
+    const maxHp = clamp01(data.maxHp, 1, 9999, 1);
+    const hp = clamp01(data.hp, 0, maxHp, 0);
+    const hunger = clamp01(data.hunger, 0, 100, 0);
+    const tired = clamp01(data.tired, 0, 100, 0);
+    const mood = clamp01(data.mood, 0, 100, 50);
+    // efficiency may be 0–1.2 fraction OR already a percent — normalize to fraction
+    let eff = Number.isFinite(data.efficiency) ? data.efficiency : 0.85;
+    if (eff > 1.5) eff = eff / 100;
+    eff = clamp01(eff, 0, 1.2, 0.85);
+    const effPct = Math.round(eff * 100);
+
     this.inspName.textContent = data.held ? `${data.kind} (held)` : data.kind;
-    this.inspJob.textContent = data.job;
-    this.inspHp.textContent = `${Math.ceil(data.hp)}/${Math.ceil(data.maxHp)}`;
-    this.inspHpBar.style.width = `${Math.max(0, Math.min(100, (data.hp / Math.max(1, data.maxHp)) * 100))}%`;
-    this.inspHunger.textContent = `${Math.floor(data.hunger)}`;
-    this.inspTired.textContent = `${Math.floor(data.tired)}`;
+    this.inspJob.textContent = data.job || 'Idle';
+    this.inspHp.textContent = `${Math.ceil(hp)}/${Math.ceil(maxHp)}`;
+    const hpPct = clamp01((hp / maxHp) * 100, 0, 100, 0);
+    this.inspHpBar.style.width = `${hpPct}%`;
+    this.inspHunger.textContent = `${Math.floor(hunger)}`;
+    this.inspTired.textContent = `${Math.floor(tired)}`;
     const moodLabel =
-      data.mood >= 75 ? 'Happy' : data.mood >= 50 ? 'Content' : data.mood >= 30 ? 'Grumpy' : data.mood >= 15 ? 'Angry' : 'Leaving?';
-    this.inspMood.textContent = `${Math.floor(data.mood)} · ${moodLabel}`;
-    this.inspMoodBar.style.width = `${Math.max(0, Math.min(100, data.mood))}%`;
-    const effPct = Math.round(Math.max(0, data.efficiency) * 100);
+      mood >= 75 ? 'Happy' : mood >= 50 ? 'Content' : mood >= 30 ? 'Grumpy' : mood >= 15 ? 'Angry' : 'Leaving?';
+    this.inspMood.textContent = `${Math.floor(mood)} · ${moodLabel}`;
+    this.inspMoodBar.style.width = `${clamp01(mood, 0, 100, 0)}%`;
+    // Always visible Efficiency: N%
     this.inspEfficiency.textContent = `${effPct}%`;
     this.inspectorEl.classList.remove('hidden');
   }

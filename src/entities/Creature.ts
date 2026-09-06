@@ -95,21 +95,40 @@ export class Creature {
     this.syncMesh(0);
   }
 
+  /** Keep vitals in sane finite ranges (prevents NaN bar widths / HUD overflow). */
+  clampStats(): void {
+    const fin = (n: number, fallback = 0) => (Number.isFinite(n) ? n : fallback);
+    this.maxHp = Math.max(1, fin(this.maxHp, 1));
+    this.hp = Math.max(0, Math.min(this.maxHp, fin(this.hp, this.maxHp)));
+    this.hunger = Math.max(0, Math.min(100, fin(this.hunger)));
+    this.sleepNeed = Math.max(0, Math.min(100, fin(this.sleepNeed)));
+    this.mood = Math.max(0, Math.min(100, fin(this.mood, 72)));
+    this.wx = fin(this.wx);
+    this.wz = fin(this.wz);
+    if (!Number.isFinite(this.x)) this.x = 0;
+    if (!Number.isFinite(this.y)) this.y = 0;
+  }
+
   syncMesh(time: number): void {
-    this.mesh.visible = true;
-    if (this.held) {
-      // DK2-like: creature dangles with the Hand cursor
-      const bob = Math.sin(time * 10 + this.bobPhase) * 0.08;
-      this.mesh.position.set(this.wx, 1.35 + bob, this.wz);
-      this.mesh.rotation.x = 0.15;
-      this.mesh.rotation.z = Math.sin(time * 6) * 0.2;
-      if (this.selectRing) {
-        this.selectRing.visible = true;
-        this.selectRing.rotation.z = time * 3;
+    try {
+      this.clampStats();
+      if (!this.mesh) return;
+      this.mesh.visible = true;
+      const wx = Number.isFinite(this.wx) ? this.wx : 0;
+      const wz = Number.isFinite(this.wz) ? this.wz : 0;
+      if (this.held) {
+        // DK2-like: creature dangles with the Hand cursor
+        const bob = Math.sin(time * 10 + this.bobPhase) * 0.08;
+        this.mesh.position.set(wx, 1.35 + bob, wz);
+        this.mesh.rotation.x = 0.15;
+        this.mesh.rotation.z = Math.sin(time * 6) * 0.2;
+        if (this.selectRing) {
+          this.selectRing.visible = true;
+          this.selectRing.rotation.z = time * 3;
+        }
+        if (this.pickaxe) this.pickaxe.visible = false;
+        return;
       }
-      if (this.pickaxe) this.pickaxe.visible = false;
-      return;
-    }
     const digging = this.job === JobType.Dig || this.job === JobType.Mine || this.job === JobType.Claim || this.job === JobType.Fortify;
     const sleeping = this.job === JobType.Sleep;
     const eating = this.job === JobType.Eat;
@@ -180,13 +199,18 @@ export class Creature {
       if (this.tintPulse <= 0) this.tintMode = null;
     }
     this.applyTintVisual();
+    } catch (err) {
+      console.warn('[underkeep] syncMesh failed', err);
+    }
   }
 
 
   /** Brief screen-friendly mesh tint while healing (green) or eating (warm). */
   /** Dig/work multiplier from mood (≈0.5–1.2). */
   workEfficiency(): number {
-    return 0.5 + (Math.max(0, Math.min(100, this.mood)) / 100) * 0.7;
+    const mood = Number.isFinite(this.mood) ? Math.max(0, Math.min(100, this.mood)) : 50;
+    const eff = 0.5 + (mood / 100) * 0.7;
+    return Number.isFinite(eff) ? Math.max(0.5, Math.min(1.2, eff)) : 0.85;
   }
 
   pulseTint(mode: 'heal' | 'feast', seconds = 0.85): void {
@@ -195,6 +219,8 @@ export class Creature {
   }
 
   private applyTintVisual(): void {
+    if (!this.mesh) return;
+    try {
     const mats: THREE.MeshStandardMaterial[] = [];
     this.mesh.traverse((o) => {
       const m = (o as THREE.Mesh).material;
@@ -226,6 +252,9 @@ export class Creature {
         mat.emissive.copy(base.emissive);
         mat.emissiveIntensity = base.intensity;
       }
+    }
+    } catch (err) {
+      console.warn('[underkeep] tint failed', err);
     }
   }
 

@@ -18,6 +18,20 @@ export enum RoomType {
   Training = 4,
   Library = 5,
   Portal = 6,
+  Guard = 7,
+}
+
+/** Wooden door on a claimed corridor tile. */
+export enum DoorState {
+  None = 0,
+  Closed = 1,
+  Open = 2,
+}
+
+/** Placeable trap on claimed floor. */
+export enum TrapType {
+  None = 0,
+  Sentry = 1,
 }
 
 export enum MarkType {
@@ -66,6 +80,10 @@ export interface Tile {
   /** 0 = intact solid, 1 = fully excavated (earth/gold). */
   digProgress: number;
   torch: boolean;
+  door: DoorState;
+  trap: TrapType;
+  /** Call-to-arms rally flag on this tile. */
+  rally: boolean;
 }
 
 export interface Vec2 {
@@ -81,7 +99,12 @@ export const ROOM_COST: Record<RoomType, number> = {
   [RoomType.Training]: 200,
   [RoomType.Library]: 250,
   [RoomType.Portal]: 300,
+  [RoomType.Guard]: 175,
 };
+
+export const DOOR_COST = 75;
+export const SENTRY_COST = 150;
+export const RALLY_COST = 40;
 
 export const ROOM_NAMES: Record<RoomType, string> = {
   [RoomType.None]: 'None',
@@ -91,6 +114,7 @@ export const ROOM_NAMES: Record<RoomType, string> = {
   [RoomType.Training]: 'Training Room',
   [RoomType.Library]: 'Library',
   [RoomType.Portal]: 'Portal',
+  [RoomType.Guard]: 'Guard Room',
 };
 
 export const CREATURE_STATS: Record<
@@ -116,6 +140,10 @@ export type ToolMode =
   | 'hatchery'
   | 'training'
   | 'library'
-  | 'portal';
+  | 'portal'
+  | 'guard'
+  | 'door'
+  | 'sentry'
+  | 'rally';
 
 export type SpellId = 'createWorker' | 'speed' | 'lightning' | 'heal';

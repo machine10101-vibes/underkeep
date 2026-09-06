@@ -6,13 +6,18 @@ import { Grid } from './Grid';
 import {
   CREATURE_STATS,
   CreatureKind,
+  DOOR_COST,
+  DoorState,
   JobType,
   MarkType,
+  RALLY_COST,
   ROOM_COST,
   RoomType,
+  SENTRY_COST,
   SpellId,
   TILE_SIZE,
   ToolMode,
+  TrapType,
   Vec2,
   TileKind,
 } from './types';
@@ -502,6 +507,10 @@ export class Game {
         '8': 'training',
         '9': 'library',
         '0': 'portal',
+        g: 'guard',
+        d: 'door',
+        f: 'sentry',
+        y: 'rally',
       };
       if (map[e.key]) {
         this.tool = map[e.key];
@@ -875,8 +884,12 @@ export class Game {
     const tile = this.grid.get(tp.x, tp.y);
     if (tile) {
       let room =
-        tile.room !== RoomType.None ? ` · ${['', 'Treasury', 'Lair', 'Hatchery', 'Training', 'Library', 'Portal'][tile.room]}` : '';
+        tile.room !== RoomType.None ? ` · ${['', 'Treasury', 'Lair', 'Hatchery', 'Training', 'Library', 'Portal', 'Guard'][tile.room]}` : '';
       if (tile.room === RoomType.Hatchery) room += ` · food ${Math.floor(this.hatcheryFood)}`;
+      if (tile.door === DoorState.Closed) room += ' · Door (closed)';
+      if (tile.door === DoorState.Open) room += ' · Door (open)';
+      if (tile.trap === TrapType.Sentry) room += ' · Sentry trap';
+      if (tile.rally) room += ' · Rally flag';
       if (tile.room === RoomType.Lair) {
         const beds = this.grid.countRoom(RoomType.Lair);
         room += ` · beds ${this.countOccupiedBeds()}/${beds}`;
@@ -1067,6 +1080,68 @@ export class Game {
         tile.mark = MarkType.Fortify;
         this.marksDirty = true;
       }
+    } else if (this.tool === 'door') {
+      if (this.grid.canPlaceDoor(x, y)) {
+        if (tile.door === DoorState.None) {
+          if (this.gold < DOOR_COST) return;
+          this.gold -= DOOR_COST;
+          tile.door = DoorState.Closed;
+          this.requestStructuralRebuild();
+          this.mentioneOnce('doorBuilt', MENTOR_LINES.doorBuilt);
+          this.saveNow();
+        } else if (tile.door === DoorState.Closed) {
+          tile.door = DoorState.Open;
+          this.requestStructuralRebuild();
+          this.hud.say(MENTOR_LINES.doorOpen);
+          this.saveNow();
+        } else {
+          tile.door = DoorState.Closed;
+          this.requestStructuralRebuild();
+          this.hud.say(MENTOR_LINES.doorClosed);
+          this.saveNow();
+        }
+      }
+    } else if (this.tool === 'sentry') {
+      if (tile.kind === TileKind.Claimed && tile.trap === TrapType.None) {
+        if (this.gold < SENTRY_COST) return;
+        this.gold -= SENTRY_COST;
+        tile.trap = TrapType.Sentry;
+        this.requestStructuralRebuild();
+        this.mentioneOnce('sentryBuilt', MENTOR_LINES.sentryBuilt);
+        this.saveNow();
+      }
+    } else if (this.tool === 'rally') {
+      if (tile.kind === TileKind.Claimed) {
+        if (tile.rally) {
+          tile.rally = false;
+          this.hud.say(MENTOR_LINES.rallyCleared);
+          this.requestStructuralRebuild();
+          this.saveNow();
+          return;
+        }
+        if (this.gold < RALLY_COST) return;
+        this.gold -= RALLY_COST;
+        // Single rally: clear others
+        for (const t of this.grid.tiles) t.rally = false;
+        tile.rally = true;
+        this.requestStructuralRebuild();
+        this.hud.say(MENTOR_LINES.rallyPlanted);
+        // Snap fighters to Guard on the flag
+        for (const c of this.creatures) {
+          if (!c.alive || c.isHero || c.isWorker || c.held) continue;
+          if (
+            c.kind === CreatureKind.Rattlekin ||
+            c.kind === CreatureKind.Emberling ||
+            c.kind === CreatureKind.Skitterwing
+          ) {
+            c.job = JobType.Guard;
+            c.jobTarget = { x, y };
+            const path = this.grid.findPath(c.x, c.y, x, y);
+            if (path) c.setPath(path);
+          }
+        }
+        this.saveNow();
+      }
     } else {
       const roomMap: Partial<Record<ToolMode, RoomType>> = {
         treasury: RoomType.Treasury,
@@ -1075,6 +1150,7 @@ export class Game {
         training: RoomType.Training,
         library: RoomType.Library,
         portal: RoomType.Portal,
+        guard: RoomType.Guard,
       };
       const room = roomMap[this.tool];
       if (room && tile.kind === TileKind.Claimed && tile.room === RoomType.None) {
@@ -1094,6 +1170,9 @@ export class Game {
             this.mentioneOnce('hatcheryBuilt', MENTOR_LINES.hatcheryBuilt);
             this.hatcheryFood = Math.max(this.hatcheryFood, 4);
             this.spikeNeedsForRoom(RoomType.Hatchery);
+          }
+          if (room === RoomType.Guard) {
+            this.mentioneOnce('guardBuilt', MENTOR_LINES.guardBuilt);
           }
           this.saveNow();
         }
@@ -1914,6 +1993,122 @@ export class Game {
     if (fighter) this.selectCreature(fighter);
   }
 
+  /** QA/screenshot: doors + sentry trap + Guard/rally. */
+  preparePass63Shot(): void {
+    this.hud.hideOverlay();
+    const hx = this.grid.heartPos.x;
+    const hy = this.grid.heartPos.y;
+    const claim = (x: number, y: number, room = RoomType.None) => {
+      const t = this.grid.get(x, y);
+      if (!t || t.kind === TileKind.Heart) return;
+      t.kind = TileKind.Claimed;
+      t.claimedProgress = 1;
+      t.room = room;
+      t.mark = MarkType.None;
+      t.digProgress = 0;
+      t.door = DoorState.None;
+      t.trap = TrapType.None;
+      t.rally = false;
+      t.fortified = false;
+    };
+    for (let y = hy - 3; y <= hy + 3; y++) {
+      for (let x = hx - 3; x <= hx + 5; x++) claim(x, y);
+    }
+    // Keep Portal/Library/Training intact for non-regression
+    claim(hx + 2, hy + 1, RoomType.Training);
+    claim(hx + 3, hy + 1, RoomType.Training);
+    claim(hx + 4, hy + 1, RoomType.Library);
+    claim(hx + 5, hy + 1, RoomType.Library);
+    claim(hx + 4, hy - 1, RoomType.Portal);
+    claim(hx + 5, hy - 1, RoomType.Portal);
+    claim(hx - 2, hy + 1, RoomType.Lair);
+    claim(hx - 1, hy + 1, RoomType.Lair);
+    claim(hx - 2, hy + 2, RoomType.Hatchery);
+    claim(hx + 2, hy + 2, RoomType.Guard);
+    claim(hx + 3, hy + 2, RoomType.Guard);
+
+    // Corridor walls so door mouths read clearly
+    for (const [x, y] of [
+      [hx, hy - 2],
+      [hx + 1, hy - 2],
+      [hx - 1, hy - 2],
+      [hx + 2, hy - 2],
+    ] as const) {
+      const wall = this.grid.get(x, y);
+      if (wall && wall.kind !== TileKind.Heart) {
+        wall.kind = TileKind.Earth;
+        wall.fortified = true;
+        wall.room = RoomType.None;
+        wall.door = DoorState.None;
+      }
+    }
+    // Open corridor mouth with closed door
+    claim(hx, hy - 1);
+    claim(hx + 1, hy - 1);
+    const doorTile = this.grid.get(hx, hy - 1)!;
+    doorTile.door = DoorState.Closed;
+    // Open door variant next to it for visual contrast
+    const doorOpen = this.grid.get(hx + 1, hy - 1)!;
+    doorOpen.door = DoorState.Open;
+    // Sentry on approach tile
+    claim(hx, hy - 3);
+    claim(hx + 1, hy - 3);
+    claim(hx, hy - 4);
+    const sentry = this.grid.get(hx, hy - 3)!;
+    sentry.trap = TrapType.Sentry;
+    // Rally flag in Guard plaza
+    const rally = this.grid.get(hx + 2, hy)!;
+    claim(hx + 2, hy);
+    rally.rally = true;
+
+    this.hatcheryFood = 8;
+    this.gold = 900;
+    // Hero approaching door (blocked)
+    const hero = this.spawnCreature(CreatureKind.HeroKnight, hx, hy - 4);
+    hero.job = JobType.Fight;
+    hero.jobTarget = { ...this.grid.heartPos };
+    // Fighter holding rally / Guard
+    if (!this.creatures.some((c) => c.kind === CreatureKind.Rattlekin && c.alive)) {
+      this.spawnCreature(CreatureKind.Rattlekin, hx + 2, hy + 2);
+    }
+    if (!this.creatures.some((c) => c.kind === CreatureKind.Emberling && c.alive)) {
+      this.spawnCreature(CreatureKind.Emberling, hx + 3, hy + 2);
+    }
+    for (const c of this.creatures) {
+      if (!c.alive || c.isHero || c.isWorker) continue;
+      if (c.kind === CreatureKind.Rattlekin || c.kind === CreatureKind.Emberling) {
+        const world = this.grid.tileToWorld(hx + 2, hy);
+        c.x = hx + 2;
+        c.y = hy;
+        c.wx = world.x + (c.kind === CreatureKind.Emberling ? 0.35 : -0.2);
+        c.wz = world.z;
+        c.job = JobType.Guard;
+        c.jobTarget = { x: hx + 2, y: hy };
+        c.setPath(null);
+        c.syncMesh(this.time);
+      }
+    }
+    // Keep a Gravemage researching so Library doesn't regress
+    if (!this.creatures.some((c) => c.kind === CreatureKind.Gravemage && c.alive)) {
+      const g = this.spawnCreature(CreatureKind.Gravemage, hx + 4, hy + 1);
+      g.job = JobType.Research;
+      g.jobTarget = { x: hx + 4, y: hy + 1 };
+    }
+    this.requestStructuralRebuild();
+    this.rebuild();
+    this.hud.sayNow('Doors sealed. Sentry armed. Rally flies — hold the line!');
+    this.hud.say(MENTOR_LINES.doorBuilt);
+    this.hud.say(MENTOR_LINES.sentryBuilt);
+    this.hud.say(MENTOR_LINES.rallyPlanted);
+    this.hud.setTooltip(`(${hx},${hy - 1}) Claimed · Door (closed)`);
+    const focus = this.grid.tileToWorld(hx + 1, hy - 1);
+    this.camTarget.set(focus.x, 0, focus.z);
+    this.renderer.camera.position.set(focus.x + 2, 22, focus.z + 13);
+    this.renderer.camera.lookAt(this.camTarget);
+    const guard = this.creatures.find((c) => c.alive && c.kind === CreatureKind.Rattlekin);
+    if (guard) this.selectCreature(guard);
+  }
+
   update(dt: number): void {
     if (this.renderer.contextLost) {
       // Still tick HUD so reload overlay stays usable
@@ -2280,6 +2475,7 @@ export class Game {
       c.trainNeed = Math.min(100, c.trainNeed + 2.2 * dt);
 
       // Already committed to eat/sleep/train/research — keep path
+      // (Guard is re-asserted below so hunger/sleep can interrupt)
       if (
         c.job === JobType.Eat ||
         c.job === JobType.Sleep ||
@@ -2299,6 +2495,10 @@ export class Game {
       }
 
       if (c.job === JobType.Fight) {
+        c.job = JobType.Idle;
+      }
+      // Drop Guard only when re-evaluating (may re-assign immediately)
+      if (c.job === JobType.Guard) {
         c.job = JobType.Idle;
       }
 
@@ -2342,6 +2542,38 @@ export class Game {
         }
       }
 
+      // Rally flag call-to-arms — fighters (and scouts) hold the flag tile
+      const rallyTile = this.grid.tiles.find((t) => t.rally);
+      if (
+        rallyTile &&
+        (isFighter || c.kind === CreatureKind.Skitterwing) &&
+        c.trainNeed <= 50
+      ) {
+        c.job = JobType.Guard;
+        c.jobTarget = { x: rallyTile.x, y: rallyTile.y };
+        if (c.x !== rallyTile.x || c.y !== rallyTile.y) {
+          c.setPath(this.grid.findPath(c.x, c.y, rallyTile.x, rallyTile.y));
+        } else {
+          c.setPath(null);
+        }
+        continue;
+      }
+
+      // Guard Room — idle fighters hold post when not training
+      if (isFighter && this.grid.countRoom(RoomType.Guard) > 0 && c.trainNeed <= 35) {
+        const t = this.findRoomTile(RoomType.Guard);
+        if (t) {
+          c.job = JobType.Guard;
+          c.jobTarget = t;
+          if (c.x !== t.x || c.y !== t.y) {
+            c.setPath(this.grid.findPath(c.x, c.y, t.x, t.y));
+          } else {
+            c.setPath(null);
+          }
+          continue;
+        }
+      }
+
       // Soft train need for non-fighters too (Skitterwing scouts)
       if (
         !isResearcher &&
@@ -2376,7 +2608,7 @@ export class Game {
       }
     }
 
-    // heroes path to heart
+    // heroes path to heart (closed doors block heroes)
     for (const h of this.creatures) {
       if (!h.alive || !h.isHero || h.stunTimer > 0) continue;
       const minion = this.creatures.find(
@@ -2386,15 +2618,15 @@ export class Game {
         h.job = JobType.Fight;
         h.jobTarget = { x: minion.x, y: minion.y };
         if (Math.hypot(h.x - minion.x, h.y - minion.y) > 1.2) {
-          h.setPath(this.grid.findPath(h.x, h.y, minion.x, minion.y));
+          h.setPath(this.grid.findPath(h.x, h.y, minion.x, minion.y, { forHero: true }));
         } else h.setPath(null);
       } else {
         h.job = JobType.Fight;
         const hx = this.grid.heartPos.x;
         const hy = this.grid.heartPos.y;
         if (h.path.length === 0 || Math.random() < 0.02) {
-          // path toward heart — may need to dig? heroes walk claimed/dirt only; if blocked, path as far as possible
-          const path = this.grid.findPath(h.x, h.y, hx, hy);
+          // path toward heart — closed doors block; walk claimed/dirt only
+          const path = this.grid.findPath(h.x, h.y, hx, hy, { forHero: true });
           if (path) h.setPath(path);
           else {
             // approach nearest walkable toward heart
@@ -2409,7 +2641,7 @@ export class Game {
                 best = { x: t.x, y: t.y };
               }
             }
-            if (best) h.setPath(this.grid.findPath(h.x, h.y, best.x, best.y));
+            if (best) h.setPath(this.grid.findPath(h.x, h.y, best.x, best.y, { forHero: true }));
           }
         }
       }
@@ -2579,6 +2811,17 @@ export class Game {
 
       const arrived = c.moveAlongPath(dt, this.grid);
 
+      // Creatures open closed doors they stand on; heroes cannot.
+      if (!c.isHero) {
+        const doorTile = this.grid.get(c.x, c.y);
+        if (doorTile && doorTile.door === DoorState.Closed) {
+          doorTile.door = DoorState.Open;
+          this.requestStructuralRebuild();
+        }
+      } else {
+        this.triggerTrapsForHero(c);
+      }
+
       if (c.isWorker) {
         this.updateWorkerJob(c, dt, arrived);
       } else if (!c.isHero) {
@@ -2586,6 +2829,24 @@ export class Game {
       } else {
         this.updateHeroJob(c, dt);
       }
+    }
+  }
+
+  /** Sentry trap: fire once on hero footprint, then disarm. */
+  private triggerTrapsForHero(c: Creature): void {
+    const t = this.grid.get(c.x, c.y);
+    if (!t || t.trap !== TrapType.Sentry) return;
+    const dmg = 38;
+    c.hp -= dmg;
+    c.pulseTint('feast', 0.55);
+    this.renderer.spawnFx(new THREE.Vector3(c.wx, 1.1, c.wz), 0xffaa44, 0.55);
+    this.renderer.spawnFx(new THREE.Vector3(c.wx, 1.4, c.wz), 0xff6622, 0.4);
+    t.trap = TrapType.None;
+    this.requestStructuralRebuild();
+    this.hud.say(MENTOR_LINES.sentryFire);
+    if (c.hp <= 0) {
+      c.alive = false;
+      c.mesh.visible = false;
     }
   }
 
@@ -2663,6 +2924,10 @@ export class Game {
             t.kind = TileKind.Dirt;
             t.mark = MarkType.None;
             t.digProgress = 0;
+            t.door = DoorState.None;
+            t.trap = TrapType.None;
+            t.rally = false;
+            t.room = RoomType.None;
             this.requestStructuralRebuild();
             c.job = JobType.Idle;
             c.jobTarget = null;
@@ -2809,6 +3074,20 @@ export class Game {
         }
         this.renderer.spawnFx(new THREE.Vector3(c.wx, 1.2, c.wz), 0xaa88ff, 0.8);
       }
+    } else if (c.job === JobType.Guard) {
+      if (!c.jobTarget) {
+        c.job = JobType.Idle;
+        return;
+      }
+      if (!arrived && c.path.length > 0) return;
+      if (c.x !== c.jobTarget.x || c.y !== c.jobTarget.y) {
+        const path = this.grid.findPath(c.x, c.y, c.jobTarget.x, c.jobTarget.y);
+        if (path) c.setPath(path);
+        return;
+      }
+      // Hold post — idle stance at rally / Guard Room
+      c.setPath(null);
+      return;
     } else if (c.job === JobType.Train && arrived) {
       c.trainNeed = Math.max(0, c.trainNeed - 30 * dt);
       c.workTimer += dt;

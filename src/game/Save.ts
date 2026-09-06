@@ -1,4 +1,4 @@
-import { CreatureKind, MarkType, RoomType, Tile, TileKind, Vec2 } from './types';
+import { CreatureKind, DoorState, MarkType, RoomType, Tile, TileKind, TrapType, Vec2 } from './types';
 
 export const SAVE_KEY = 'underkeep-save-v1';
 
@@ -43,6 +43,9 @@ export interface SaveData {
     claimedProgress: number;
     digProgress: number;
     torch: boolean;
+    door?: DoorState;
+    trap?: TrapType;
+    rally?: boolean;
   }>;
   gold: number;
   mana: number;
@@ -61,6 +64,7 @@ export interface SaveData {
   gameOver: boolean;
   won: boolean;
   cam?: { tx: number; tz: number; cx: number; cy: number; cz: number };
+  rallyPos?: Vec2 | null;
 }
 
 function finiteNum(n: unknown): n is number {
@@ -206,6 +210,9 @@ export function packTiles(tiles: Tile[]): SaveData['tiles'] {
     claimedProgress: t.claimedProgress,
     digProgress: t.digProgress,
     torch: t.torch,
+    door: t.door ?? DoorState.None,
+    trap: t.trap ?? TrapType.None,
+    rally: !!t.rally,
   }));
 }
 
@@ -222,5 +229,8 @@ export function unpackTiles(gridTiles: Tile[], packed: SaveData['tiles']): void 
     t.claimedProgress = p.claimedProgress ?? 0;
     t.digProgress = p.digProgress ?? 0;
     t.torch = !!p.torch;
+    t.door = (p.door as DoorState) ?? DoorState.None;
+    t.trap = (p.trap as TrapType) ?? TrapType.None;
+    t.rally = !!p.rally;
   }
 }

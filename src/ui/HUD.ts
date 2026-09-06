@@ -1,6 +1,6 @@
 import { SpellId, ToolMode } from '../game/types';
 
-const ROOM_TOOLS: ToolMode[] = ['treasury', 'lair', 'hatchery', 'training', 'library', 'portal'];
+const ROOM_TOOLS: ToolMode[] = ['treasury', 'lair', 'hatchery', 'training', 'library', 'portal', 'guard', 'door', 'sentry', 'rally'];
 
 export class HUD {
   private goldEl: HTMLElement;
@@ -329,4 +329,12 @@ export const MENTOR_LINES = {
   moodLow: "A minion's mood is crumbling. Beds, food, and space — or they may leave.",
   sluggishDig: "Sluggish claws… mood is dragging the dig.",
   leaveThreat: "A minion threatens to leave the Underkeep…",
+  doorBuilt: "A wooden door bars the corridor. Heroes hate hinges.",
+  doorOpen: "Door swings open — minions pass; heroes still hesitate if you close it again.",
+  doorClosed: "Door sealed. Heroes bounce. Creatures can pry it open.",
+  sentryBuilt: "Sentry trap armed. Heroes who tread here learn about arrows.",
+  sentryFire: "Twang! The Sentry greets a hero with sharp hospitality.",
+  guardBuilt: "Guard Room raised. Fighters will hold the line when idle.",
+  rallyPlanted: "Rally flag planted! Call to arms — minions hold this tile.",
+  rallyCleared: "Rally flag struck. Back to ordinary scheming.",
 };

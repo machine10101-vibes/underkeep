@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { RoomType, TILE_SIZE, TileKind } from '../game/types';
+import { DoorState, RoomType, TILE_SIZE, TileKind } from '../game/types';
 import {
   bumpFor,
   claimedStoneTex,
@@ -67,6 +67,7 @@ export function makeClaimedFloorMesh(room: RoomType): THREE.Group {
     [RoomType.Training]: 0xc06050,
     [RoomType.Library]: 0x5070c8,
     [RoomType.Portal]: 0xa050d0,
+    [RoomType.Guard]: 0x708090,
   };
   const slabColor = roomTint[room] ?? 0xb8a888;
   const slabEmissive =
@@ -82,7 +83,9 @@ export function makeClaimedFloorMesh(room: RoomType): THREE.Group {
               ? 0x401010
               : room === RoomType.Library
                 ? 0x101848
-                : 0x301048;
+                : room === RoomType.Guard
+                  ? 0x202830
+                  : 0x301048;
 
   const mortar = new THREE.MeshStandardMaterial({
     color: 0x2a2218,
@@ -952,6 +955,15 @@ export function floorMaterial(kind: TileKind, room: RoomType): THREE.MeshStandar
         emissiveIntensity: 0.35,
         bump: 0.07,
       });
+    case RoomType.Guard:
+      return texturedMat('floor-training', trainingFloorTex(), {
+        metalness: 0.25,
+        roughness: 0.68,
+        emissive: 0x182028,
+        emissiveIntensity: 0.12,
+        bump: 0.1,
+        color: 0x8090a0,
+      });
     default:
       return texturedMat('floor-claimed-v2', claimedStoneTex(), {
         color: 0xb8a890,
@@ -977,6 +989,7 @@ export function makeRoomDecal(room: RoomType): THREE.Mesh | null {
     [RoomType.Training]: { kind: 'worn', color: [170, 70, 60], emissive: 0x802020, ei: 0.18, size: 1.4 },
     [RoomType.Library]: { kind: 'runes', color: [90, 120, 210], emissive: 0x4060c0, ei: 0.4, size: 1.45 },
     [RoomType.Portal]: { kind: 'swirl', color: [160, 80, 220], emissive: 0x8030c0, ei: 0.55, size: 1.5 },
+    [RoomType.Guard]: { kind: 'worn', color: [100, 120, 140], emissive: 0x406080, ei: 0.22, size: 1.4 },
   };
   const s = specs[room];
   if (!s) return null;
@@ -1194,6 +1207,37 @@ export function makeRoomProps(room: RoomType): THREE.Group | null {
     );
     core.position.y = 1.15;
     g.add(core);
+  } else if (room === RoomType.Guard) {
+    const wood = new THREE.MeshStandardMaterial({ color: 0x5a4030, roughness: 0.8 });
+    const steel = new THREE.MeshStandardMaterial({
+      color: 0x90a0b0,
+      metalness: 0.7,
+      roughness: 0.35,
+      emissive: 0x203040,
+      emissiveIntensity: 0.15,
+    });
+    const post = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.09, 1.35, 6), wood);
+    post.position.set(0, 0.7, 0);
+    post.castShadow = true;
+    g.add(post);
+    const banner = new THREE.Mesh(
+      new THREE.BoxGeometry(0.55, 0.7, 0.04),
+      new THREE.MeshStandardMaterial({
+        color: 0x603020,
+        emissive: 0x401010,
+        emissiveIntensity: 0.2,
+        roughness: 0.75,
+      })
+    );
+    banner.position.set(0, 1.05, 0.08);
+    g.add(banner);
+    const shield = new THREE.Mesh(new THREE.CylinderGeometry(0.28, 0.28, 0.06, 8), steel);
+    shield.rotation.x = Math.PI / 2;
+    shield.position.set(0.45, 0.55, -0.2);
+    g.add(shield);
+    const rack = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.08, 0.2), wood);
+    rack.position.set(-0.35, 0.35, 0.25);
+    g.add(rack);
   } else {
     return null;
   }
@@ -1240,6 +1284,136 @@ export function makeGoldGlitter(): THREE.Group {
   streak.position.set(0.15, 1.45, -0.1);
   streak.rotation.z = 0.2;
   g.add(streak);
+  return g;
+}
+
+
+/** Wooden door mesh — closed slab or open leaf. */
+export function makeDoorMesh(state: DoorState): THREE.Group {
+  const g = new THREE.Group();
+  const wood = new THREE.MeshStandardMaterial({
+    color: 0x6a4428,
+    roughness: 0.78,
+    metalness: 0.12,
+    emissive: 0x2a1808,
+    emissiveIntensity: 0.12,
+  });
+  const iron = new THREE.MeshStandardMaterial({
+    color: 0x888898,
+    metalness: 0.85,
+    roughness: 0.3,
+    emissive: 0x202028,
+    emissiveIntensity: 0.1,
+  });
+  const frameL = new THREE.Mesh(new THREE.BoxGeometry(0.12, 1.55, 0.18), wood);
+  frameL.position.set(-0.72, 0.85, 0);
+  g.add(frameL);
+  const frameR = frameL.clone();
+  frameR.position.x = 0.72;
+  g.add(frameR);
+  const lintel = new THREE.Mesh(new THREE.BoxGeometry(1.56, 0.14, 0.2), wood);
+  lintel.position.set(0, 1.62, 0);
+  g.add(lintel);
+  const leaf = new THREE.Mesh(new THREE.BoxGeometry(1.2, 1.4, 0.1), wood);
+  leaf.castShadow = true;
+  if (state === DoorState.Open) {
+    leaf.position.set(0.55, 0.78, 0.35);
+    leaf.rotation.y = -1.05;
+  } else {
+    leaf.position.set(0, 0.78, 0);
+  }
+  g.add(leaf);
+  const band = new THREE.Mesh(new THREE.BoxGeometry(1.22, 0.08, 0.12), iron);
+  band.position.copy(leaf.position);
+  band.position.y = 0.55;
+  band.rotation.copy(leaf.rotation);
+  g.add(band);
+  const knob = new THREE.Mesh(new THREE.SphereGeometry(0.06, 8, 6), iron);
+  if (state === DoorState.Open) {
+    knob.position.set(0.35, 0.75, 0.55);
+  } else {
+    knob.position.set(0.45, 0.75, 0.08);
+  }
+  g.add(knob);
+  return g;
+}
+
+/** Sentry / arrow trap turret on claimed floor. */
+export function makeSentryTrapMesh(): THREE.Group {
+  const g = new THREE.Group();
+  const stone = new THREE.MeshStandardMaterial({
+    color: 0x5a5860,
+    roughness: 0.7,
+    metalness: 0.25,
+    emissive: 0x201818,
+    emissiveIntensity: 0.12,
+  });
+  const metal = new THREE.MeshStandardMaterial({
+    color: 0xa8b0c0,
+    metalness: 0.8,
+    roughness: 0.28,
+    emissive: 0x403020,
+    emissiveIntensity: 0.2,
+  });
+  const base = new THREE.Mesh(new THREE.CylinderGeometry(0.35, 0.42, 0.22, 8), stone);
+  base.position.y = 0.14;
+  base.castShadow = true;
+  g.add(base);
+  const post = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.12, 0.7, 6), stone);
+  post.position.y = 0.55;
+  g.add(post);
+  const head = new THREE.Mesh(new THREE.BoxGeometry(0.55, 0.22, 0.28), metal);
+  head.position.set(0.05, 0.95, 0);
+  head.castShadow = true;
+  g.add(head);
+  const barrel = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.08, 0.45, 6), metal);
+  barrel.rotation.z = Math.PI / 2;
+  barrel.position.set(0.4, 0.95, 0);
+  g.add(barrel);
+  const tip = new THREE.Mesh(
+    new THREE.ConeGeometry(0.05, 0.18, 6),
+    new THREE.MeshStandardMaterial({
+      color: 0xc0c8d8,
+      metalness: 0.9,
+      roughness: 0.2,
+      emissive: 0x804010,
+      emissiveIntensity: 0.35,
+    })
+  );
+  tip.rotation.z = -Math.PI / 2;
+  tip.position.set(0.68, 0.95, 0);
+  g.add(tip);
+  return g;
+}
+
+/** Call-to-arms rally flag. */
+export function makeRallyFlagMesh(): THREE.Group {
+  const g = new THREE.Group();
+  const wood = new THREE.MeshStandardMaterial({ color: 0x5a3a22, roughness: 0.8 });
+  const cloth = new THREE.MeshStandardMaterial({
+    color: 0xb02828,
+    emissive: 0x601010,
+    emissiveIntensity: 0.35,
+    roughness: 0.7,
+  });
+  const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.05, 1.6, 6), wood);
+  pole.position.y = 0.85;
+  pole.castShadow = true;
+  g.add(pole);
+  const flag = new THREE.Mesh(new THREE.BoxGeometry(0.55, 0.38, 0.03), cloth);
+  flag.position.set(0.3, 1.4, 0);
+  g.add(flag);
+  const tip = new THREE.Mesh(
+    new THREE.SphereGeometry(0.07, 8, 6),
+    new THREE.MeshStandardMaterial({
+      color: 0xe0c040,
+      metalness: 0.7,
+      emissive: 0xa08020,
+      emissiveIntensity: 0.4,
+    })
+  );
+  tip.position.y = 1.68;
+  g.add(tip);
   return g;
 }
 

@@ -4,7 +4,7 @@ import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
 import { ShaderPass } from 'three/examples/jsm/postprocessing/ShaderPass.js';
 import { Grid } from '../game/Grid';
-import { TILE_SIZE, TileKind } from '../game/types';
+import { DoorState, TILE_SIZE, TileKind, TrapType } from '../game/types';
 import {
   floorMaterial,
   makeBlockEdgeGeo,
@@ -15,8 +15,11 @@ import {
   makeGoldVeinGeo,
   makeHeartGeo,
   makeRockGeo,
+  makeDoorMesh,
+  makeRallyFlagMesh,
   makeRoomDecal,
   makeRoomProps,
+  makeSentryTrapMesh,
   makeTorchMesh,
   makeWallGeo,
   tileMaterial,
@@ -422,6 +425,37 @@ export class DungeonRenderer {
       if (props) {
         props.position.set(w.x, 0.14, w.z);
         this.gridGroup.add(props);
+      }
+
+      if (tile.door === DoorState.Closed || tile.door === DoorState.Open) {
+        const door = makeDoorMesh(tile.door);
+        door.position.set(w.x, 0.02, w.z);
+        // Orient door across the narrower corridor axis
+        const solidX =
+          (!!grid.get(tile.x + 1, tile.y) &&
+            (grid.get(tile.x + 1, tile.y)!.fortified ||
+              grid.get(tile.x + 1, tile.y)!.kind === TileKind.Earth ||
+              grid.get(tile.x + 1, tile.y)!.kind === TileKind.Gold ||
+              grid.get(tile.x + 1, tile.y)!.kind === TileKind.Rock)) ||
+          (!!grid.get(tile.x - 1, tile.y) &&
+            (grid.get(tile.x - 1, tile.y)!.fortified ||
+              grid.get(tile.x - 1, tile.y)!.kind === TileKind.Earth ||
+              grid.get(tile.x - 1, tile.y)!.kind === TileKind.Gold ||
+              grid.get(tile.x - 1, tile.y)!.kind === TileKind.Rock));
+        if (!solidX) door.rotation.y = Math.PI / 2;
+        this.gridGroup.add(door);
+      }
+
+      if (tile.trap === TrapType.Sentry) {
+        const trap = makeSentryTrapMesh();
+        trap.position.set(w.x + 0.15, 0.02, w.z - 0.15);
+        this.gridGroup.add(trap);
+      }
+
+      if (tile.rally) {
+        const flag = makeRallyFlagMesh();
+        flag.position.set(w.x - 0.25, 0.02, w.z + 0.25);
+        this.gridGroup.add(flag);
       }
 
       if (tile.torch) {

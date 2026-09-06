@@ -1,4 +1,4 @@
-import { MarkType, RoomType, TILE_SIZE, Tile, TileKind, Vec2 } from './types';
+import { DoorState, MarkType, RoomType, TILE_SIZE, Tile, TileKind, TrapType, Vec2 } from './types';
 
 export class Grid {
   readonly width: number;
@@ -23,6 +23,9 @@ export class Grid {
           claimedProgress: 0,
           digProgress: 0,
           torch: false,
+          door: DoorState.None,
+          trap: TrapType.None,
+          rally: false,
         });
       }
     }
@@ -265,8 +268,44 @@ export class Grid {
     );
   }
 
+  /** True if a closed door blocks heroes on this tile. Creatures may open/pass. */
+  blocksHero(x: number, y: number): boolean {
+    const t = this.get(x, y);
+    return !!t && t.door === DoorState.Closed;
+  }
+
+  /** Corridor mouth / room-adjacent claimed tile suitable for a wooden door. */
+  canPlaceDoor(x: number, y: number): boolean {
+    const t = this.get(x, y);
+    if (!t || t.kind !== TileKind.Claimed || t.room !== RoomType.None) return false;
+    if (t.door !== DoorState.None) return true; // allow re-click toggle
+    let solid = 0;
+    let walk = 0;
+    let roomAdj = false;
+    for (const n of this.neighbors4(x, y)) {
+      if (n.fortified || n.kind === TileKind.Earth || n.kind === TileKind.Gold || n.kind === TileKind.Rock) {
+        solid++;
+      }
+      if (
+        !n.fortified &&
+        (n.kind === TileKind.Dirt || n.kind === TileKind.Claimed || n.kind === TileKind.Heart)
+      ) {
+        walk++;
+      }
+      if (n.room !== RoomType.None) roomAdj = true;
+    }
+    // Corridor mouth: walls + open path, or room-adjacent corridor
+    return (solid >= 1 && walk >= 1) || roomAdj;
+  }
+
   /** A* pathfinding on walkable tiles (goal may be diggable solid when explicitly targeted). */
-  findPath(sx: number, sy: number, gx: number, gy: number): Vec2[] | null {
+  findPath(
+    sx: number,
+    sy: number,
+    gx: number,
+    gy: number,
+    opts?: { forHero?: boolean }
+  ): Vec2[] | null {
     if (!this.inBounds(sx, sy) || !this.inBounds(gx, gy)) return null;
     if (sx === gx && sy === gy) return [{ x: gx, y: gy }];
 
@@ -277,7 +316,9 @@ export class Grid {
     gScore.set(key(sx, sy), 0);
     const closed = new Set<number>();
     const h = (x: number, y: number) => Math.abs(x - gx) + Math.abs(y - gy);
+    const forHero = !!opts?.forHero;
     const passable = (nx: number, ny: number): boolean => {
+      if (forHero && this.blocksHero(nx, ny)) return false;
       if (this.isWalkable(nx, ny)) return true;
       // Allow stepping onto diggable goal only (stand-in for adjacent jobs uses walkable goals)
       if (nx === gx && ny === gy && this.isDiggable(nx, ny)) return true;
@@ -326,7 +367,13 @@ export class Grid {
   }
 
   /** Path to a tile adjacent to target (for digging/mining/fortify) */
-  findPathAdjacent(sx: number, sy: number, tx: number, ty: number): Vec2[] | null {
+  findPathAdjacent(
+    sx: number,
+    sy: number,
+    tx: number,
+    ty: number,
+    opts?: { forHero?: boolean }
+  ): Vec2[] | null {
     let best: Vec2[] | null = null;
     for (const [dx, dy] of [
       [1, 0],
@@ -337,7 +384,8 @@ export class Grid {
       const ax = tx + dx;
       const ay = ty + dy;
       if (!this.isWalkable(ax, ay)) continue;
-      const p = this.findPath(sx, sy, ax, ay);
+      if (opts?.forHero && this.blocksHero(ax, ay)) continue;
+      const p = this.findPath(sx, sy, ax, ay, opts);
       if (p && (!best || p.length < best.length)) best = p;
     }
     return best;

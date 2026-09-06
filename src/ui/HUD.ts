@@ -225,4 +225,10 @@ export const MENTOR_LINES = {
   speed: "Haste, my little nightmares. The clock is cruel.",
   lightning: "Heaven's temper, redirected. Delightful.",
   claim: "Claimed land feeds your mana. Ambition has a wattage.",
+  lairBuilt: "A Lair. Beds for the weary and the wounded. Capacity equals tiles.",
+  lairUse: "Minions claim their bedrolls. Tired claws seek the Lair.",
+  lairFull: "Every bed is taken. Expand the Lair or expect cranky minions.",
+  hatcheryBuilt: "A Hatchery. Nest-food grows while you scheme — hungry mouths will come.",
+  hatcheryUse: "Feast! The Hatchery soothes rumbling guts. Work resumes after.",
+  hatcheryHungry: "The nests are bare. Wait for more Hatchery food… or build more nests.",
 };

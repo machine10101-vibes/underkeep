@@ -45,9 +45,14 @@ export class Creature {
   mesh: THREE.Group;
   private bobPhase: number;
   digAnim = 0;
+  /** Smooth facing yaw (radians, Y axis). */
+  facing = 0;
+  private facingTarget = 0;
   /** Optional pickaxe sub-mesh for dig swing (set by visual). */
   pickaxe: THREE.Object3D | null = null;
   selectRing: THREE.Object3D | null = null;
+  /** Assigned Lair bed tile key "x,y" or null. */
+  bedKey: string | null = null;
 
   constructor(kind: CreatureKind, tileX: number, tileY: number, grid: Grid) {
     this.id = nextId++;
@@ -80,15 +85,30 @@ export class Creature {
     }
     this.mesh.visible = true;
     const digging = this.job === JobType.Dig || this.job === JobType.Mine || this.job === JobType.Claim || this.job === JobType.Fortify;
+    const sleeping = this.job === JobType.Sleep;
+    const eating = this.job === JobType.Eat;
     const bob =
       this.kind === CreatureKind.Skitterwing
         ? Math.sin(time * 6 + this.bobPhase) * 0.25 + 0.4
         : digging
           ? Math.sin(time * 14 + this.bobPhase) * 0.06
-          : Math.sin(time * 8 + this.bobPhase) * 0.04;
-    this.mesh.position.set(this.wx, bob, this.wz);
+          : sleeping
+            ? Math.sin(time * 2 + this.bobPhase) * 0.02
+            : Math.sin(time * 8 + this.bobPhase) * 0.04;
+    const yOff = sleeping ? 0.12 : eating ? 0.02 : 0;
+    this.mesh.position.set(this.wx, bob + yOff, this.wz);
+    // Smooth Y facing — avoid lookAt snap/jitter
+    let face = this.facing;
+    let d = this.facingTarget - face;
+    while (d > Math.PI) d -= Math.PI * 2;
+    while (d < -Math.PI) d += Math.PI * 2;
+    face += d * Math.min(1, 10 * (1 / 60)); // ~frame-rate independent-ish; dt applied in move
+    this.facing = face;
+    this.mesh.rotation.y = this.facing;
     if (this.stunTimer > 0) {
       this.mesh.rotation.z = Math.sin(time * 20) * 0.3;
+    } else if (sleeping) {
+      this.mesh.rotation.z = 0.35;
     } else {
       this.mesh.rotation.z = 0;
     }
@@ -131,6 +151,13 @@ export class Creature {
     this.pathIndex = 0;
   }
 
+  faceToward(wx: number, wz: number): void {
+    const dx = wx - this.wx;
+    const dz = wz - this.wz;
+    if (dx * dx + dz * dz < 1e-6) return;
+    this.facingTarget = Math.atan2(dx, dz);
+  }
+
   moveAlongPath(dt: number, grid: Grid): boolean {
     if (this.stunTimer > 0 || this.held) return false;
     if (this.pathIndex >= this.path.length) return true;
@@ -140,7 +167,8 @@ export class Creature {
     const dx = w.x - this.wx;
     const dz = w.z - this.wz;
     const dist = Math.hypot(dx, dz);
-    if (dist < 0.08) {
+    // Arrive threshold — slightly soft to reduce corner jitter
+    if (dist < 0.12) {
       this.wx = w.x;
       this.wz = w.z;
       this.x = target.x;
@@ -151,7 +179,12 @@ export class Creature {
     const step = Math.min(dist, spd * dt);
     this.wx += (dx / dist) * step;
     this.wz += (dz / dist) * step;
-    this.mesh.lookAt(this.wx + dx, this.mesh.position.y, this.wz + dz);
+    this.faceToward(w.x, w.z);
+    // Smooth facing in sync with dt
+    let d = this.facingTarget - this.facing;
+    while (d > Math.PI) d -= Math.PI * 2;
+    while (d < -Math.PI) d += Math.PI * 2;
+    this.facing += d * Math.min(1, 12 * dt);
     // update tile occupancy approx
     const tp = grid.worldToTile(this.wx, this.wz);
     if (grid.inBounds(tp.x, tp.y)) {

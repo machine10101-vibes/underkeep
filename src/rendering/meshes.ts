@@ -223,9 +223,11 @@ export function makeGoldVeinGeo(): THREE.BufferGeometry {
 
 /** Thin top-edge outline so diggable blocks read on mobile */
 export function makeBlockEdgeGeo(height: number): THREE.BufferGeometry {
-  return cachedGeo(`edge-${height.toFixed(2)}`, () => {
+  // Quantize height so dig shrinks don't explode the geo cache (OOM → white screen)
+  const q = Math.round(Math.max(0.25, height) * 4) / 4;
+  return cachedGeo(`edge-${q.toFixed(2)}`, () => {
     const s = TILE_SIZE * 0.5 * 0.97;
-    const y = height;
+    const y = q;
     const points = [
       new THREE.Vector3(-s, y, -s),
       new THREE.Vector3(s, y, -s),

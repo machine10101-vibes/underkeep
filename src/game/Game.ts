@@ -67,6 +67,12 @@ export class Game {
   private panAccum = { x: 0, y: 0 };
   private saveAcc = 0;
   private restoredFromSave = false;
+  /** Hatchery food stock (DK2 chickens vibe) — regenerates on Hatchery tiles. */
+  private hatcheryFood = 0;
+  private foodRegenAcc = 0;
+  /** Lair bed occupancy: "x,y" -> creature id */
+  private bedOwners = new Map<string, number>();
+  private contextRecoveryShown = false;
 
   constructor(canvas: HTMLCanvasElement) {
     // HUD first so New Game / sheets stay wired even if boot later fails
@@ -85,6 +91,8 @@ export class Game {
 
     this.grid = new Grid(40, 40);
     this.renderer = new DungeonRenderer(canvas);
+    this.renderer.onContextLost = () => this.handleContextLost();
+    this.renderer.onContextRestored = () => this.handleContextRestored();
 
     let restored = false;
     try {
@@ -120,6 +128,28 @@ export class Game {
   /** Dismiss boot splash and reveal HUD once meshes + stats are ready. */
   markReady(): void {
     document.body.classList.remove('booting');
+  }
+
+  handleContextLost(): void {
+    if (this.contextRecoveryShown) return;
+    this.contextRecoveryShown = true;
+    this.hud.showOverlay(
+      'Graphics hiccup',
+      'The dungeon view lost its WebGL context (often after heavy digging). Reload to restore — your save is kept.',
+      'Reload Dungeon'
+    );
+    this.hud.onOverlayContinue = () => {
+      location.reload();
+    };
+  }
+
+  private handleContextRestored(): void {
+    this.contextRecoveryShown = false;
+    this.gridDirty = true;
+    this.rebuild();
+    this.syncAllEntityMeshes();
+    this.hud.say('The Underkeep re-solidifies. Dig on, Keeper.');
+    this.hud.hideOverlay();
   }
 
   /** True when dungeon has heart + diggable earth + ≥1 Scrabbler, or match ended. */
@@ -167,6 +197,10 @@ export class Game {
     this.wageAcc = 0;
     this.heartHp = 500;
     this.restoredFromSave = false;
+    this.hatcheryFood = 0;
+    this.foodRegenAcc = 0;
+    this.bedOwners.clear();
+    this.contextRecoveryShown = false;
     this.grid = new Grid(40, 40);
   }
 
@@ -766,8 +800,13 @@ export class Game {
     this.renderer.setHover(w.x, w.z, true, this.toolColor());
     const tile = this.grid.get(tp.x, tp.y);
     if (tile) {
-      const room =
+      let room =
         tile.room !== RoomType.None ? ` · ${['', 'Treasury', 'Lair', 'Hatchery', 'Training', 'Library', 'Portal'][tile.room]}` : '';
+      if (tile.room === RoomType.Hatchery) room += ` · food ${Math.floor(this.hatcheryFood)}`;
+      if (tile.room === RoomType.Lair) {
+        const beds = this.grid.countRoom(RoomType.Lair);
+        room += ` · beds ${this.bedOwners.size}/${beds}`;
+      }
       const dig = tile.digProgress > 0 ? ` · dig ${Math.floor(tile.digProgress * 100)}%` : '';
       const kindLabel =
         tile.kind === TileKind.Gold
@@ -909,6 +948,14 @@ export class Game {
           this.gridDirty = true;
           this.mentioneOnce('firstRoom', MENTOR_LINES.firstRoom);
           if (room === RoomType.Portal) this.mentioneOnce('portal', MENTOR_LINES.portal);
+          if (room === RoomType.Lair) {
+            this.mentioneOnce('lairBuilt', MENTOR_LINES.lairBuilt);
+            // Seed a bit of capacity feedback
+          }
+          if (room === RoomType.Hatchery) {
+            this.mentioneOnce('hatcheryBuilt', MENTOR_LINES.hatcheryBuilt);
+            this.hatcheryFood = Math.max(this.hatcheryFood, 2);
+          }
           this.saveNow();
         }
       }
@@ -1271,11 +1318,17 @@ export class Game {
   }
 
   update(dt: number): void {
+    if (this.renderer.contextLost) {
+      // Still tick HUD so reload overlay stays usable
+      this.hud.update(dt);
+      return;
+    }
     if (!this.gameOver) {
       this.time += dt;
       this.updateCamera(dt);
       this.regenMana(dt);
-      this.assignJobs();
+      this.regenHatcheryFood(dt);
+      this.assignJobs(dt);
       this.updateCreatures(dt);
       this.updatePortal(dt);
       this.updateHeroWave(dt);
@@ -1360,7 +1413,25 @@ export class Game {
     this.mana = Math.min(this.maxMana(), this.mana + rate * dt);
   }
 
-  private assignJobs(): void {
+  private regenHatcheryFood(dt: number): void {
+    const hatchTiles = this.grid.countRoom(RoomType.Hatchery);
+    if (hatchTiles <= 0) {
+      this.hatcheryFood = 0;
+      return;
+    }
+    // ~1 food / 2.5s per hatchery tile, cap = 4 * tiles
+    this.foodRegenAcc += dt;
+    const interval = 2.5;
+    while (this.foodRegenAcc >= interval) {
+      this.foodRegenAcc -= interval;
+      const cap = hatchTiles * 4;
+      if (this.hatcheryFood < cap) {
+        this.hatcheryFood = Math.min(cap, this.hatcheryFood + hatchTiles);
+      }
+    }
+  }
+
+  private assignJobs(dt: number): void {
     const workers = this.creatures.filter((c) => c.alive && c.isWorker && !c.held && c.stunTimer <= 0);
     // heroes force flee
     for (const w of workers) {
@@ -1421,6 +1492,21 @@ export class Game {
       w.job = JobType.Idle;
       w.jobTarget = null;
       let assigned = false;
+
+      // Haul gold to Treasury first when carrying a load
+      if (w.goldCarried >= 40) {
+        const treasury = this.grid.tiles.find((t) => t.room === RoomType.Treasury);
+        const tx = treasury?.x ?? this.grid.heartPos.x;
+        const ty = treasury?.y ?? this.grid.heartPos.y;
+        const path = this.grid.findPath(w.x, w.y, tx, ty);
+        if (path) {
+          w.job = JobType.Haul;
+          w.jobTarget = { x: tx, y: ty };
+          w.setPath(path);
+          assigned = true;
+        }
+      }
+      if (assigned) continue;
 
       // Prefer nearest reachable dig marks (edge of cavern first)
       const digSorted = digMarks
@@ -1488,6 +1574,22 @@ export class Game {
       }
     }
 
+    // Scrabblers also get mild hunger/sleep (lighter than minions)
+    for (const w of workers) {
+      if (w.job === JobType.Flee || w.job === JobType.Dig || w.job === JobType.Mine || w.job === JobType.Haul) continue;
+      w.hunger += 2.5 * dt;
+      w.sleepNeed += 1.2 * dt;
+      if (w.job === JobType.Eat || w.job === JobType.Sleep) continue;
+      if (w.hunger > 55 && this.grid.countRoom(RoomType.Hatchery) > 0 && this.hatcheryFood > 0) {
+        this.assignEat(w);
+      } else if (
+        (w.sleepNeed > 70 || w.hp < w.maxHp * 0.55) &&
+        this.grid.countRoom(RoomType.Lair) > 0
+      ) {
+        this.assignSleep(w);
+      }
+    }
+
     // non-worker jobs: eat / sleep / train / fight
     for (const c of this.creatures) {
       if (!c.alive || c.isWorker || c.isHero || c.held || c.stunTimer > 0) continue;
@@ -1496,6 +1598,7 @@ export class Game {
         (h) => h.alive && h.isHero && Math.hypot(h.x - c.x, h.y - c.y) < 10
       );
       if (enemy) {
+        if (c.bedKey) this.releaseBed(c);
         c.job = JobType.Fight;
         c.jobTarget = { x: enemy.x, y: enemy.y };
         if (Math.hypot(c.x - enemy.x, c.y - enemy.y) > 1.2) {
@@ -1507,31 +1610,36 @@ export class Game {
         continue;
       }
 
-      c.hunger += 0.3;
-      c.sleepNeed += 0.2;
-      c.trainNeed += 0.15;
+      // Needs accumulate in real time (was +0.3/frame → instant hunger)
+      c.hunger += 4.5 * dt;
+      c.sleepNeed += 3.0 * dt;
+      c.trainNeed += 2.2 * dt;
+
+      // Already committed to eat/sleep/train — keep path, do not re-roll target every frame
+      if (c.job === JobType.Eat || c.job === JobType.Sleep || c.job === JobType.Train) {
+        if (c.job === JobType.Sleep && c.jobTarget) {
+          // Ensure bed still owned
+          const key = `${c.jobTarget.x},${c.jobTarget.y}`;
+          if (c.bedKey !== key) c.bedKey = key;
+        }
+        if (c.path.length === 0 && c.jobTarget) {
+          const path = this.grid.findPath(c.x, c.y, c.jobTarget.x, c.jobTarget.y);
+          if (path) c.setPath(path);
+        }
+        continue;
+      }
 
       if (c.job === JobType.Fight) {
         c.job = JobType.Idle;
       }
 
+      // Hurt creatures seek Lair to rest/heal
+      const hurt = c.hp < c.maxHp * 0.6;
       if (c.hunger > 40 && this.grid.countRoom(RoomType.Hatchery) > 0) {
-        const t = this.findRoomTile(RoomType.Hatchery);
-        if (t) {
-          c.job = JobType.Eat;
-          c.jobTarget = t;
-          c.setPath(this.grid.findPath(c.x, c.y, t.x, t.y));
-          continue;
-        }
+        if (this.assignEat(c)) continue;
       }
-      if (c.sleepNeed > 50 && this.grid.countRoom(RoomType.Lair) > 0) {
-        const t = this.findRoomTile(RoomType.Lair);
-        if (t) {
-          c.job = JobType.Sleep;
-          c.jobTarget = t;
-          c.setPath(this.grid.findPath(c.x, c.y, t.x, t.y));
-          continue;
-        }
+      if ((c.sleepNeed > 50 || hurt) && this.grid.countRoom(RoomType.Lair) > 0) {
+        if (this.assignSleep(c)) continue;
       }
       if (c.trainNeed > 35 && this.grid.countRoom(RoomType.Training) > 0 && c.level < 4) {
         const t = this.findRoomTile(RoomType.Training);
@@ -1542,14 +1650,20 @@ export class Game {
           continue;
         }
       }
-      if (c.job === JobType.Idle || c.path.length === 0) {
-        // wander claimed
-        if (Math.random() < 0.01) {
-          const claimed = this.grid.tiles.filter((t) => t.kind === TileKind.Claimed);
-          if (claimed.length) {
-            const t = claimed[Math.floor(Math.random() * claimed.length)];
+      if (c.job === JobType.Idle || (c.job === JobType.Wander && c.path.length === 0)) {
+        // Prefer idling near own bed / Lair when available
+        if (Math.random() < 0.008) {
+          const lair = this.findFreeOrOwnedBed(c);
+          if (lair) {
             c.job = JobType.Wander;
-            c.setPath(this.grid.findPath(c.x, c.y, t.x, t.y));
+            c.setPath(this.grid.findPath(c.x, c.y, lair.x, lair.y));
+          } else {
+            const claimed = this.grid.tiles.filter((t) => t.kind === TileKind.Claimed);
+            if (claimed.length) {
+              const t = claimed[Math.floor(Math.random() * claimed.length)];
+              c.job = JobType.Wander;
+              c.setPath(this.grid.findPath(c.x, c.y, t.x, t.y));
+            }
           }
         }
       }
@@ -1602,6 +1716,76 @@ export class Game {
     return { x: t.x, y: t.y };
   }
 
+  private releaseBed(c: Creature): void {
+    if (!c.bedKey) return;
+    if (this.bedOwners.get(c.bedKey) === c.id) this.bedOwners.delete(c.bedKey);
+    c.bedKey = null;
+  }
+
+  private findFreeOrOwnedBed(c: Creature): Vec2 | null {
+    if (c.bedKey) {
+      const [x, y] = c.bedKey.split(',').map(Number);
+      const t = this.grid.get(x, y);
+      if (t && t.room === RoomType.Lair) return { x, y };
+      this.releaseBed(c);
+    }
+    const beds = this.grid.tiles.filter((t) => t.room === RoomType.Lair);
+    for (const t of beds) {
+      const key = `${t.x},${t.y}`;
+      const owner = this.bedOwners.get(key);
+      if (owner === undefined || owner === c.id) return { x: t.x, y: t.y };
+    }
+    return beds.length ? { x: beds[0].x, y: beds[0].y } : null;
+  }
+
+  private assignSleep(c: Creature): boolean {
+    const bed = this.findFreeOrOwnedBed(c);
+    if (!bed) return false;
+    const key = `${bed.x},${bed.y}`;
+    const owner = this.bedOwners.get(key);
+    if (owner !== undefined && owner !== c.id) {
+      // Capacity full — try any free
+      const free = this.grid.tiles.find((t) => {
+        if (t.room !== RoomType.Lair) return false;
+        const k = `${t.x},${t.y}`;
+        return !this.bedOwners.has(k);
+      });
+      if (!free) {
+        this.mentioneOnce('lairFull', MENTOR_LINES.lairFull);
+        return false;
+      }
+      const fk = `${free.x},${free.y}`;
+      this.bedOwners.set(fk, c.id);
+      c.bedKey = fk;
+      c.job = JobType.Sleep;
+      c.jobTarget = { x: free.x, y: free.y };
+      c.setPath(this.grid.findPath(c.x, c.y, free.x, free.y));
+      this.mentioneOnce('lairUse', MENTOR_LINES.lairUse);
+      return true;
+    }
+    this.bedOwners.set(key, c.id);
+    c.bedKey = key;
+    c.job = JobType.Sleep;
+    c.jobTarget = bed;
+    c.setPath(this.grid.findPath(c.x, c.y, bed.x, bed.y));
+    this.mentioneOnce('lairUse', MENTOR_LINES.lairUse);
+    return true;
+  }
+
+  private assignEat(c: Creature): boolean {
+    if (this.hatcheryFood <= 0 && this.grid.countRoom(RoomType.Hatchery) > 0) {
+      // Still walk there — food regenerates; low stock mentor once
+      this.mentioneOnce('hatcheryHungry', MENTOR_LINES.hatcheryHungry);
+    }
+    const t = this.findRoomTile(RoomType.Hatchery);
+    if (!t) return false;
+    c.job = JobType.Eat;
+    c.jobTarget = t;
+    c.setPath(this.grid.findPath(c.x, c.y, t.x, t.y));
+    this.mentioneOnce('hatcheryUse', MENTOR_LINES.hatcheryUse);
+    return true;
+  }
+
   private updateCreatures(dt: number): void {
     for (const c of this.creatures) {
       if (!c.alive || c.held) continue;
@@ -1633,6 +1817,11 @@ export class Game {
       }
       return;
     }
+    // Workers can eat/sleep too
+    if (c.job === JobType.Eat || c.job === JobType.Sleep) {
+      this.updateMinionJob(c, dt, arrived);
+      return;
+    }
     if (!c.jobTarget) return;
     const t = this.grid.get(c.jobTarget.x, c.jobTarget.y);
     if (!t) {
@@ -1642,7 +1831,7 @@ export class Game {
 
     if (c.job === JobType.Dig || c.job === JobType.Mine) {
       if (!arrived && c.pathIndex < c.path.length) return;
-      // Must stand on an orthogonal neighbor
+      // Must stand on an orthogonal neighbor (planted at dig face)
       const manhattan = Math.abs(c.x - t.x) + Math.abs(c.y - t.y);
       if (manhattan !== 1 && Math.hypot(c.x - t.x, c.y - t.y) > 1.55) {
         const path = this.grid.findPathAdjacent(c.x, c.y, t.x, t.y);
@@ -1653,12 +1842,12 @@ export class Game {
         }
         return;
       }
-      // Face the block and chip
+      // Face the block — pickaxe swing synced via digAnim in Creature.syncMesh
       const tw = this.grid.tileToWorld(t.x, t.y);
-      c.mesh.lookAt(tw.x, c.mesh.position.y, tw.z);
+      c.faceToward(tw.x, tw.z);
       c.workTimer += dt;
-      // Chip cadence ~0.35s; earth fully dug after ~3 chips (~1.05s)
-      if (c.workTimer >= 0.35) {
+      // Chip cadence ~0.38s; earth fully dug after ~3 chips
+      if (c.workTimer >= 0.38) {
         c.workTimer = 0;
         const wpos = this.grid.tileToWorld(t.x, t.y);
         this.renderer.spawnDigDebris(wpos.x, wpos.z, t.kind === TileKind.Gold ? 0xe0b040 : 0xc08040);
@@ -1669,20 +1858,26 @@ export class Game {
           t.goldAmount -= mined;
           c.goldCarried += mined;
           t.digProgress = Math.min(1, t.digProgress + 0.2);
-          this.gridDirty = true;
+          // Incremental visual — NO full mesh rebuild (white-screen fix)
+          this.renderer.updateDigVisual(t.x, t.y, t.digProgress, t.kind);
           this.mentioneOnce('firstGold', MENTOR_LINES.firstGold);
           if (t.goldAmount <= 0) {
             t.kind = TileKind.Dirt;
             t.mark = MarkType.None;
             t.goldAmount = 0;
             t.digProgress = 0;
-            this.gridDirty = true;
+            this.gridDirty = true; // kind change needs rebuild
             c.job = JobType.Idle;
             c.jobTarget = null;
+          } else if (c.goldCarried >= 120) {
+            // Break to haul a full load to Treasury
+            c.job = JobType.Idle;
+            c.jobTarget = null;
+            c.setPath(null);
           }
         } else if (t.kind === TileKind.Earth) {
           t.digProgress = Math.min(1, t.digProgress + 0.34);
-          this.gridDirty = true;
+          this.renderer.updateDigVisual(t.x, t.y, t.digProgress, t.kind);
           if (t.digProgress >= 1) {
             t.kind = TileKind.Dirt;
             t.mark = MarkType.None;
@@ -1745,7 +1940,11 @@ export class Game {
       }
     } else if (c.job === JobType.Haul) {
       if (!arrived) return;
-      this.gold += c.goldCarried;
+      if (c.goldCarried > 0) {
+        this.gold += c.goldCarried;
+        this.renderer.spawnFx(new THREE.Vector3(c.wx, 0.6, c.wz), 0xffd040, 0.55);
+        this.mentioneOnce('firstGold', MENTOR_LINES.firstGold);
+      }
       c.goldCarried = 0;
       c.job = JobType.Idle;
       c.jobTarget = null;
@@ -1753,14 +1952,32 @@ export class Game {
   }
 
   private updateMinionJob(c: Creature, dt: number, arrived: boolean): void {
-    if (c.job === JobType.Eat && arrived) {
-      c.hunger = Math.max(0, c.hunger - 50 * dt);
+    if (c.job === JobType.Eat) {
+      if (!arrived && c.pathIndex < c.path.length) return;
+      // Consume hatchery food while eating
+      if (this.hatcheryFood > 0) {
+        this.hatcheryFood = Math.max(0, this.hatcheryFood - 1.2 * dt);
+        c.hunger = Math.max(0, c.hunger - 55 * dt);
+        if (Math.random() < dt * 2) {
+          this.renderer.spawnFx(new THREE.Vector3(c.wx, 0.5, c.wz), 0xc0e040, 0.3);
+        }
+      } else {
+        c.hunger = Math.max(0, c.hunger - 12 * dt); // meager scraps
+      }
       if (c.hunger < 5) {
         c.job = JobType.Idle;
+        c.jobTarget = null;
       }
-    } else if (c.job === JobType.Sleep && arrived) {
+    } else if (c.job === JobType.Sleep) {
+      if (!arrived && c.pathIndex < c.path.length) return;
       c.sleepNeed = Math.max(0, c.sleepNeed - 40 * dt);
-      if (c.sleepNeed < 5) c.job = JobType.Idle;
+      // Rest heals
+      if (c.hp < c.maxHp) c.hp = Math.min(c.maxHp, c.hp + 8 * dt);
+      if (c.sleepNeed < 5 && c.hp >= c.maxHp * 0.95) {
+        c.job = JobType.Idle;
+        c.jobTarget = null;
+        // Keep bed reservation for attraction/capacity; release only if leaving dungeon
+      }
     } else if (c.job === JobType.Train && arrived) {
       c.trainNeed = Math.max(0, c.trainNeed - 30 * dt);
       c.workTimer += dt;

@@ -39,12 +39,25 @@ try {
 (window as unknown as { __underkeep?: Game | null }).__underkeep = game;
 
 let last = performance.now();
+let frameErrors = 0;
 function frame(now: number): void {
   const dt = Math.min(0.05, (now - last) / 1000);
   last = now;
   if (game) {
-    game.update(dt);
-    game.render();
+    try {
+      game.update(dt);
+      game.render();
+      frameErrors = 0;
+    } catch (err) {
+      frameErrors++;
+      console.error('[underkeep] frame error', err);
+      // After repeated uncaught update/render exceptions, offer recovery (never stuck white)
+      if (frameErrors >= 5) {
+        const g = game as unknown as { handleContextLost?: () => void };
+        g.handleContextLost?.();
+        frameErrors = 0;
+      }
+    }
   }
   requestAnimationFrame(frame);
 }

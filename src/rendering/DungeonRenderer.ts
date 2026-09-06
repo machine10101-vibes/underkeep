@@ -77,6 +77,12 @@ export class DungeonRenderer {
   private earthEdgeMat: THREE.LineBasicMaterial;
   private goldEdgeMat: THREE.LineBasicMaterial;
   private rockEdgeMat: THREE.LineBasicMaterial;
+  /** WebGL context lost — skip composer until restored/re-inited. */
+  contextLost = false;
+  private useComposer = true;
+  private renderFails = 0;
+  onContextLost: (() => void) | null = null;
+  onContextRestored: (() => void) | null = null;
 
   constructor(canvas: HTMLCanvasElement) {
     this.scene = new THREE.Scene();
@@ -92,8 +98,14 @@ export class DungeonRenderer {
       antialias: true,
       powerPreference: 'high-performance',
       alpha: false,
+      preserveDrawingBuffer: false,
+      failIfMajorPerformanceCaveat: false,
     });
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    // Cap DPR hard — high ratios + bloom rebuilds were a common white-screen path on phones
+    const coarse = typeof window !== 'undefined' && window.matchMedia?.('(pointer: coarse)').matches;
+    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, coarse ? 1.25 : 1.75));
+    // Never clear to white if something fails mid-frame
+    this.renderer.setClearColor(0x221c24, 1);
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
@@ -194,15 +206,58 @@ export class DungeonRenderer {
     const isCoarse = typeof window !== 'undefined' && window.matchMedia?.('(pointer: coarse)').matches;
     this.bloomPass = new UnrealBloomPass(
       new THREE.Vector2(1, 1),
-      isCoarse ? 0.1 : 0.14,
+      isCoarse ? 0.08 : 0.12,
       0.35,
-      0.95
+      0.96
     );
     this.composer.addPass(this.bloomPass);
     this.composer.addPass(new ShaderPass(ColorGradeShader));
 
     this.onResize();
     window.addEventListener('resize', () => this.onResize());
+    this.bindContextRecovery(canvas);
+  }
+
+  private bindContextRecovery(canvas: HTMLCanvasElement): void {
+    canvas.addEventListener('webglcontextlost', (e) => {
+      e.preventDefault();
+      this.contextLost = true;
+      this.useComposer = false;
+      console.warn('[underkeep] WebGL context lost');
+      this.onContextLost?.();
+    }, false);
+    canvas.addEventListener('webglcontextrestored', () => {
+      console.warn('[underkeep] WebGL context restored — reinit renderer pipeline');
+      this.contextLost = false;
+      try {
+        this.reinitPipeline();
+        this.onContextRestored?.();
+      } catch (err) {
+        console.error('[underkeep] context restore failed', err);
+        this.onContextLost?.();
+      }
+    }, false);
+  }
+
+  /** Rebuild composer / sizes after context restore. */
+  reinitPipeline(): void {
+    const size = new THREE.Vector2();
+    this.renderer.getSize(size);
+    this.renderer.setClearColor(0x221c24, 1);
+    this.composer = new EffectComposer(this.renderer);
+    this.composer.addPass(new RenderPass(this.scene, this.camera));
+    const isCoarse = typeof window !== 'undefined' && window.matchMedia?.('(pointer: coarse)').matches;
+    this.bloomPass = new UnrealBloomPass(
+      new THREE.Vector2(size.x || 1, size.y || 1),
+      isCoarse ? 0.08 : 0.12,
+      0.35,
+      0.96
+    );
+    this.composer.addPass(this.bloomPass);
+    this.composer.addPass(new ShaderPass(ColorGradeShader));
+    this.useComposer = true;
+    this.renderFails = 0;
+    this.onResize();
   }
 
   onResize(): void {
@@ -214,9 +269,34 @@ export class DungeonRenderer {
     this.composer.setSize(w, h);
   }
 
+  /** Dispose non-shared GPU resources (room props, marks, glitter). Shared cached geos/mats stay. */
+  private disposeGridChild(obj: THREE.Object3D): void {
+    obj.traverse((o) => {
+      const mesh = o as THREE.Mesh;
+      if (mesh.isMesh) {
+        const g = mesh.geometry;
+        // Only dispose uncached one-off geos (props/marks/glitter) — keyed userData
+        if (g && (mesh.userData.disposeGeo || g.userData?.disposeGeo)) {
+          g.dispose();
+        }
+        const mats = Array.isArray(mesh.material) ? mesh.material : mesh.material ? [mesh.material] : [];
+        for (const m of mats) {
+          if (m && (m as THREE.Material).userData?.disposeMat) {
+            (m as THREE.Material).dispose();
+          }
+        }
+      }
+      const light = o as THREE.PointLight;
+      if (light.isLight) {
+        // point lights are fine to drop with the group
+      }
+    });
+  }
+
   rebuildGrid(grid: Grid): void {
     while (this.gridGroup.children.length) {
       const c = this.gridGroup.children.pop()!;
+      this.disposeGridChild(c);
       this.gridGroup.remove(c);
     }
     this.tileMeshes.clear();
@@ -273,6 +353,7 @@ export class DungeonRenderer {
           const glitter = makeGoldGlitter();
           glitter.position.set(w.x, mesh.position.y, w.z);
           glitter.scale.set(s, sy, s);
+          glitter.userData.glitterFor = key;
           this.gridGroup.add(glitter);
         }
         const edgeH = 2.35 * sy + mesh.position.y;
@@ -284,15 +365,17 @@ export class DungeonRenderer {
         );
         this.tileMeshes.set(key, mesh);
         if (tile.mark) {
-          const mark = new THREE.Mesh(
-            new THREE.PlaneGeometry(TILE_SIZE * 0.7, TILE_SIZE * 0.7),
-            new THREE.MeshBasicMaterial({
-              color: tile.mark === 1 ? 0xff3322 : tile.mark === 2 ? 0x44aaff : 0xccccaa,
-              transparent: true,
-              opacity: 0.7,
-              depthWrite: false,
-            })
-          );
+          const markGeo = new THREE.PlaneGeometry(TILE_SIZE * 0.7, TILE_SIZE * 0.7);
+          markGeo.userData.disposeGeo = true;
+          const markMat = new THREE.MeshBasicMaterial({
+            color: tile.mark === 1 ? 0xff3322 : tile.mark === 2 ? 0x44aaff : 0xccccaa,
+            transparent: true,
+            opacity: 0.7,
+            depthWrite: false,
+          });
+          markMat.userData.disposeMat = true;
+          const mark = new THREE.Mesh(markGeo, markMat);
+          mark.userData.disposeGeo = true;
           mark.rotation.x = -Math.PI / 2;
           mark.position.set(w.x, Math.max(0.5, 2.42 * sy + mesh.position.y), w.z);
           this.gridGroup.add(mark);
@@ -399,6 +482,29 @@ export class DungeonRenderer {
     const line = new THREE.Line(makeBlockEdgeGeo(height), mat);
     line.position.set(x, 0, z);
     this.gridGroup.add(line);
+  }
+
+  /**
+   * Cheap dig-progress visual — avoids full rebuildGrid (OOM / context-loss white screen).
+   * Call only while the tile remains Earth/Gold; full rebuild when kind changes.
+   */
+  updateDigVisual(x: number, y: number, digProgress: number, kind: TileKind): void {
+    const key = `${x},${y}`;
+    const mesh = this.tileMeshes.get(key);
+    if (!mesh) return;
+    const dig = Math.max(0, Math.min(0.95, digProgress || 0));
+    const s = 1 - dig * 0.7;
+    const sy = 1 - dig * 0.85;
+    mesh.scale.set(s, sy, s);
+    mesh.position.y = -dig * 1.15;
+    // Dim gold glitter sibling if present
+    for (const child of this.gridGroup.children) {
+      if (child.userData?.glitterFor === key) {
+        child.position.y = mesh.position.y;
+        child.scale.set(s, sy, s);
+        child.visible = dig < 0.85 && kind === TileKind.Gold;
+      }
+    }
   }
 
   setHover(wx: number, wz: number, visible: boolean, color = 0xffaa20): void {
@@ -557,7 +663,29 @@ export class DungeonRenderer {
   }
 
   render(): void {
-    this.composer.render();
+    if (this.contextLost) return;
+    try {
+      if (this.useComposer) {
+        this.composer.render();
+      } else {
+        this.renderer.render(this.scene, this.camera);
+      }
+      this.renderFails = 0;
+    } catch (err) {
+      this.renderFails++;
+      console.error('[underkeep] render failed', err);
+      // Fall back to direct render (skip bloom) after first failure
+      this.useComposer = false;
+      try {
+        this.renderer.render(this.scene, this.camera);
+      } catch (err2) {
+        console.error('[underkeep] fallback render failed', err2);
+        if (this.renderFails >= 3) {
+          this.contextLost = true;
+          this.onContextLost?.();
+        }
+      }
+    }
   }
 
   raycastGround(nx: number, ny: number): THREE.Vector3 | null {

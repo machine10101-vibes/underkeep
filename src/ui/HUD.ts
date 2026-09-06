@@ -20,11 +20,21 @@ export class HUD {
   private btnSpells: HTMLElement | null;
   private mentorTimer = 0;
   private mentorQueue: string[] = [];
+  private inspectorEl: HTMLElement;
+  private inspName: HTMLElement;
+  private inspJob: HTMLElement;
+  private inspHp: HTMLElement;
+  private inspHpBar: HTMLElement;
+  private inspHunger: HTMLElement;
+  private inspTired: HTMLElement;
+  private inspMood: HTMLElement;
+  private inspMoodBar: HTMLElement;
 
   onToolChange: ((tool: ToolMode) => void) | null = null;
   onSpell: ((spell: SpellId) => void) | null = null;
   onOverlayContinue: (() => void) | null = null;
   onNewGame: (() => void) | null = null;
+  onInspectorClose: (() => void) | null = null;
 
   constructor() {
     this.goldEl = document.getElementById('gold-value')!;
@@ -42,6 +52,19 @@ export class HUD {
     this.spellsSheet = document.getElementById('spells-sheet')!;
     this.btnBuild = document.getElementById('btn-build');
     this.btnSpells = document.getElementById('btn-spells');
+    this.inspectorEl = document.getElementById('inspector')!;
+    this.inspName = document.getElementById('insp-name')!;
+    this.inspJob = document.getElementById('insp-job')!;
+    this.inspHp = document.getElementById('insp-hp')!;
+    this.inspHpBar = document.getElementById('insp-hp-bar')!;
+    this.inspHunger = document.getElementById('insp-hunger')!;
+    this.inspTired = document.getElementById('insp-tired')!;
+    this.inspMood = document.getElementById('insp-mood')!;
+    this.inspMoodBar = document.getElementById('insp-mood-bar')!;
+    document.getElementById('insp-close')?.addEventListener('click', () => {
+      this.hideInspector();
+      this.onInspectorClose?.();
+    });
 
     document.querySelectorAll('.tool').forEach((btn) => {
       btn.addEventListener('click', () => {
@@ -185,6 +208,34 @@ export class HUD {
     }
   }
 
+
+  showInspector(data: {
+    kind: string;
+    job: string;
+    hp: number;
+    maxHp: number;
+    hunger: number;
+    tired: number;
+    mood: number;
+    held?: boolean;
+  }): void {
+    this.inspName.textContent = data.held ? `${data.kind} (held)` : data.kind;
+    this.inspJob.textContent = data.job;
+    this.inspHp.textContent = `${Math.ceil(data.hp)}/${Math.ceil(data.maxHp)}`;
+    this.inspHpBar.style.width = `${Math.max(0, Math.min(100, (data.hp / Math.max(1, data.maxHp)) * 100))}%`;
+    this.inspHunger.textContent = `${Math.floor(data.hunger)}`;
+    this.inspTired.textContent = `${Math.floor(data.tired)}`;
+    const moodLabel =
+      data.mood >= 75 ? 'Happy' : data.mood >= 50 ? 'Content' : data.mood >= 30 ? 'Grumpy' : data.mood >= 15 ? 'Angry' : 'Leaving?';
+    this.inspMood.textContent = `${Math.floor(data.mood)} · ${moodLabel}`;
+    this.inspMoodBar.style.width = `${Math.max(0, Math.min(100, data.mood))}%`;
+    this.inspectorEl.classList.remove('hidden');
+  }
+
+  hideInspector(): void {
+    this.inspectorEl.classList.add('hidden');
+  }
+
   showOverlay(title: string, msg: string, btn = 'Continue', secondaryBtn?: string): void {
     this.overlayTitle.textContent = title;
     this.overlayMsg.textContent = msg;
@@ -234,4 +285,8 @@ export const MENTOR_LINES = {
   hatcheryUse: "Feast! The Hatchery soothes rumbling guts. Work resumes after.",
   feasting: "Feasting at the Hatchery.",
   hatcheryHungry: "The nests are bare. Wait for more Hatchery food… or build more nests.",
+  pickUp: "Into the Hand. Drop them where the work is — or slap sense into them.",
+  drop: "Back on their feet. Back to the dirt.",
+  moodLow: "A minion's mood is crumbling. Beds, food, and space — or they may leave.",
+  leaveThreat: "A minion threatens to leave the Underkeep…",
 };

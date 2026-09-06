@@ -72,6 +72,20 @@
           <span id="mentor-text">The earth awaits your cruelty, Keeper.</span>
           <button type="button" id="mentor-dismiss" aria-label="Dismiss">✕</button>
         </div>
+        <div id="inspector" class="hidden" aria-live="polite">
+          <div class="insp-head">
+            <span id="insp-name">Creature</span>
+            <button type="button" id="insp-close" aria-label="Close">✕</button>
+          </div>
+          <div class="insp-row"><span>Job</span><span id="insp-job">—</span></div>
+          <div class="insp-row"><span>HP</span><span id="insp-hp">—</span></div>
+          <div class="insp-bar"><div id="insp-hp-bar"></div></div>
+          <div class="insp-row"><span>Hunger</span><span id="insp-hunger">—</span></div>
+          <div class="insp-row"><span>Tired</span><span id="insp-tired">—</span></div>
+          <div class="insp-row"><span>Mood</span><span id="insp-mood">—</span></div>
+          <div class="insp-bar mood"><div id="insp-mood-bar"></div></div>
+          <div class="insp-hint">Hand: click pick up · right-click slap · drop on tile</div>
+        </div>
         <div id="tooltip"></div>
         <div id="touch-hint" class="mobile-only">Tap · Long-press slap · Drag pan · Pinch zoom</div>
       </div>

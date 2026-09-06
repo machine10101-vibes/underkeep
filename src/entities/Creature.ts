@@ -35,6 +35,10 @@ export class Creature {
   speedBuff = 0;
   hunger = 0;
   sleepNeed = 0;
+  /** 0–100. Affects work efficiency; very low → leave threat. */
+  mood = 72;
+  leaveWarned = false;
+  selected = false;
   trainNeed = 0;
   held = false;
   fleeTimer = 0;
@@ -90,11 +94,20 @@ export class Creature {
   }
 
   syncMesh(time: number): void {
+    this.mesh.visible = true;
     if (this.held) {
-      this.mesh.visible = false;
+      // DK2-like: creature dangles with the Hand cursor
+      const bob = Math.sin(time * 10 + this.bobPhase) * 0.08;
+      this.mesh.position.set(this.wx, 1.35 + bob, this.wz);
+      this.mesh.rotation.x = 0.15;
+      this.mesh.rotation.z = Math.sin(time * 6) * 0.2;
+      if (this.selectRing) {
+        this.selectRing.visible = true;
+        this.selectRing.rotation.z = time * 3;
+      }
+      if (this.pickaxe) this.pickaxe.visible = false;
       return;
     }
-    this.mesh.visible = true;
     const digging = this.job === JobType.Dig || this.job === JobType.Mine || this.job === JobType.Claim || this.job === JobType.Fortify;
     const sleeping = this.job === JobType.Sleep;
     const eating = this.job === JobType.Eat;
@@ -157,7 +170,7 @@ export class Creature {
       }
     }
     if (this.selectRing) {
-      this.selectRing.visible = digging || this.held;
+      this.selectRing.visible = digging || this.held || this.selected;
       this.selectRing.rotation.z = time * 1.5;
     }
     if (this.tintPulse > 0) {
@@ -169,6 +182,11 @@ export class Creature {
 
 
   /** Brief screen-friendly mesh tint while healing (green) or eating (warm). */
+  /** Dig/work multiplier from mood (≈0.5–1.2). */
+  workEfficiency(): number {
+    return 0.5 + (Math.max(0, Math.min(100, this.mood)) / 100) * 0.7;
+  }
+
   pulseTint(mode: 'heal' | 'feast', seconds = 0.85): void {
     this.tintMode = mode;
     this.tintPulse = Math.max(this.tintPulse, seconds);

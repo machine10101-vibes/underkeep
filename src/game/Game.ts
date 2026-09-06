@@ -40,6 +40,7 @@ export class Game {
   private mana = 50;
   private tool: ToolMode = 'select';
   private held: Creature | null = null;
+  private selected: Creature | null = null;
   private gridDirty = true;
   private time = 0;
   private workerCostScale = 0;
@@ -88,6 +89,7 @@ export class Game {
       }
     };
     this.hud.onNewGame = () => this.confirmNewGame();
+    this.hud.onInspectorClose = () => this.clearSelection();
 
     this.grid = new Grid(40, 40);
     this.renderer = new DungeonRenderer(canvas);
@@ -185,6 +187,8 @@ export class Game {
     this.mana = 50;
     this.tool = 'select';
     this.held = null;
+    this.selected = null;
+    this.hud.hideInspector();
     this.time = 0;
     this.workerCostScale = 0;
     this.portalCooldown = 0;
@@ -760,17 +764,19 @@ export class Game {
         this.dropHeldAt(tx, ty);
         return;
       }
-      const c = this.creatureAt(tx, ty);
+      const c = this.creatureAt(tx, ty, hit);
       if (c && !c.isHero) {
+        this.selectCreature(c);
         this.pickUp(c);
         return;
       }
+      // Empty tile — deselect
+      this.clearSelection();
     } else {
       this.paint = true;
       this.applyTool(tx, ty);
       this.lastPaint = { x: tx, y: ty };
     }
-    void hit;
   }
 
   private handleSecondaryAt(tx: number, ty: number): void {
@@ -780,6 +786,7 @@ export class Game {
     }
     const c = this.creatureAt(tx, ty);
     if (c && !c.isHero) {
+      this.selectCreature(c);
       this.slap(c);
     } else {
       const tile = this.grid.get(tx, ty);
@@ -816,7 +823,16 @@ export class Game {
             : tile.kind === TileKind.Rock
               ? 'Rock'
               : TileKind[tile.kind];
-      this.hud.setTooltip(`(${tp.x},${tp.y}) ${kindLabel}${tile.fortified ? ' [fortified]' : ''}${room}${dig}`);
+      let tip = `(${tp.x},${tp.y}) ${kindLabel}${tile.fortified ? ' [fortified]' : ''}${room}${dig}`;
+      if (this.tool === 'select') {
+        const c = this.creatureAt(tp.x, tp.y);
+        if (c && !c.isHero) {
+          tip += ` · ${c.kind} mood ${Math.floor(c.mood)}`;
+        } else if (this.held) {
+          tip += ' · drop here';
+        }
+      }
+      this.hud.setTooltip(tip);
     }
   }
 
@@ -893,18 +909,61 @@ export class Game {
     }
   }
 
-  private creatureAt(x: number, y: number): Creature | null {
+  private creatureAt(x: number, y: number, worldHit?: THREE.Vector3): Creature | null {
     let best: Creature | null = null;
-    let bestD = 1.2;
+    let bestD = 1.85; // forgiving Hand pick radius (desktop + overview cam)
     for (const c of this.creatures) {
       if (!c.alive || c.held) continue;
-      const d = Math.hypot(c.x - x, c.y - y);
+      let d = Math.hypot(c.x - x, c.y - y);
+      if (worldHit) {
+        const wd = Math.hypot(c.wx - worldHit.x, c.wz - worldHit.z) / TILE_SIZE;
+        d = Math.min(d, wd);
+      }
       if (d < bestD) {
         bestD = d;
         best = c;
       }
     }
     return best;
+  }
+
+  private clearSelection(): void {
+    if (this.selected) this.selected.selected = false;
+    this.selected = null;
+    this.hud.hideInspector();
+  }
+
+  private selectCreature(c: Creature): void {
+    if (this.selected && this.selected !== c) this.selected.selected = false;
+    this.selected = c;
+    c.selected = true;
+    this.refreshInspector();
+  }
+
+  private refreshInspector(): void {
+    const c = this.held ?? this.selected;
+    if (!c || !c.alive) {
+      this.hud.hideInspector();
+      return;
+    }
+    const kindNames: Record<string, string> = {
+      scrabbler: 'Scrabbler',
+      skitterwing: 'Skitterwing',
+      rattlekin: 'Rattlekin',
+      emberling: 'Emberling',
+      hero_knight: 'Hero Knight',
+      hero_archer: 'Hero Archer',
+    };
+    this.hud.showInspector({
+      kind: kindNames[c.kind] ?? c.kind,
+      job: c.held ? 'Held' : c.job.charAt(0).toUpperCase() + c.job.slice(1),
+      hp: c.hp,
+      maxHp: c.maxHp,
+      hunger: c.hunger,
+      tired: c.sleepNeed,
+      mood: c.mood,
+      held: c.held,
+    });
   }
 
   private applyTool(x: number, y: number): void {
@@ -965,10 +1024,21 @@ export class Game {
   }
 
   private pickUp(c: Creature): void {
+    // Release bed if carried off
+    if (c.bedKey && this.bedOwners.get(c.bedKey) === c.id) {
+      this.bedOwners.delete(c.bedKey);
+    }
+    c.bedKey = null;
     c.held = true;
     c.setPath(null);
     c.job = JobType.Idle;
+    c.jobTarget = null;
+    c.workTimer = 0;
     this.held = c;
+    this.selectCreature(c);
+    this.renderer.spawnFx(new THREE.Vector3(c.wx, 1.0, c.wz), 0xffdd88, 0.45);
+    this.mentioneOnce('pickUp', MENTOR_LINES.pickUp);
+    this.refreshInspector();
   }
 
   private dropHeld(): void {
@@ -1015,13 +1085,27 @@ export class Game {
       c.stunTimer = 1.5;
     }
     this.held = null;
+    c.mood = Math.min(100, c.mood + 4);
+    this.mentioneOnce('drop', MENTOR_LINES.drop);
+    this.refreshInspector();
   }
 
   private slap(c: Creature): void {
-    c.speedBuff = Math.max(c.speedBuff, 2.5);
-    c.sleepNeed = Math.max(0, c.sleepNeed - 10);
-    this.renderer.spawnFx(new THREE.Vector3(c.wx, 0.5, c.wz), 0xffee88, 0.4);
-    this.mentioneOnce('slap', MENTOR_LINES.slap);
+    // Stun + interrupt current job (DK2-like Hand slap)
+    c.stunTimer = Math.max(c.stunTimer, 1.35);
+    c.speedBuff = Math.max(c.speedBuff, 2.8);
+    c.sleepNeed = Math.max(0, c.sleepNeed - 12);
+    c.hunger = Math.max(0, c.hunger - 4);
+    c.mood = Math.min(100, c.mood + 8);
+    c.setPath(null);
+    if (c.job !== JobType.Sleep && c.job !== JobType.Eat) {
+      c.job = JobType.Idle;
+      c.jobTarget = null;
+    }
+    this.renderer.spawnFx(new THREE.Vector3(c.wx, 0.7, c.wz), 0xffee88, 0.55);
+    this.renderer.spawnFx(new THREE.Vector3(c.wx, 1.1, c.wz), 0xffaa44, 0.4);
+    this.hud.say(MENTOR_LINES.slap);
+    this.refreshInspector();
   }
 
   private workerCost(): number {
@@ -1309,6 +1393,35 @@ export class Game {
     this.renderer.camera.lookAt(this.camTarget);
   }
 
+  /** QA/screenshot: Pass 6.1 inspector + Hand hold + mood. */
+  preparePass61Shot(): void {
+    this.preparePass5bShot();
+    const workers = this.creatures.filter((c) => c.isWorker && c.alive);
+    const target = workers[2] ?? workers[0];
+    if (target) {
+      target.mood = 38;
+      target.hunger = 55;
+      target.sleepNeed = 40;
+      target.hp = target.maxHp * 0.7;
+      this.selectCreature(target);
+      // Hold a second creature to show Hand carry
+      const carry = workers.find((c) => c !== target && c.job !== JobType.Sleep) ?? workers[1];
+      if (carry) {
+        this.pickUp(carry);
+        const focus = this.grid.tileToWorld(target.x, target.y);
+        carry.wx = focus.x + 1.2;
+        carry.wz = focus.z + 0.4;
+        carry.syncMesh(this.time);
+      }
+      this.refreshInspector();
+      const focusW = this.grid.tileToWorld(target.x, target.y);
+      this.camTarget.set(focusW.x, 0, focusW.z);
+      this.renderer.camera.position.set(focusW.x + 2, 18, focusW.z + 11);
+      this.renderer.camera.lookAt(this.camTarget);
+      this.hud.say(MENTOR_LINES.pickUp);
+    }
+  }
+
   /** QA/screenshot: Pass 5c louder heal + feast sparks (also usable as heal-only / feast-only). */
   preparePass5cShot(focus: 'both' | 'heal' | 'feast' = 'both'): void {
     this.preparePass5bShot();
@@ -1464,6 +1577,7 @@ export class Game {
       this.regenMana(dt);
       this.regenHatcheryFood(dt);
       this.assignJobs(dt);
+      this.updateMoods(dt);
       this.updateCreatures(dt);
       this.updatePortal(dt);
       this.updateHeroWave(dt);
@@ -1485,6 +1599,7 @@ export class Game {
 
     this.renderer.update(dt);
     this.hud.update(dt);
+    if (this.selected || this.held) this.refreshInspector();
     this.hud.updateStats(
       this.gold,
       this.mana,
@@ -1980,6 +2095,39 @@ export class Game {
     }
   }
 
+
+  private updateMoods(dt: number): void {
+    const hasLair = this.grid.countRoom(RoomType.Lair) > 0;
+    const lairBeds = Math.max(1, this.grid.countRoom(RoomType.Lair));
+    const minionCount = this.creatures.filter((c) => c.alive && !c.isHero).length;
+    const overcrowded = hasLair && minionCount > lairBeds + 1;
+    for (const c of this.creatures) {
+      if (!c.alive || c.isHero || c.held) continue;
+      let delta = 2.0 * dt; // gentle recover
+      if (c.hunger > 45) delta -= 10 * dt * ((c.hunger - 45) / 55);
+      if (c.sleepNeed > 40) delta -= 8 * dt * ((c.sleepNeed - 40) / 60);
+      if (!hasLair) delta -= 3.5 * dt;
+      if (overcrowded) delta -= 4.5 * dt;
+      if (c.job === JobType.Sleep || c.job === JobType.Eat) delta += 12 * dt;
+      if (c.hp < c.maxHp * 0.4) delta -= 3 * dt;
+      c.mood = Math.max(0, Math.min(100, c.mood + delta));
+      if (c.mood < 14 && !c.leaveWarned) {
+        c.leaveWarned = true;
+        this.hud.say(MENTOR_LINES.leaveThreat);
+        this.mentioneOnce('moodLow', MENTOR_LINES.moodLow);
+      } else if (c.mood > 35) {
+        c.leaveWarned = false;
+      }
+      // Soft leave: very low mood idle creatures may despawn slowly (non-workers less sticky)
+      if (c.mood < 6 && !c.isWorker && c.job === JobType.Idle && Math.random() < dt * 0.015) {
+        c.alive = false;
+        c.mesh.visible = false;
+        this.hud.say('A minion has left the Underkeep.');
+        if (this.selected === c) this.clearSelection();
+      }
+    }
+  }
+
   private updateCreatures(dt: number): void {
     for (const c of this.creatures) {
       if (!c.alive || c.held) continue;
@@ -2051,7 +2199,7 @@ export class Game {
           const mined = Math.min(40, t.goldAmount);
           t.goldAmount -= mined;
           c.goldCarried += mined;
-          t.digProgress = Math.min(1, t.digProgress + 0.2);
+          t.digProgress = Math.min(1, t.digProgress + 0.2 * c.workEfficiency());
           // Incremental visual — NO full mesh rebuild (white-screen fix)
           this.renderer.updateDigVisual(t.x, t.y, t.digProgress, t.kind);
           this.mentioneOnce('firstGold', MENTOR_LINES.firstGold);
@@ -2070,7 +2218,7 @@ export class Game {
             c.setPath(null);
           }
         } else if (t.kind === TileKind.Earth) {
-          t.digProgress = Math.min(1, t.digProgress + 0.34);
+          t.digProgress = Math.min(1, t.digProgress + 0.34 * c.workEfficiency());
           this.renderer.updateDigVisual(t.x, t.y, t.digProgress, t.kind);
           if (t.digProgress >= 1) {
             t.kind = TileKind.Dirt;

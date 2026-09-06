@@ -133,7 +133,7 @@ export class Grid {
     for (const t of this.tiles) t.torch = false;
     for (const t of this.tiles) {
       if (t.kind !== TileKind.Claimed && t.kind !== TileKind.Dirt && t.kind !== TileKind.Heart) continue;
-      if ((t.x + t.y) % 7 !== 0) continue;
+      if ((t.x + t.y) % 4 !== 0) continue;
       // near a solid wall
       const dirs = [
         [1, 0],

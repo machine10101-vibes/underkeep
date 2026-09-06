@@ -101,9 +101,7 @@ export class Game {
     const c = new Creature(kind, x, y, this.grid);
     const stats = CREATURE_STATS[kind];
     const mesh = this.renderer.createEntityVisual(
-      kind === CreatureKind.HeroKnight || kind === CreatureKind.HeroArcher
-        ? 'hero'
-        : kind,
+      kind,
       stats.color,
       stats.scale
     );

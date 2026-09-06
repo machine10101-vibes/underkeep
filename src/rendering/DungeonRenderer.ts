@@ -6,6 +6,7 @@ import { ShaderPass } from 'three/examples/jsm/postprocessing/ShaderPass.js';
 import { Grid } from '../game/Grid';
 import { TILE_SIZE, TileKind } from '../game/types';
 import {
+  floorMaterial,
   makeBlockEdgeGeo,
   makeCreatureMesh,
   makeFloorGeo,
@@ -69,16 +70,14 @@ export class DungeonRenderer {
   private markerMesh: THREE.Mesh;
   private selectRing: THREE.Mesh;
   private clock = 0;
-  private dirtFloorMat: THREE.MeshStandardMaterial;
-  private claimedFloorMat: THREE.MeshStandardMaterial;
   private edgeMat: THREE.LineBasicMaterial;
   private earthEdgeMat: THREE.LineBasicMaterial;
   private goldEdgeMat: THREE.LineBasicMaterial;
 
   constructor(canvas: HTMLCanvasElement) {
     this.scene = new THREE.Scene();
-    this.scene.background = new THREE.Color(0x1c1822);
-    this.scene.fog = new THREE.FogExp2(0x1a161c, 0.008);
+    this.scene.background = new THREE.Color(0x18141c);
+    this.scene.fog = new THREE.FogExp2(0x16121a, 0.0075);
 
     this.camera = new THREE.PerspectiveCamera(52, 1, 0.1, 220);
     this.camera.position.set(0, 32, 24);
@@ -114,8 +113,8 @@ export class DungeonRenderer {
     dir.shadow.camera.right = 55;
     dir.shadow.camera.top = 55;
     dir.shadow.camera.bottom = -55;
-    dir.shadow.bias = -0.0008;
-    dir.shadow.intensity = 0.45;
+    dir.shadow.bias = -0.0006;
+    dir.shadow.intensity = 0.55;
     this.scene.add(dir);
 
     const fill = new THREE.DirectionalLight(0x7090c8, 0.35);
@@ -140,20 +139,6 @@ export class DungeonRenderer {
     this.scene.add(this.entityGroup);
     this.scene.add(this.fxGroup);
 
-    this.dirtFloorMat = new THREE.MeshStandardMaterial({
-      color: 0x8a6540,
-      metalness: 0.02,
-      roughness: 0.9,
-      emissive: 0x1a1008,
-      emissiveIntensity: 0.08,
-    });
-    this.claimedFloorMat = new THREE.MeshStandardMaterial({
-      color: 0x8a7460,
-      metalness: 0.15,
-      roughness: 0.58,
-      emissive: 0x201810,
-      emissiveIntensity: 0.1,
-    });
     this.edgeMat = new THREE.LineBasicMaterial({
       color: 0x2a2218,
       transparent: true,
@@ -276,7 +261,7 @@ export class DungeonRenderer {
       }
 
       if (tile.fortified) {
-        const mesh = new THREE.Mesh(makeWallGeo(), tileMaterial(TileKind.Earth, true, tile.room));
+        const mesh = new THREE.Mesh(makeWallGeo(true), tileMaterial(TileKind.Earth, true, tile.room));
         mesh.position.set(w.x, 0, w.z);
         mesh.castShadow = true;
         mesh.receiveShadow = true;
@@ -286,13 +271,8 @@ export class DungeonRenderer {
         continue;
       }
 
-      // floors — Claimed / Dirt / Heart
-      const floor = new THREE.Mesh(
-        makeFloorGeo(),
-        tile.kind === TileKind.Claimed || tile.kind === TileKind.Heart
-          ? this.claimedFloorMat
-          : this.dirtFloorMat
-      );
+      // floors — Claimed / Dirt / Heart with room-specific materials
+      const floor = new THREE.Mesh(makeFloorGeo(), floorMaterial(tile.kind, tile.room));
       floor.position.set(w.x, 0, w.z);
       floor.receiveShadow = true;
       this.gridGroup.add(floor);
@@ -327,11 +307,30 @@ export class DungeonRenderer {
       }
 
       if (tile.torch) {
-        const torch = makeTorchMesh() as THREE.Group & {
+        // Limit real point lights for mobile perf — every other torch is emissive-only
+        const withLight = this.torches.filter((x) => x.torchLight).length < 14 && (tile.x + tile.y) % 2 === 0;
+        const torch = makeTorchMesh(withLight) as THREE.Group & {
           flame?: THREE.Mesh;
           torchLight?: THREE.PointLight;
         };
-        torch.position.set(w.x + 0.7, 0, w.z);
+        // Nestle against nearest solid wall
+        let ox = 0.65;
+        let oz = 0;
+        const neighbors: Array<[number, number, number, number]> = [
+          [1, 0, 0.65, 0],
+          [-1, 0, -0.65, 0],
+          [0, 1, 0, 0.65],
+          [0, -1, 0, -0.65],
+        ];
+        for (const [dx, dy, px, pz] of neighbors) {
+          const n = grid.get(tile.x + dx, tile.y + dy);
+          if (n && (n.kind === TileKind.Earth || n.kind === TileKind.Gold || n.kind === TileKind.Rock || n.fortified)) {
+            ox = px;
+            oz = pz;
+            break;
+          }
+        }
+        torch.position.set(w.x + ox, 0, w.z + oz);
         this.gridGroup.add(torch);
         this.torches.push(torch);
       }

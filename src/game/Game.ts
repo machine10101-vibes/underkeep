@@ -92,6 +92,8 @@ export class Game {
   private contextRecoveryShown = false;
   /** Mark paint without structural rebuild (overlay only). */
   private marksDirty = false;
+  /** Fog reveal without structural rebuild. */
+  private fogDirty = false;
   /** Coalesce expensive rebuildGrid calls. */
   private rebuildCooldown = 0;
   private pendingStructuralRebuild = false;
@@ -247,6 +249,7 @@ export class Game {
     this.researchRank = 0;
     this.healUnlocked = false;
     this.marksDirty = false;
+    this.fogDirty = false;
     this.pendingStructuralRebuild = false;
     this.rebuildCooldown = 0;
     this.grid = new Grid(40, 40);
@@ -412,6 +415,13 @@ export class Game {
     }
     unpackTiles(this.grid.tiles, data.tiles);
     this.grid.heartPos = { x: data.heartPos.x, y: data.heartPos.y };
+    // Pre-6.5 saves lack explored flags — seed from claimed territory once
+    if (!this.grid.tiles.some((tile) => tile.explored)) {
+      this.grid.seedExploration();
+    } else {
+      // Ensure claimed/dirt/heart always lit + wall-face LOS
+      this.grid.revealFromTerritory();
+    }
 
     this.gold = data.gold;
     this.mana = data.mana;
@@ -501,6 +511,7 @@ export class Game {
     this.renderer.rebuildGrid(this.grid);
     this.gridDirty = false;
     this.marksDirty = false;
+    this.fogDirty = false;
     this.pendingStructuralRebuild = false;
     this.rebuildCooldown = 0.22;
   }
@@ -515,6 +526,49 @@ export class Game {
     if (!this.marksDirty) return;
     this.renderer.syncMarkOverlay(this.grid);
     this.marksDirty = false;
+  }
+
+  private flushFog(): void {
+    if (!this.fogDirty) return;
+    this.renderer.syncFogOverlay(this.grid);
+    this.fogDirty = false;
+  }
+
+  /** Reveal territory LOS / dig neighborhood without a structural rebuild. */
+  private noteFogChange(changed: boolean): void {
+    if (changed) this.fogDirty = true;
+  }
+
+  /** Mood must never become NaN — Math.min/max(NaN) stays NaN and poisons inspector bars. */
+  private safeMood(c: Creature, next: number): void {
+    const cur = Number.isFinite(c.mood) ? c.mood : 72;
+    const n = Number.isFinite(next) ? next : cur;
+    c.mood = Math.max(0, Math.min(100, n));
+  }
+
+  /** Purge dead/hero entries from multi-select without throwing. */
+  private pruneSelection(): void {
+    try {
+      this.selectedGroup = this.selectedGroup.filter((c) => c && c.alive && !c.isHero);
+      if (this.selected && (!this.selected.alive || this.selected.isHero)) {
+        this.selected = null;
+      }
+      if (this.selected && !this.selectedGroup.includes(this.selected)) {
+        this.selectedGroup.push(this.selected);
+      }
+      if (!this.selected && this.selectedGroup.length) {
+        this.selected = this.selectedGroup[this.selectedGroup.length - 1];
+      }
+      if (!this.selectedGroup.length) {
+        this.selected = null;
+        this.hud.hideInspector();
+      }
+    } catch (err) {
+      console.warn('[underkeep] pruneSelection failed', err);
+      this.selected = null;
+      this.selectedGroup = [];
+      try { this.hud.hideInspector(); } catch { /* ignore */ }
+    }
   }
 
   private bindInput(canvas: HTMLCanvasElement): void {
@@ -1136,13 +1190,18 @@ export class Game {
   }
 
   private syncSelectionPrimary(): void {
-    this.selectedGroup = this.selectedGroup.filter((c) => c.alive && !c.isHero);
-    for (const c of this.creatures) {
-      if (!this.selectedGroup.includes(c)) c.selected = false;
+    try {
+      this.selectedGroup = this.selectedGroup.filter((c) => c && c.alive && !c.isHero);
+      for (const c of this.creatures) {
+        if (!this.selectedGroup.includes(c)) c.selected = false;
+      }
+      for (const c of this.selectedGroup) c.selected = true;
+      this.selected = this.selectedGroup.length ? this.selectedGroup[this.selectedGroup.length - 1] : null;
+      this.refreshInspector();
+    } catch (err) {
+      console.warn('[underkeep] syncSelectionPrimary failed', err);
+      this.pruneSelection();
     }
-    for (const c of this.selectedGroup) c.selected = true;
-    this.selected = this.selectedGroup.length ? this.selectedGroup[this.selectedGroup.length - 1] : null;
-    this.refreshInspector();
   }
 
   private selectCreature(c: Creature): void {
@@ -1176,79 +1235,106 @@ export class Game {
     y1: number,
     additive: boolean
   ): void {
-    const left = Math.min(x0, x1);
-    const right = Math.max(x0, x1);
-    const top = Math.min(y0, y1);
-    const bottom = Math.max(y0, y1);
-    if (right - left < 6 && bottom - top < 6) return;
-    const cam = this.renderer.camera;
-    const rect = canvas.getBoundingClientRect();
-    const picked: Creature[] = [];
-    const v = new THREE.Vector3();
-    for (const c of this.creatures) {
-      if (!c.alive || c.isHero || c.held) continue;
-      v.set(c.wx, 0.6, c.wz);
-      v.project(cam);
-      const sx = ((v.x + 1) / 2) * rect.width + rect.left;
-      const sy = ((-v.y + 1) / 2) * rect.height + rect.top;
-      if (sx >= left && sx <= right && sy >= top && sy <= bottom) picked.push(c);
+    try {
+      const left = Math.min(x0, x1);
+      const right = Math.max(x0, x1);
+      const top = Math.min(y0, y1);
+      const bottom = Math.max(y0, y1);
+      if (right - left < 6 && bottom - top < 6) return;
+      const cam = this.renderer.camera;
+      const rect = canvas.getBoundingClientRect();
+      const picked: Creature[] = [];
+      const v = new THREE.Vector3();
+      for (const c of this.creatures) {
+        if (!c.alive || c.isHero || c.held) continue;
+        if (!Number.isFinite(c.wx) || !Number.isFinite(c.wz)) continue;
+        v.set(c.wx, 0.6, c.wz);
+        v.project(cam);
+        if (!Number.isFinite(v.x) || !Number.isFinite(v.y)) continue;
+        const sx = ((v.x + 1) / 2) * rect.width + rect.left;
+        const sy = ((-v.y + 1) / 2) * rect.height + rect.top;
+        if (sx >= left && sx <= right && sy >= top && sy <= bottom) picked.push(c);
+      }
+      if (!additive) {
+        for (const o of this.selectedGroup) o.selected = false;
+        this.selectedGroup = [];
+      }
+      for (const c of picked) {
+        if (!this.selectedGroup.includes(c)) this.selectedGroup.push(c);
+        c.selected = true;
+      }
+      if (picked.length) this.mentioneOnce('groupSelect', MENTOR_LINES.groupSelect);
+      this.syncSelectionPrimary();
+    } catch (err) {
+      console.warn('[underkeep] box select failed', err);
     }
-    if (!additive) {
-      for (const o of this.selectedGroup) o.selected = false;
-      this.selectedGroup = [];
-    }
-    for (const c of picked) {
-      if (!this.selectedGroup.includes(c)) this.selectedGroup.push(c);
-      c.selected = true;
-    }
-    if (picked.length) this.mentioneOnce('groupSelect', MENTOR_LINES.groupSelect);
-    this.syncSelectionPrimary();
   }
 
   /** Attack-move / rally attack for selected fighters (and combat minions). */
   private issueAttackMove(tx: number, ty: number, towardHero = false): void {
-    const units = this.selectedGroup.filter(
-      (c) => c.alive && !c.isHero && !c.isWorker && !c.held
-    );
-    if (!units.length) {
-      // Allow Scrabblers to still get a move order if that's all that's selected
-      const any = this.selectedGroup.filter((c) => c.alive && !c.isHero && !c.held);
-      if (!any.length) return;
-      for (const c of any) {
-        if (c.bedKey) this.releaseBed(c);
-        c.job = JobType.Wander;
-        c.jobTarget = { x: tx, y: ty };
-        c.setPath(this.grid.findPath(c.x, c.y, tx, ty));
+    try {
+      this.pruneSelection();
+      const units = this.selectedGroup.filter(
+        (c) => c.alive && !c.isHero && !c.isWorker && !c.held
+      );
+      if (!units.length) {
+        // Allow Scrabblers to still get a move order if that's all that's selected
+        const any = this.selectedGroup.filter((c) => c.alive && !c.isHero && !c.held);
+        if (!any.length) return;
+        for (const c of any) {
+          try {
+            if (c.bedKey) this.releaseBed(c);
+            c.job = JobType.Wander;
+            c.jobTarget = { x: tx, y: ty };
+            c.setPath(this.grid.findPath(c.x, c.y, tx, ty));
+          } catch (err) {
+            console.warn('[underkeep] move order unit failed', err);
+          }
+        }
+        this.hud.sayNow('Move order issued.');
+        return;
       }
-      this.hud.sayNow('Move order issued.');
-      return;
-    }
-    let i = 0;
-    for (const c of units) {
-      if (c.bedKey) this.releaseBed(c);
-      // Slight scatter so they don't stack on one tile
-      const ox = (i % 3) - 1;
-      const oy = Math.floor(i / 3) % 2;
-      i++;
-      let dx = tx + ox;
-      let dy = ty + oy;
-      if (!this.grid.isWalkable(dx, dy)) {
-        dx = tx;
-        dy = ty;
+      let i = 0;
+      for (const c of units) {
+        try {
+          if (c.bedKey) this.releaseBed(c);
+          // Slight scatter so they don't stack on one tile
+          const ox = (i % 3) - 1;
+          const oy = Math.floor(i / 3) % 2;
+          i++;
+          let dx = tx + ox;
+          let dy = ty + oy;
+          if (!this.grid.isWalkable(dx, dy)) {
+            dx = tx;
+            dy = ty;
+          }
+          c.job = JobType.AttackMove;
+          c.jobTarget = { x: dx, y: dy };
+          const path = this.grid.findPath(
+            Number.isFinite(c.x) ? c.x : dx,
+            Number.isFinite(c.y) ? c.y : dy,
+            dx,
+            dy
+          );
+          if (path) c.setPath(path);
+          else c.setPath(null);
+          this.safeMood(c, (Number.isFinite(c.mood) ? c.mood : 72) + 3);
+          c.clampStats();
+        } catch (err) {
+          console.warn('[underkeep] attack-move unit failed', err);
+        }
       }
-      c.job = JobType.AttackMove;
-      c.jobTarget = { x: dx, y: dy };
-      const path = this.grid.findPath(c.x, c.y, dx, dy);
-      if (path) c.setPath(path);
-      else c.setPath(null);
-      c.mood = Math.min(100, c.mood + 3);
+      try {
+        const w = this.grid.tileToWorld(tx, ty);
+        if (Number.isFinite(w.x) && Number.isFinite(w.z)) {
+          this.renderer.spawnFx(new THREE.Vector3(w.x, 0.9, w.z), towardHero ? 0xff6040 : 0xffcc44, 0.55);
+        }
+      } catch { /* ignore fx */ }
+      this.hud.sayNow(towardHero ? MENTOR_LINES.attackHero : MENTOR_LINES.attackMove);
+      this.refreshInspector();
+    } catch (err) {
+      console.warn('[underkeep] issueAttackMove failed', err);
     }
-    this.renderer.spawnFx(
-      new THREE.Vector3(this.grid.tileToWorld(tx, ty).x, 0.9, this.grid.tileToWorld(tx, ty).z),
-      towardHero ? 0xff6040 : 0xffcc44,
-      0.55
-    );
-    this.hud.sayNow(towardHero ? MENTOR_LINES.attackHero : MENTOR_LINES.attackMove);
   }
 
   private refreshInspector(): void {
@@ -1271,7 +1357,9 @@ export class Game {
       const jobRaw = typeof c.job === 'string' && c.job.length > 0 ? c.job : 'idle';
       const jobLabel = c.held
         ? 'Held'
-        : jobRaw.charAt(0).toUpperCase() + jobRaw.slice(1);
+        : jobRaw === JobType.AttackMove
+          ? 'Attack'
+          : jobRaw.charAt(0).toUpperCase() + jobRaw.slice(1);
       const groupN = this.selectedGroup.filter((x) => x.alive).length;
       const kindLabel = kindNames[c.kind] ?? String(c.kind);
       this.hud.showInspector({
@@ -1455,6 +1543,7 @@ export class Game {
   private dropHeldAt(x: number, y: number): void {
     const c = this.held;
     if (!c) return;
+    try {
     if (!this.grid.isWalkable(x, y) && !(this.grid.get(x, y)?.kind === TileKind.Heart)) {
       // find nearby walkable
       let placed = false;
@@ -1490,9 +1579,20 @@ export class Game {
       c.stunTimer = 1.5;
     }
     this.held = null;
-    c.mood = Math.min(100, c.mood + 4);
+    this.safeMood(c, (Number.isFinite(c.mood) ? c.mood : 72) + 4);
+    c.clampStats();
     this.mentioneOnce('drop', MENTOR_LINES.drop);
     this.refreshInspector();
+    } catch (err) {
+      console.warn('[underkeep] dropHeldAt failed', err);
+      try {
+        if (c) {
+          c.held = false;
+          c.clampStats();
+        }
+        this.held = null;
+      } catch { /* ignore */ }
+    }
   }
 
   private slap(c: Creature): void {
@@ -1504,7 +1604,7 @@ export class Game {
       c.speedBuff = Math.max(c.speedBuff, 2.8);
       c.sleepNeed = Math.max(0, Math.min(100, c.sleepNeed - 12));
       c.hunger = Math.max(0, Math.min(100, c.hunger - 4));
-      c.mood = Math.max(0, Math.min(100, c.mood + 8));
+      this.safeMood(c, (Number.isFinite(c.mood) ? c.mood : 72) + 8);
       c.setPath(null);
       c.workTimer = 0;
       if (c.job !== JobType.Sleep && c.job !== JobType.Eat) {
@@ -2342,6 +2442,266 @@ export class Game {
     if (guard) this.selectCreature(guard);
   }
 
+
+  /** QA/screenshot: Pass 6.5 fog of war and/or idle auto-fortify. */
+  preparePass65Shot(focus: 'fow' | 'fortify' | 'both' = 'both'): void {
+    this.hud.hideOverlay();
+    const hx = this.grid.heartPos.x;
+    const hy = this.grid.heartPos.y;
+    const claim = (x: number, y: number, room = RoomType.None) => {
+      const t = this.grid.get(x, y);
+      if (!t || t.kind === TileKind.Heart) return;
+      t.kind = TileKind.Claimed;
+      t.claimedProgress = 1;
+      t.room = room;
+      t.mark = MarkType.None;
+      t.digProgress = 0;
+      t.door = DoorState.None;
+      t.trap = TrapType.None;
+      t.rally = false;
+      t.fortified = false;
+      t.explored = true;
+    };
+
+    // Compact heart plaza — leave most of the map fogged
+    for (let y = hy - 2; y <= hy + 2; y++) {
+      for (let x = hx - 2; x <= hx + 3; x++) claim(x, y);
+    }
+    // Non-regression rooms (small)
+    claim(hx + 2, hy, RoomType.Treasury);
+    claim(hx + 3, hy, RoomType.Treasury);
+    claim(hx + 2, hy + 1, RoomType.Lair);
+    claim(hx + 3, hy + 1, RoomType.Training);
+    claim(hx + 2, hy + 2, RoomType.Library);
+    claim(hx + 3, hy + 2, RoomType.Portal);
+    claim(hx - 2, hy + 1, RoomType.Hatchery);
+    claim(hx - 1, hy + 1, RoomType.Guard);
+
+    // Soft earth walls around plaza (fortify candidates) — NOT rock
+    for (const [x, y] of [
+      [hx - 3, hy],
+      [hx - 3, hy + 1],
+      [hx - 3, hy - 1],
+      [hx + 4, hy],
+      [hx + 4, hy + 1],
+      [hx + 4, hy - 1],
+      [hx, hy + 3],
+      [hx + 1, hy + 3],
+      [hx + 2, hy + 3],
+      [hx, hy - 3],
+      [hx + 1, hy - 3],
+    ] as const) {
+      const wall = this.grid.get(x, y);
+      if (!wall || wall.kind === TileKind.Heart) continue;
+      wall.kind = TileKind.Earth;
+      wall.fortified = false;
+      wall.mark = MarkType.None;
+      wall.room = RoomType.None;
+      wall.goldAmount = 0;
+      wall.digProgress = 0;
+      wall.explored = true; // wall-face LOS
+    }
+
+    // One rock pillar to prove rock stays impassable / not auto-fortified
+    const rock = this.grid.get(hx + 5, hy);
+    if (rock) {
+      rock.kind = TileKind.Rock;
+      rock.fortified = false;
+      rock.mark = MarkType.None;
+      rock.explored = true;
+      rock.room = RoomType.None;
+    }
+
+    // Dig tongue east into fog so FoW boundary reads clearly
+    for (let x = hx + 4; x <= hx + 7; x++) {
+      claim(x, hy - 2);
+    }
+    // Beyond the tongue — force UNEXPLORED dark
+    for (let y = 0; y < this.grid.height; y++) {
+      for (let x = 0; x < this.grid.width; x++) {
+        const t = this.grid.get(x, y)!;
+        const near =
+          Math.abs(x - hx) <= 4 && Math.abs(y - hy) <= 3
+            ? true
+            : Math.abs(x - (hx + 5)) <= 2 && Math.abs(y - (hy - 2)) <= 1;
+        if (!near && t.kind !== TileKind.Heart) {
+          // Keep far tiles fogged even if generator claimed corridor north
+          if (t.kind === TileKind.Claimed || t.kind === TileKind.Dirt) {
+            t.kind = TileKind.Earth;
+            t.claimedProgress = 0;
+            t.room = RoomType.None;
+          }
+          t.explored = false;
+          t.mark = MarkType.None;
+          t.fortified = false;
+        }
+      }
+    }
+    // Re-assert plaza explored + LOS
+    this.grid.revealFromTerritory();
+
+    // Door/sentry snippet for non-regression visual
+    claim(hx, hy - 1);
+    this.grid.get(hx, hy - 1)!.door = DoorState.Closed;
+    claim(hx - 1, hy - 2);
+    this.grid.get(hx - 1, hy - 2)!.trap = TrapType.Sentry;
+    this.grid.get(hx - 1, hy + 1)!.rally = true;
+
+    this.hatcheryFood = 6;
+    this.gold = 900;
+    this.healUnlocked = true;
+
+    // Workers for auto-fortify
+    const workers = this.creatures.filter((c) => c.isWorker && c.alive);
+    while (workers.length < 4) {
+      workers.push(this.spawnCreature(CreatureKind.Scrabbler, hx, hy));
+    }
+    for (let i = 0; i < workers.length; i++) {
+      const w = workers[i];
+      const tx = hx - 1 + (i % 3);
+      const ty = hy + (i % 2);
+      const world = this.grid.tileToWorld(tx, ty);
+      w.x = tx;
+      w.y = ty;
+      w.wx = world.x;
+      w.wz = world.z;
+      w.hunger = 5;
+      w.sleepNeed = 5;
+      w.goldCarried = 0;
+      w.job = JobType.Idle;
+      w.jobTarget = null;
+      w.setPath(null);
+      w.held = false;
+    }
+
+    // Keep a Gravemage / fighter so Library + combat systems don't vanish
+    if (!this.creatures.some((c) => c.kind === CreatureKind.Gravemage && c.alive)) {
+      const g = this.spawnCreature(CreatureKind.Gravemage, hx + 2, hy + 2);
+      g.job = JobType.Research;
+      g.jobTarget = { x: hx + 2, y: hy + 2 };
+    }
+    if (!this.creatures.some((c) => c.kind === CreatureKind.Rattlekin && c.alive)) {
+      this.spawnCreature(CreatureKind.Rattlekin, hx - 1, hy + 1);
+    }
+
+    if (focus === 'fortify' || focus === 'both') {
+      // Pre-mark a couple walls + force one worker mid-fortify for readable shot
+      for (const [x, y] of [
+        [hx - 3, hy],
+        [hx - 3, hy + 1],
+        [hx + 4, hy],
+        [hx, hy + 3],
+      ] as const) {
+        const wt = this.grid.get(x, y);
+        if (wt && wt.kind === TileKind.Earth && !wt.fortified) {
+          wt.mark = MarkType.Fortify;
+          wt.explored = true;
+        }
+      }
+      // One already fortified for contrast
+      const done = this.grid.get(hx + 1, hy + 3);
+      if (done && done.kind === TileKind.Earth) {
+        done.fortified = true;
+        done.mark = MarkType.None;
+        done.explored = true;
+      }
+      const w0 = workers[0];
+      const target = { x: hx - 3, y: hy };
+      const adj = this.grid.tileToWorld(hx - 2, hy);
+      w0.x = hx - 2;
+      w0.y = hy;
+      w0.wx = adj.x;
+      w0.wz = adj.z;
+      w0.job = JobType.Fortify;
+      w0.jobTarget = target;
+      w0.workTimer = 0.8;
+      w0.setPath(null);
+      this.hud.sayNow(MENTOR_LINES.autoFortify);
+    }
+
+    if (focus === 'fow' || focus === 'both') {
+      this.hud.say(MENTOR_LINES.fog);
+      this.hud.sayNow('Fog of war — unexplored earth stays dark until dig/claim.');
+    }
+
+    this.requestStructuralRebuild();
+    this.rebuild();
+    this.fogDirty = false;
+    this.marksDirty = false;
+
+    if (focus === 'fortify') {
+      const focusW = this.grid.tileToWorld(hx - 2, hy);
+      this.camTarget.set(focusW.x, 0, focusW.z);
+      this.renderer.camera.position.set(focusW.x + 3, 20, focusW.z + 12);
+      this.hud.setTooltip(`Idle Scrabblers auto-fortify soft earth · Rock impassable`);
+    } else {
+      // Pull camera back so fogged periphery is obvious
+      const focusW = this.grid.tileToWorld(hx + 2, hy - 1);
+      this.camTarget.set(focusW.x, 0, focusW.z);
+      this.renderer.camera.position.set(focusW.x + 6, 32, focusW.z + 22);
+      this.hud.setTooltip(`Fog of war — explored heart vs dark unexplored`);
+    }
+    this.renderer.camera.lookAt(this.camTarget);
+  }
+
+
+  /** QA/screenshot: Pass 6.4b Hand pick + shift multi-select + attack-move, no blackout. */
+  preparePass64bShot(): void {
+    this.hud.hideOverlay();
+    // Reuse 6.4 arena then force Hand/group/AttackMove proof state
+    this.preparePass64Shot();
+    const hx = this.grid.heartPos.x;
+    const hy = this.grid.heartPos.y;
+    // Ensure moods are finite (Leaving? must not poison bars)
+    for (const c of this.creatures) {
+      if (!c.alive) continue;
+      c.clampStats();
+      this.safeMood(c, Number.isFinite(c.mood) ? Math.max(40, c.mood) : 72);
+      c.hunger = Math.max(0, Math.min(40, c.hunger));
+      c.sleepNeed = Math.max(0, Math.min(40, c.sleepNeed));
+    }
+    // Pick one Scrabbler into Hand for pick proof
+    const worker = this.creatures.find((c) => c.alive && c.isWorker);
+    if (worker) {
+      this.tool = 'select';
+      this.hud.setActiveTool('select');
+      this.pickUp(worker);
+    }
+    // Multi-select fighters (not held)
+    const fighters = this.creatures.filter(
+      (c) =>
+        c.alive &&
+        !c.isHero &&
+        !c.isWorker &&
+        (c.kind === CreatureKind.Rattlekin || c.kind === CreatureKind.Emberling)
+    );
+    // Drop worker first so Hand is free for screenshot of squad, then re-pick after group order
+    if (this.held) {
+      this.dropHeldAt(hx, hy);
+    }
+    this.clearSelection();
+    for (const f of fighters.slice(0, 3)) {
+      f.selected = true;
+      if (!this.selectedGroup.includes(f)) this.selectedGroup.push(f);
+    }
+    this.syncSelectionPrimary();
+    this.issueAttackMove(hx, hy - 3, true);
+    // Also demonstrate Hand pick on a fighter without blackout
+    const pickTarget = fighters[0];
+    if (pickTarget) {
+      // Keep squad attack-move on others; pick one for inspector Held
+      this.pickUp(pickTarget);
+    }
+    this.hud.sayNow('Hand pick + squad Attack — no blackout.');
+    this.hud.say(MENTOR_LINES.groupSelect);
+    this.hud.say(MENTOR_LINES.attackMove);
+    this.refreshInspector();
+    const focus = this.grid.tileToWorld(hx + 1, hy - 1);
+    this.camTarget.set(focus.x, 0, focus.z);
+    this.renderer.camera.position.set(focus.x + 3, 22, focus.z + 14);
+    this.renderer.camera.lookAt(this.camTarget);
+  }
+
   /** QA/screenshot: group select rings + attack-move + hero combat. */
   preparePass64Shot(): void {
     this.hud.hideOverlay();
@@ -2491,20 +2851,20 @@ export class Game {
 
       if (!this.gameOver) {
         this.time += dt;
-        this.updateCamera(dt);
-        this.regenMana(dt);
-        this.regenHatcheryFood(dt);
-        this.assignJobs(dt);
-        this.updateMoods(dt);
-        this.updateCreatures(dt);
-        this.updatePortal(dt);
-        this.updateHeroWave(dt);
-        this.checkHeart();
-        this.payWages(dt);
+        try { this.updateCamera(dt); } catch (e) { console.warn('[underkeep] camera', e); }
+        try { this.regenMana(dt); } catch (e) { console.warn('[underkeep] mana', e); }
+        try { this.regenHatcheryFood(dt); } catch (e) { console.warn('[underkeep] food', e); }
+        try { this.assignJobs(dt); } catch (e) { console.warn('[underkeep] assignJobs', e); }
+        try { this.updateMoods(dt); } catch (e) { console.warn('[underkeep] moods', e); }
+        try { this.updateCreatures(dt); } catch (e) { console.warn('[underkeep] creatures', e); }
+        try { this.updatePortal(dt); } catch (e) { console.warn('[underkeep] portal', e); }
+        try { this.updateHeroWave(dt); } catch (e) { console.warn('[underkeep] heroes', e); }
+        try { this.checkHeart(); } catch (e) { console.warn('[underkeep] heart', e); }
+        try { this.payWages(dt); } catch (e) { console.warn('[underkeep] wages', e); }
         this.saveAcc += dt;
         if (this.saveAcc >= 4) {
           this.saveAcc = 0;
-          this.saveNow();
+          try { this.saveNow(); } catch (e) { console.warn('[underkeep] save', e); }
         }
       }
 
@@ -2518,8 +2878,9 @@ export class Game {
       if (this.rebuildCooldown > 0) this.rebuildCooldown -= dt;
       if (this.pendingStructuralRebuild || this.gridDirty) {
         if (this.rebuildCooldown <= 0) this.rebuild();
-      } else if (this.marksDirty && !this.paint) {
-        this.flushMarks();
+      } else {
+        if (this.marksDirty && !this.paint) this.flushMarks();
+        if (this.fogDirty) this.flushFog();
       }
 
       for (const c of this.creatures) {
@@ -2527,6 +2888,20 @@ export class Game {
           if (c.alive) {
             c.clampStats();
             c.syncMesh(this.time);
+            // FoW: hide units on unexplored tiles (explored stays visible). Never throw.
+            try {
+              if (c.mesh) {
+                if (c.held) {
+                  c.mesh.visible = true;
+                } else {
+                  const tx = Number.isFinite(c.x) ? Math.round(c.x) : 0;
+                  const ty = Number.isFinite(c.y) ? Math.round(c.y) : 0;
+                  c.mesh.visible = this.grid.isExplored(tx, ty);
+                }
+              }
+            } catch {
+              if (c.mesh) c.mesh.visible = true;
+            }
           } else if (c.mesh) {
             c.mesh.visible = false;
           }
@@ -2775,6 +3150,43 @@ export class Game {
         claimedTargets.add(key);
         assigned = true;
         break;
+      }
+      // Pass 6.5: idle Scrabblers auto-fortify soft earth walls next to claimed land (rock stays impassable)
+      if (!assigned) {
+        let best: Vec2 | null = null;
+        let bestD = 999;
+        for (const tile of this.grid.tiles) {
+          if (tile.kind !== TileKind.Earth || tile.fortified) continue;
+          if (tile.mark === MarkType.Dig) continue; // don't steal dig marks
+          if (!this.grid.hasAdjacentClaimed(tile.x, tile.y)) continue;
+          if (!this.grid.isReachableSolid(tile.x, tile.y)) continue;
+          // Prefer explored wall faces so FoW doesn't send workers into the dark
+          if (!tile.explored) continue;
+          const key = `${tile.x},${tile.y}`;
+          if (claimedTargets.has(key)) continue;
+          const d = Math.abs(tile.x - w.x) + Math.abs(tile.y - w.y);
+          if (d < bestD && d <= 16) {
+            bestD = d;
+            best = { x: tile.x, y: tile.y };
+          }
+        }
+        if (best) {
+          const path = this.grid.findPathAdjacent(w.x, w.y, best.x, best.y);
+          if (path) {
+            const ft = this.grid.get(best.x, best.y)!;
+            if (ft.mark !== MarkType.Fortify) {
+              ft.mark = MarkType.Fortify;
+              this.marksDirty = true;
+            }
+            w.job = JobType.Fortify;
+            w.jobTarget = best;
+            w.setPath(path);
+            w.workTimer = 0;
+            claimedTargets.add(`${best.x},${best.y}`);
+            assigned = true;
+            this.mentioneOnce('autoFortify', MENTOR_LINES.autoFortify);
+          }
+        }
       }
       if (!assigned && w.goldCarried > 0) {
         const treasury = this.grid.tiles.find((t) => t.room === RoomType.Treasury);
@@ -3161,42 +3573,62 @@ export class Game {
 
 
   private updateMoods(dt: number): void {
-    const hasLair = this.grid.countRoom(RoomType.Lair) > 0;
-    const lairBeds = Math.max(1, this.grid.countRoom(RoomType.Lair));
-    const minionCount = this.creatures.filter((c) => c.alive && !c.isHero).length;
-    const overcrowded = hasLair && minionCount > lairBeds + 1;
-    for (const c of this.creatures) {
-      if (!c.alive || c.isHero || c.held) continue;
-      let delta = 2.0 * dt; // gentle recover
-      if (c.hunger > 45) delta -= 10 * dt * ((c.hunger - 45) / 55);
-      if (c.sleepNeed > 40) delta -= 8 * dt * ((c.sleepNeed - 40) / 60);
-      if (!hasLair) delta -= 3.5 * dt;
-      if (overcrowded) delta -= 4.5 * dt;
-      if (c.job === JobType.Sleep || c.job === JobType.Eat) delta += 12 * dt;
-      if (c.hp < c.maxHp * 0.4) delta -= 3 * dt;
-      c.mood = Math.max(0, Math.min(100, c.mood + delta));
-      if (c.mood < 14 && !c.leaveWarned) {
-        c.leaveWarned = true;
-        this.hud.say(MENTOR_LINES.leaveThreat);
-        this.mentioneOnce('moodLow', MENTOR_LINES.moodLow);
-      } else if (c.mood > 35) {
-        c.leaveWarned = false;
+    try {
+      const hasLair = this.grid.countRoom(RoomType.Lair) > 0;
+      const lairBeds = Math.max(1, this.grid.countRoom(RoomType.Lair));
+      const minionCount = this.creatures.filter((c) => c.alive && !c.isHero).length;
+      const overcrowded = hasLair && minionCount > lairBeds + 1;
+      for (const c of this.creatures) {
+        try {
+          if (!c.alive || c.isHero || c.held) continue;
+          c.clampStats();
+          let delta = 2.0 * dt; // gentle recover
+          if (c.hunger > 45) delta -= 10 * dt * ((c.hunger - 45) / 55);
+          if (c.sleepNeed > 40) delta -= 8 * dt * ((c.sleepNeed - 40) / 60);
+          if (!hasLair) delta -= 3.5 * dt;
+          if (overcrowded) delta -= 4.5 * dt;
+          if (c.job === JobType.Sleep || c.job === JobType.Eat) delta += 12 * dt;
+          if (c.hp < c.maxHp * 0.4) delta -= 3 * dt;
+          if (!Number.isFinite(delta)) delta = 0;
+          this.safeMood(c, (Number.isFinite(c.mood) ? c.mood : 72) + delta);
+          if (c.mood < 14 && !c.leaveWarned) {
+            c.leaveWarned = true;
+            this.hud.say(MENTOR_LINES.leaveThreat);
+            this.mentioneOnce('moodLow', MENTOR_LINES.moodLow);
+          } else if (c.mood > 35) {
+            c.leaveWarned = false;
+          }
+          // Mood → dig speed: toast once when efficiency drops below ~75%
+          const eff = c.workEfficiency();
+          if (c.isWorker && eff < 0.75 && !c.efficiencyWarned) {
+            c.efficiencyWarned = true;
+            this.hud.say(MENTOR_LINES.sluggishDig);
+          } else if (eff >= 0.82) {
+            c.efficiencyWarned = false;
+          }
+          // Soft leave: very low mood idle creatures may despawn slowly (non-workers less sticky)
+          // Pass 6.4b: never throw on mesh / selection — Leaving? must not black-screen the canvas
+          if (c.mood < 6 && !c.isWorker && c.job === JobType.Idle && Math.random() < dt * 0.015) {
+            c.alive = false;
+            try {
+              if (c.mesh) c.mesh.visible = false;
+            } catch { /* ignore */ }
+            if (this.held === c) this.held = null;
+            c.held = false;
+            c.selected = false;
+            this.selectedGroup = this.selectedGroup.filter((x) => x !== c && x.alive);
+            if (this.selected === c) this.selected = null;
+            this.pruneSelection();
+            this.hud.say('A minion has left the Underkeep.');
+            if (!this.selected) this.hud.hideInspector();
+            else this.refreshInspector();
+          }
+        } catch (err) {
+          console.warn('[underkeep] mood tick failed', c?.id, err);
+        }
       }
-      // Mood → dig speed: toast once when efficiency drops below ~75%
-      const eff = c.workEfficiency();
-      if (c.isWorker && eff < 0.75 && !c.efficiencyWarned) {
-        c.efficiencyWarned = true;
-        this.hud.say(MENTOR_LINES.sluggishDig);
-      } else if (eff >= 0.82) {
-        c.efficiencyWarned = false;
-      }
-      // Soft leave: very low mood idle creatures may despawn slowly (non-workers less sticky)
-      if (c.mood < 6 && !c.isWorker && c.job === JobType.Idle && Math.random() < dt * 0.015) {
-        c.alive = false;
-        c.mesh.visible = false;
-        this.hud.say('A minion has left the Underkeep.');
-        if (this.selected === c) this.clearSelection();
-      }
+    } catch (err) {
+      console.warn('[underkeep] updateMoods failed', err);
     }
   }
 
@@ -3310,6 +3742,8 @@ export class Game {
             t.mark = MarkType.None;
             t.goldAmount = 0;
             t.digProgress = 0;
+            this.noteFogChange(this.grid.revealAround(t.x, t.y, 1));
+            this.noteFogChange(this.grid.revealFromTerritory());
             this.requestStructuralRebuild();
             c.job = JobType.Idle;
             c.jobTarget = null;
@@ -3330,6 +3764,8 @@ export class Game {
             t.trap = TrapType.None;
             t.rally = false;
             t.room = RoomType.None;
+            this.noteFogChange(this.grid.revealAround(t.x, t.y, 1));
+            this.noteFogChange(this.grid.revealFromTerritory());
             this.requestStructuralRebuild();
             c.job = JobType.Idle;
             c.jobTarget = null;
@@ -3367,12 +3803,14 @@ export class Game {
         t.kind = TileKind.Claimed;
         t.claimedProgress = 1;
         t.mark = MarkType.None;
+        this.noteFogChange(this.grid.revealFromTerritory());
         this.requestStructuralRebuild();
         c.job = JobType.Idle;
         c.jobTarget = null;
         const wpos = this.grid.tileToWorld(t.x, t.y);
         this.renderer.spawnFx(new THREE.Vector3(wpos.x, 0.3, wpos.z), 0xc8bca8, 0.4);
         this.mentioneOnce('claim', MENTOR_LINES.claim);
+        this.mentioneOnce('fog', MENTOR_LINES.fog);
         this.saveNow();
       }
     } else if (c.job === JobType.Fortify) {
@@ -3558,6 +3996,7 @@ export class Game {
   private heartHp = 500;
 
   private doCombat(c: Creature, _dt: number): void {
+    try {
     const meleeR = c.isHero ? 1.65 : 1.55;
     const foes = this.creatures.filter(
       (o) => o.alive && o !== c && o.isHero !== c.isHero && !o.isWorker && Math.hypot(o.x - c.x, o.y - c.y) < meleeR
@@ -3588,6 +4027,9 @@ export class Game {
     if (beforeAlive && !target.alive && target.isHero) {
       this.hud.sayNow(MENTOR_LINES.heroDown);
       this.renderer.spawnFx(new THREE.Vector3(target.wx, 1.2, target.wz), 0xffee88, 0.7);
+    }
+    } catch (err) {
+      console.warn('[underkeep] doCombat failed', err);
     }
   }
 

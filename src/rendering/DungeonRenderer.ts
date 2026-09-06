@@ -98,6 +98,15 @@ export class DungeonRenderer {
   private markOverlay = new THREE.Group();
   private markPlaneGeo = new THREE.PlaneGeometry(TILE_SIZE * 0.7, TILE_SIZE * 0.7);
   private digWireGeo = new THREE.EdgesGeometry(new THREE.BoxGeometry(TILE_SIZE * 0.92, 2.2, TILE_SIZE * 0.92));
+  /** Fog of war — shared geo/mat, recycled meshes; never full rebuild storms. */
+  private fogOverlay = new THREE.Group();
+  private fogBoxGeo = new THREE.BoxGeometry(TILE_SIZE * 1.05, 4.4, TILE_SIZE * 1.05);
+  private fogMat = new THREE.MeshBasicMaterial({
+    color: 0x08060a,
+    depthWrite: true,
+  });
+  private fogMeshes = new Map<string, THREE.Mesh>();
+  private fogPool: THREE.Mesh[] = [];
 
   constructor(canvas: HTMLCanvasElement) {
     this.scene = new THREE.Scene();
@@ -170,6 +179,7 @@ export class DungeonRenderer {
 
     this.scene.add(this.gridGroup);
     this.scene.add(this.markOverlay);
+    this.scene.add(this.fogOverlay);
     this.scene.add(this.entityGroup);
     this.scene.add(this.fxGroup);
 
@@ -487,6 +497,7 @@ export class DungeonRenderer {
       }
     }
     this.syncMarkOverlay(grid);
+    this.syncFogOverlay(grid);
   }
 
   /** Lightweight dig/claim/fortify tags — no terrain rebuild required. */
@@ -528,6 +539,52 @@ export class DungeonRenderer {
         this.markOverlay.add(wire);
       }
     }
+  }
+
+
+  /**
+   * Fog of war overlay — unexplored tiles get a solid dark column.
+   * Recycles meshes (pool); shared geo/mat — NO dispose storms, NO terrain rebuild.
+   */
+  syncFogOverlay(grid: Grid): void {
+    const keep = new Set<string>();
+    for (const tile of grid.tiles) {
+      if (tile.explored) continue;
+      const key = `${tile.x},${tile.y}`;
+      keep.add(key);
+      let mesh = this.fogMeshes.get(key);
+      if (!mesh) {
+        mesh = this.fogPool.pop() ?? new THREE.Mesh(this.fogBoxGeo, this.fogMat);
+        mesh.castShadow = false;
+        mesh.receiveShadow = false;
+        this.fogMeshes.set(key, mesh);
+        this.fogOverlay.add(mesh);
+      }
+      const w = grid.tileToWorld(tile.x, tile.y);
+      mesh.position.set(w.x, 1.9, w.z);
+      mesh.visible = true;
+      // Soft hide underlying tile mesh to cut overdraw while fogged
+      const under = this.tileMeshes.get(key);
+      if (under) under.visible = false;
+    }
+    // Recycle fog meshes for explored tiles; restore underlying visibility
+    for (const [key, mesh] of [...this.fogMeshes.entries()]) {
+      if (keep.has(key)) continue;
+      mesh.visible = false;
+      this.fogOverlay.remove(mesh);
+      this.fogMeshes.delete(key);
+      this.fogPool.push(mesh);
+      const under = this.tileMeshes.get(key);
+      if (under) under.visible = true;
+    }
+    // Ensure explored tiles are visible even if never fogged
+    for (const tile of grid.tiles) {
+      if (!tile.explored) continue;
+      const under = this.tileMeshes.get(`${tile.x},${tile.y}`);
+      if (under && !under.visible) under.visible = true;
+    }
+    // Cap pool so context-loss path stays lean
+    while (this.fogPool.length > 256) this.fogPool.pop();
   }
 
   private addEdge(x: number, z: number, height: number, mat: THREE.LineBasicMaterial): void {

@@ -85,6 +85,8 @@ export interface Tile {
   trap: TrapType;
   /** Call-to-arms rally flag on this tile. */
   rally: boolean;
+  /** Fog of war — once true, stays visible forever. */
+  explored: boolean;
 }
 
 export interface Vec2 {

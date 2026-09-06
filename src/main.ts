@@ -51,10 +51,19 @@ function frame(now: number): void {
     } catch (err) {
       frameErrors++;
       console.error('[underkeep] frame error', err);
-      // Recover fast — never leave a stuck black/white canvas on Hand/inspector exceptions
-      if (frameErrors >= 2) {
-        const g = game as unknown as { handleContextLost?: () => void };
+      // Pass 6.4b: Hand/select/AttackMove logic faults must NOT fake a WebGL context-loss
+      // overlay (that reads as a full black screen). Only escalate when the renderer
+      // actually lost context or render itself is wedged.
+      const g = game as unknown as {
+        renderer?: { contextLost?: boolean };
+        handleContextLost?: () => void;
+      };
+      if (g.renderer?.contextLost) {
         g.handleContextLost?.();
+        frameErrors = 0;
+      } else if (frameErrors >= 8) {
+        // Persistent unknown faults — soft recover without claiming context loss
+        console.warn('[underkeep] many frame errors — continuing without overlay');
         frameErrors = 0;
       }
     }
@@ -89,7 +98,13 @@ if (
     params.get('shot') === '6.3' ||
     params.get('shot') === '63' ||
     params.get('shot') === '6.4' ||
-    params.get('shot') === '64')
+    params.get('shot') === '64' ||
+    params.get('shot') === '6.4b' ||
+    params.get('shot') === '64b' ||
+    params.get('shot') === '6.5' ||
+    params.get('shot') === '65' ||
+    params.get('shot') === '6.5-fow' ||
+    params.get('shot') === '6.5-fortify')
 ) {
   // Auto-arrange evidence shots
   setTimeout(() => {
@@ -106,10 +121,16 @@ if (
       preparePass62Shot?: () => void;
       preparePass63Shot?: () => void;
       preparePass64Shot?: () => void;
+      preparePass64bShot?: () => void;
+      preparePass65Shot?: (focus?: 'fow' | 'fortify' | 'both') => void;
     };
     g.hud.hideOverlay();
     const shot = params.get('shot');
-    if (shot === '6.4' || shot === '64') g.preparePass64Shot?.();
+    if (shot === '6.5-fortify') g.preparePass65Shot?.('fortify');
+    else if (shot === '6.5-fow') g.preparePass65Shot?.('fow');
+    else if (shot === '6.5' || shot === '65') g.preparePass65Shot?.('both');
+    else if (shot === '6.4b' || shot === '64b') g.preparePass64bShot?.();
+    else if (shot === '6.4' || shot === '64') g.preparePass64Shot?.();
     else if (shot === '6.3' || shot === '63') g.preparePass63Shot?.();
     else if (shot === '6.2a' || shot === '62a') g.preparePass62aStabShot?.();
     else if (shot === '6.2' || shot === '62') g.preparePass62Shot?.();

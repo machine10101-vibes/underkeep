@@ -46,6 +46,7 @@ export interface SaveData {
     door?: DoorState;
     trap?: TrapType;
     rally?: boolean;
+    explored?: boolean;
   }>;
   gold: number;
   mana: number;
@@ -213,6 +214,7 @@ export function packTiles(tiles: Tile[]): SaveData['tiles'] {
     door: t.door ?? DoorState.None,
     trap: t.trap ?? TrapType.None,
     rally: !!t.rally,
+    explored: !!t.explored,
   }));
 }
 
@@ -232,5 +234,7 @@ export function unpackTiles(gridTiles: Tile[], packed: SaveData['tiles']): void 
     t.door = (p.door as DoorState) ?? DoorState.None;
     t.trap = (p.trap as TrapType) ?? TrapType.None;
     t.rally = !!p.rally;
+    // Missing explored (pre-6.5 saves): leave false; caller reseeds from territory
+    t.explored = p.explored === undefined ? false : !!p.explored;
   }
 }

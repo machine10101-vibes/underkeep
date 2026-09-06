@@ -234,6 +234,7 @@ export class HUD {
     efficiency: number;
     held?: boolean;
   }): void {
+    try {
     const clamp01 = (n: number, lo: number, hi: number, fb = lo) => {
       if (!Number.isFinite(n)) return fb;
       return Math.max(lo, Math.min(hi, n));
@@ -263,6 +264,10 @@ export class HUD {
     // Always visible Efficiency: N%
     this.inspEfficiency.textContent = `${effPct}%`;
     this.inspectorEl.classList.remove('hidden');
+    } catch (err) {
+      console.warn('[underkeep] showInspector failed', err);
+      try { this.inspectorEl.classList.add('hidden'); } catch { /* ignore */ }
+    }
   }
 
   hideInspector(): void {
@@ -340,6 +345,8 @@ export const MENTOR_LINES = {
   groupSelect: "Squad marked. Shift-click or drag-box to gather more — then click a tile to attack-move.",
   attackMove: "Attack-move! Selected fighters advance and engage.",
   attackHero: "Hunt them down! Fighters surge toward the heroes.",
+  fog: "Beyond the torchlight — unexplored dark. Dig and claim to push the fog back.",
+  autoFortify: "Idle Scrabblers reinforce soft earth walls on their own. Rock still laughs at them.",
   heroesSoon: "Footsteps in the dark… heroes approach. Fortify doors, set traps, rally fighters.",
   heroesImminent: "Steel at the gate! Heroes arrive any moment.",
   heroEngage: "Heroes clash with your minions — doors and traps earn their keep.",

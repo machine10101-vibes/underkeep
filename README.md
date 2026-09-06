@@ -4,7 +4,9 @@ Original-IP dungeon management game inspired by **Dungeon Keeper 2** (3D). Dark-
 
 ## Play online
 
-**https://machine10101-vibes.github.io/underkeep/**
+**https://machine10101-vibes.github.io/underkeep/?v=pass6.4b**
+
+Pass 6.4b: Hand / group-select / attack-move hardened against black-screen regressions.
 
 Works on desktop and phones (touch controls).
 
@@ -71,6 +73,8 @@ Dropping a creature into a fight **stuns** them briefly (DK2-style).
 5. Place a **Portal**; attract **Skitterwing**, **Rattlekin**, **Emberling** when thresholds are met.
 6. Minions sleep (Lair), eat (Hatchery), train (Training).
 7. ~90s in, a **hero wave** marches toward the Heart — survive to win.
+8. **Fog of war** — unexplored tiles stay dark until dig/claim / LOS from claimed land.
+9. Idle Scrabblers **auto-fortify** soft earth walls adjacent to claimed territory (rock stays impassable).
 
 ## Stack
 

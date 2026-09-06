@@ -26,6 +26,7 @@ export class Grid {
           door: DoorState.None,
           trap: TrapType.None,
           rally: false,
+          explored: false,
         });
       }
     }
@@ -176,6 +177,7 @@ export class Grid {
 
     // Place a few torches on claimed tiles near walls
     this.refreshTorches();
+    this.seedExploration();
   }
 
   refreshTorches(): void {
@@ -296,6 +298,93 @@ export class Grid {
     }
     // Corridor mouth: walls + open path, or room-adjacent corridor
     return (solid >= 1 && walk >= 1) || roomAdj;
+  }
+
+
+  /**
+   * Fog of war seed: claimed/heart/dirt known, plus orthogonal wall faces (LOS).
+   * Far earth/rock stays dark until dig/claim expands territory.
+   */
+  seedExploration(): void {
+    for (const t of this.tiles) t.explored = false;
+    for (const t of this.tiles) {
+      if (
+        t.kind === TileKind.Claimed ||
+        t.kind === TileKind.Heart ||
+        t.kind === TileKind.Dirt
+      ) {
+        t.explored = true;
+      }
+    }
+    // LOS: solids adjacent to claimed/heart are visible wall faces
+    for (const t of this.tiles) {
+      if (!t.explored) continue;
+      if (
+        t.kind !== TileKind.Claimed &&
+        t.kind !== TileKind.Heart &&
+        t.kind !== TileKind.Dirt
+      ) {
+        continue;
+      }
+      for (const n of this.neighbors4(t.x, t.y)) {
+        n.explored = true;
+      }
+    }
+  }
+
+  /** Reveal a tile; returns true if newly explored. */
+  revealTile(x: number, y: number): boolean {
+    const t = this.get(x, y);
+    if (!t || t.explored) return false;
+    t.explored = true;
+    return true;
+  }
+
+  /**
+   * Reveal tile + Chebyshev neighborhood (dig/claim nearby).
+   * Returns true if any tile newly explored.
+   */
+  revealAround(x: number, y: number, radius = 1): boolean {
+    let changed = false;
+    for (let dy = -radius; dy <= radius; dy++) {
+      for (let dx = -radius; dx <= radius; dx++) {
+        if (this.revealTile(x + dx, y + dy)) changed = true;
+      }
+    }
+    return changed;
+  }
+
+  /**
+   * Expand LOS from all claimed/heart/dirt — call after claim or dig-open.
+   * Cheap enough for coalesced rebuild path (not every chip).
+   */
+  revealFromTerritory(): boolean {
+    let changed = false;
+    for (const t of this.tiles) {
+      if (
+        t.kind !== TileKind.Claimed &&
+        t.kind !== TileKind.Heart &&
+        t.kind !== TileKind.Dirt
+      ) {
+        continue;
+      }
+      if (!t.explored) {
+        t.explored = true;
+        changed = true;
+      }
+      for (const n of this.neighbors4(t.x, t.y)) {
+        if (!n.explored) {
+          n.explored = true;
+          changed = true;
+        }
+      }
+    }
+    return changed;
+  }
+
+  isExplored(x: number, y: number): boolean {
+    const t = this.get(x, y);
+    return !!t && t.explored;
   }
 
   /** A* pathfinding on walkable tiles (goal may be diggable solid when explicitly targeted). */

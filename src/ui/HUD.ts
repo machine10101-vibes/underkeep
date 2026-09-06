@@ -337,4 +337,11 @@ export const MENTOR_LINES = {
   guardBuilt: "Guard Room raised. Fighters will hold the line when idle.",
   rallyPlanted: "Rally flag planted! Call to arms — minions hold this tile.",
   rallyCleared: "Rally flag struck. Back to ordinary scheming.",
+  groupSelect: "Squad marked. Shift-click or drag-box to gather more — then click a tile to attack-move.",
+  attackMove: "Attack-move! Selected fighters advance and engage.",
+  attackHero: "Hunt them down! Fighters surge toward the heroes.",
+  heroesSoon: "Footsteps in the dark… heroes approach. Fortify doors, set traps, rally fighters.",
+  heroesImminent: "Steel at the gate! Heroes arrive any moment.",
+  heroEngage: "Heroes clash with your minions — doors and traps earn their keep.",
+  heroDown: "A hero falls. The Underkeep drinks deep.",
 };

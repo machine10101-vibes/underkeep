@@ -31,12 +31,12 @@ npm run preview
 
 | Input | Action |
 |-------|--------|
-| **LMB** | Use tool (paint dig/claim/fortify/rooms) · Hand: pick up creature |
+| **LMB** | Use tool · Hand: pick up · empty+selection: attack-move · shift-click: multi-select |
 | **RMB** | Slap creature · Cancel tile mark · Drop held creature |
 | **Space** | Drop held creature |
 | **WASD / Arrows** | Pan camera |
 | **Mouse wheel** | Zoom |
-| **1** | Hand / Select |
+| **1** | Hand / Select (shift-click / drag-box multi-select) |
 | **2** | Dig mark |
 | **3** | Claim mark |
 | **4** | Fortify mark |

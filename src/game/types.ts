@@ -66,6 +66,7 @@ export enum JobType {
   Flee = 'flee',
   Wander = 'wander',
   Guard = 'guard',
+  AttackMove = 'attack',
 }
 
 export interface Tile {

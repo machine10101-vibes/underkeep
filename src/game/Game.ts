@@ -46,6 +46,17 @@ export class Game {
   private tool: ToolMode = 'select';
   private held: Creature | null = null;
   private selected: Creature | null = null;
+  /** Multi-select set (Pass 6.4). Includes primary `selected`. */
+  private selectedGroup: Creature[] = [];
+  private boxSelecting = false;
+  private boxStartClient: { x: number; y: number } | null = null;
+  private boxMoved = false;
+  private boxPointerId: number | null = null;
+  private pendingPrimary: { tx: number; ty: number; hit: THREE.Vector3; shift: boolean } | null = null;
+  private marqueeEl: HTMLElement | null = null;
+  private heroWarn30 = false;
+  private heroWarn10 = false;
+  private heroEngageAnnounced = false;
   private gridDirty = true;
   private time = 0;
   private workerCostScale = 0;
@@ -92,8 +103,12 @@ export class Game {
   constructor(canvas: HTMLCanvasElement) {
     // HUD first so New Game / sheets stay wired even if boot later fails
     this.hud = new HUD();
+    this.marqueeEl = document.getElementById('select-marquee');
     this.hud.onToolChange = (t) => {
       this.tool = t;
+      if (t !== 'select') {
+        this.cancelBoxSelect();
+      }
     };
     this.hud.onSpell = (s) => this.castSpell(s);
     this.hud.onOverlayContinue = () => {
@@ -202,6 +217,15 @@ export class Game {
     this.tool = 'select';
     this.held = null;
     this.selected = null;
+    this.selectedGroup = [];
+    this.boxSelecting = false;
+    this.boxStartClient = null;
+    this.boxMoved = false;
+    this.pendingPrimary = null;
+    this.hideMarquee();
+    this.heroWarn30 = false;
+    this.heroWarn10 = false;
+    this.heroEngageAnnounced = false;
     this.hud.hideInspector();
     this.time = 0;
     this.workerCostScale = 0;
@@ -524,6 +548,10 @@ export class Game {
         e.preventDefault();
         this.dropHeld();
       }
+      if (e.key === 'Escape') {
+        this.cancelBoxSelect();
+        this.clearSelection();
+      }
     });
     window.addEventListener('keyup', (e) => this.keys.delete(e.key.toLowerCase()));
 
@@ -542,25 +570,69 @@ export class Game {
       const hit = this.pointerToWorld(e, canvas) ?? new THREE.Vector3();
 
       if (e.button === 2) {
+        this.cancelBoxSelect();
         this.handleSecondaryAt(tp.x, tp.y, hit);
         return;
       }
 
       if (e.button === 0) {
-        this.handlePrimaryAt(tp.x, tp.y, hit);
+        if (this.tool === 'select' && !this.held) {
+          const onCreature = this.creatureAt(tp.x, tp.y, hit);
+          // Start potential drag-box on empty ground (or always track; commit only if dragged)
+          if (!onCreature || onCreature.isHero) {
+            this.boxSelecting = true;
+            this.boxMoved = false;
+            this.boxStartClient = { x: e.clientX, y: e.clientY };
+            this.pendingPrimary = { tx: tp.x, ty: tp.y, hit: hit.clone(), shift: e.shiftKey };
+            return;
+          }
+          // Creature under cursor — immediate Hand / shift-select
+          this.handlePrimaryAt(tp.x, tp.y, hit, e.shiftKey);
+          return;
+        }
+        this.handlePrimaryAt(tp.x, tp.y, hit, e.shiftKey);
       }
     });
 
-    canvas.addEventListener('mouseup', () => {
+    canvas.addEventListener('mouseup', (e) => {
       if (performance.now() < this.ignoreMouseUntil) return;
+      if (this.boxSelecting && this.boxStartClient) {
+        const start = this.boxStartClient;
+        if (this.boxMoved) {
+          this.selectCreaturesInScreenBox(
+            canvas,
+            start.x,
+            start.y,
+            e.clientX,
+            e.clientY,
+            e.shiftKey || !!(this.pendingPrimary?.shift)
+          );
+        } else if (this.pendingPrimary) {
+          const p = this.pendingPrimary;
+          this.handlePrimaryAt(p.tx, p.ty, p.hit, p.shift || e.shiftKey);
+        }
+        this.cancelBoxSelect();
+      }
       this.paint = false;
       this.lastPaint = null;
       this.flushMarks();
     });
 
+    canvas.addEventListener('mouseleave', () => {
+      if (this.boxSelecting) this.cancelBoxSelect();
+    });
+
     canvas.addEventListener('mousemove', (e) => {
       if (performance.now() < this.ignoreMouseUntil) return;
       this.updatePointerHover(e, canvas);
+      if (this.boxSelecting && this.boxStartClient && this.tool === 'select') {
+        const dx = e.clientX - this.boxStartClient.x;
+        const dy = e.clientY - this.boxStartClient.y;
+        if (Math.hypot(dx, dy) > 8) {
+          this.boxMoved = true;
+          this.updateMarquee(this.boxStartClient.x, this.boxStartClient.y, e.clientX, e.clientY);
+        }
+      }
       if (this.paint && this.tool !== 'select') {
         const tp = this.pointerToTile(e, canvas);
         if (!tp) return;
@@ -814,7 +886,7 @@ export class Game {
     }
   }
 
-  private handlePrimaryAt(tx: number, ty: number, hit: THREE.Vector3): void {
+  private handlePrimaryAt(tx: number, ty: number, hit: THREE.Vector3, shift = false): void {
     try {
       if (this.tool === 'select') {
         if (this.held) {
@@ -822,12 +894,31 @@ export class Game {
           return;
         }
         const c = this.creatureAt(tx, ty, hit);
+        // Shift-click: toggle multi-select without Hand pick-up
+        if (c && !c.isHero && shift) {
+          this.toggleSelectCreature(c);
+          return;
+        }
+        // Click hero while squad selected → attack-move toward them
+        if (c && c.isHero && this.selectedGroup.some((x) => x.alive && !x.isWorker)) {
+          this.issueAttackMove(c.x, c.y, true);
+          return;
+        }
         if (c && !c.isHero) {
           this.selectCreature(c);
           this.pickUp(c);
           return;
         }
-        // Empty tile — deselect
+        // Empty tile with selection → attack-move / rally attack
+        if (this.selectedGroup.some((x) => x.alive && !x.held)) {
+          const walk =
+            this.grid.isWalkable(tx, ty) || this.grid.get(tx, ty)?.kind === TileKind.Heart;
+          if (walk) {
+            this.issueAttackMove(tx, ty, false);
+            return;
+          }
+        }
+        // Empty / invalid — deselect
         this.clearSelection();
       } else {
         this.paint = true;
@@ -1007,17 +1098,157 @@ export class Game {
     return best;
   }
 
+  private hideMarquee(): void {
+    if (this.marqueeEl) {
+      this.marqueeEl.classList.add('hidden');
+      this.marqueeEl.style.width = '0';
+      this.marqueeEl.style.height = '0';
+    }
+  }
+
+  private cancelBoxSelect(): void {
+    this.boxSelecting = false;
+    this.boxStartClient = null;
+    this.boxMoved = false;
+    this.pendingPrimary = null;
+    this.hideMarquee();
+  }
+
+  private updateMarquee(x0: number, y0: number, x1: number, y1: number): void {
+    if (!this.marqueeEl) return;
+    const left = Math.min(x0, x1);
+    const top = Math.min(y0, y1);
+    const w = Math.abs(x1 - x0);
+    const h = Math.abs(y1 - y0);
+    this.marqueeEl.classList.remove('hidden');
+    this.marqueeEl.style.left = `${left}px`;
+    this.marqueeEl.style.top = `${top}px`;
+    this.marqueeEl.style.width = `${w}px`;
+    this.marqueeEl.style.height = `${h}px`;
+  }
+
   private clearSelection(): void {
+    for (const c of this.selectedGroup) c.selected = false;
     if (this.selected) this.selected.selected = false;
     this.selected = null;
+    this.selectedGroup = [];
     this.hud.hideInspector();
   }
 
+  private syncSelectionPrimary(): void {
+    this.selectedGroup = this.selectedGroup.filter((c) => c.alive && !c.isHero);
+    for (const c of this.creatures) {
+      if (!this.selectedGroup.includes(c)) c.selected = false;
+    }
+    for (const c of this.selectedGroup) c.selected = true;
+    this.selected = this.selectedGroup.length ? this.selectedGroup[this.selectedGroup.length - 1] : null;
+    this.refreshInspector();
+  }
+
   private selectCreature(c: Creature): void {
-    if (this.selected && this.selected !== c) this.selected.selected = false;
+    if (!c || !c.alive || c.isHero) return;
+    for (const o of this.selectedGroup) o.selected = false;
+    this.selectedGroup = [c];
     this.selected = c;
     c.selected = true;
     this.refreshInspector();
+  }
+
+  private toggleSelectCreature(c: Creature): void {
+    if (!c || !c.alive || c.isHero) return;
+    const idx = this.selectedGroup.indexOf(c);
+    if (idx >= 0) {
+      c.selected = false;
+      this.selectedGroup.splice(idx, 1);
+    } else {
+      this.selectedGroup.push(c);
+      c.selected = true;
+      this.mentioneOnce('groupSelect', MENTOR_LINES.groupSelect);
+    }
+    this.syncSelectionPrimary();
+  }
+
+  private selectCreaturesInScreenBox(
+    canvas: HTMLCanvasElement,
+    x0: number,
+    y0: number,
+    x1: number,
+    y1: number,
+    additive: boolean
+  ): void {
+    const left = Math.min(x0, x1);
+    const right = Math.max(x0, x1);
+    const top = Math.min(y0, y1);
+    const bottom = Math.max(y0, y1);
+    if (right - left < 6 && bottom - top < 6) return;
+    const cam = this.renderer.camera;
+    const rect = canvas.getBoundingClientRect();
+    const picked: Creature[] = [];
+    const v = new THREE.Vector3();
+    for (const c of this.creatures) {
+      if (!c.alive || c.isHero || c.held) continue;
+      v.set(c.wx, 0.6, c.wz);
+      v.project(cam);
+      const sx = ((v.x + 1) / 2) * rect.width + rect.left;
+      const sy = ((-v.y + 1) / 2) * rect.height + rect.top;
+      if (sx >= left && sx <= right && sy >= top && sy <= bottom) picked.push(c);
+    }
+    if (!additive) {
+      for (const o of this.selectedGroup) o.selected = false;
+      this.selectedGroup = [];
+    }
+    for (const c of picked) {
+      if (!this.selectedGroup.includes(c)) this.selectedGroup.push(c);
+      c.selected = true;
+    }
+    if (picked.length) this.mentioneOnce('groupSelect', MENTOR_LINES.groupSelect);
+    this.syncSelectionPrimary();
+  }
+
+  /** Attack-move / rally attack for selected fighters (and combat minions). */
+  private issueAttackMove(tx: number, ty: number, towardHero = false): void {
+    const units = this.selectedGroup.filter(
+      (c) => c.alive && !c.isHero && !c.isWorker && !c.held
+    );
+    if (!units.length) {
+      // Allow Scrabblers to still get a move order if that's all that's selected
+      const any = this.selectedGroup.filter((c) => c.alive && !c.isHero && !c.held);
+      if (!any.length) return;
+      for (const c of any) {
+        if (c.bedKey) this.releaseBed(c);
+        c.job = JobType.Wander;
+        c.jobTarget = { x: tx, y: ty };
+        c.setPath(this.grid.findPath(c.x, c.y, tx, ty));
+      }
+      this.hud.sayNow('Move order issued.');
+      return;
+    }
+    let i = 0;
+    for (const c of units) {
+      if (c.bedKey) this.releaseBed(c);
+      // Slight scatter so they don't stack on one tile
+      const ox = (i % 3) - 1;
+      const oy = Math.floor(i / 3) % 2;
+      i++;
+      let dx = tx + ox;
+      let dy = ty + oy;
+      if (!this.grid.isWalkable(dx, dy)) {
+        dx = tx;
+        dy = ty;
+      }
+      c.job = JobType.AttackMove;
+      c.jobTarget = { x: dx, y: dy };
+      const path = this.grid.findPath(c.x, c.y, dx, dy);
+      if (path) c.setPath(path);
+      else c.setPath(null);
+      c.mood = Math.min(100, c.mood + 3);
+    }
+    this.renderer.spawnFx(
+      new THREE.Vector3(this.grid.tileToWorld(tx, ty).x, 0.9, this.grid.tileToWorld(tx, ty).z),
+      towardHero ? 0xff6040 : 0xffcc44,
+      0.55
+    );
+    this.hud.sayNow(towardHero ? MENTOR_LINES.attackHero : MENTOR_LINES.attackMove);
   }
 
   private refreshInspector(): void {
@@ -1041,9 +1272,11 @@ export class Game {
       const jobLabel = c.held
         ? 'Held'
         : jobRaw.charAt(0).toUpperCase() + jobRaw.slice(1);
+      const groupN = this.selectedGroup.filter((x) => x.alive).length;
+      const kindLabel = kindNames[c.kind] ?? String(c.kind);
       this.hud.showInspector({
-        kind: kindNames[c.kind] ?? String(c.kind),
-        job: jobLabel,
+        kind: groupN > 1 ? `${kindLabel} (+${groupN - 1})` : kindLabel,
+        job: groupN > 1 ? `${jobLabel} · squad ${groupN}` : jobLabel,
         hp: c.hp,
         maxHp: c.maxHp,
         hunger: c.hunger,
@@ -2109,6 +2342,140 @@ export class Game {
     if (guard) this.selectCreature(guard);
   }
 
+  /** QA/screenshot: group select rings + attack-move + hero combat. */
+  preparePass64Shot(): void {
+    this.hud.hideOverlay();
+    const hx = this.grid.heartPos.x;
+    const hy = this.grid.heartPos.y;
+    const claim = (x: number, y: number, room = RoomType.None) => {
+      const t = this.grid.get(x, y);
+      if (!t || t.kind === TileKind.Heart) return;
+      t.kind = TileKind.Claimed;
+      t.claimedProgress = 1;
+      t.room = room;
+      t.mark = MarkType.None;
+      t.digProgress = 0;
+      t.door = DoorState.None;
+      t.trap = TrapType.None;
+      t.rally = false;
+      t.fortified = false;
+    };
+    for (let y = hy - 4; y <= hy + 3; y++) {
+      for (let x = hx - 3; x <= hx + 5; x++) claim(x, y);
+    }
+    // Keep prior systems visible (non-regression)
+    claim(hx + 2, hy + 1, RoomType.Training);
+    claim(hx + 3, hy + 1, RoomType.Training);
+    claim(hx + 4, hy + 1, RoomType.Library);
+    claim(hx + 5, hy + 1, RoomType.Library);
+    claim(hx + 4, hy - 1, RoomType.Portal);
+    claim(hx + 5, hy - 1, RoomType.Portal);
+    claim(hx - 2, hy + 1, RoomType.Lair);
+    claim(hx - 1, hy + 1, RoomType.Lair);
+    claim(hx - 2, hy + 2, RoomType.Hatchery);
+    claim(hx + 2, hy + 2, RoomType.Guard);
+    claim(hx + 3, hy + 2, RoomType.Guard);
+    // Approach corridor + door + sentry
+    for (const [x, y] of [
+      [hx - 1, hy - 2],
+      [hx + 1, hy - 2],
+      [hx + 2, hy - 2],
+    ] as const) {
+      const wall = this.grid.get(x, y);
+      if (wall && wall.kind !== TileKind.Heart) {
+        wall.kind = TileKind.Earth;
+        wall.fortified = true;
+        wall.room = RoomType.None;
+      }
+    }
+    claim(hx, hy - 1);
+    claim(hx, hy - 2);
+    claim(hx, hy - 3);
+    claim(hx, hy - 4);
+    this.grid.get(hx, hy - 1)!.door = DoorState.Closed;
+    this.grid.get(hx, hy - 3)!.trap = TrapType.Sentry;
+    this.grid.get(hx + 2, hy)!.rally = true;
+
+    this.hatcheryFood = 8;
+    this.gold = 1000;
+    this.heroWaveSpawned = true;
+    this.heroWaveTimer = 0;
+    this.heroWarn30 = true;
+    this.heroWarn10 = true;
+
+    // Clear extras then spawn a readable fight
+    for (const c of [...this.creatures]) {
+      if (c.isHero) {
+        c.alive = false;
+        try { this.renderer.removeEntityMesh(c.mesh); } catch { /* ignore */ }
+      }
+    }
+    this.creatures = this.creatures.filter((c) => c.alive);
+
+    const place = (kind: CreatureKind, x: number, y: number) => {
+      const c = this.spawnCreature(kind, x, y);
+      const w = this.grid.tileToWorld(x, y);
+      c.x = x;
+      c.y = y;
+      c.wx = w.x;
+      c.wz = w.z;
+      c.held = false;
+      c.stunTimer = 0;
+      c.hunger = 10;
+      c.sleepNeed = 10;
+      c.trainNeed = 0;
+      return c;
+    };
+    // Remove prior fighters so the squad reads cleanly
+    for (const c of [...this.creatures]) {
+      if (
+        c.alive &&
+        (c.kind === CreatureKind.Rattlekin || c.kind === CreatureKind.Emberling)
+      ) {
+        c.alive = false;
+        try { this.renderer.removeEntityMesh(c.mesh); } catch { /* ignore */ }
+      }
+    }
+    this.creatures = this.creatures.filter((c) => c.alive);
+    const r1 = place(CreatureKind.Rattlekin, hx + 1, hy);
+    const r2 = place(CreatureKind.Rattlekin, hx + 2, hy);
+    const e1 = place(CreatureKind.Emberling, hx + 3, hy);
+    if (!this.creatures.some((c) => c.kind === CreatureKind.Gravemage && c.alive)) {
+      const g = this.spawnCreature(CreatureKind.Gravemage, hx + 4, hy + 1);
+      g.job = JobType.Research;
+      g.jobTarget = { x: hx + 4, y: hy + 1 };
+    }
+
+    // Heroes in the corridor — fight loop readable
+    const h1 = this.spawnCreature(CreatureKind.HeroKnight, hx, hy - 4);
+    const h2 = this.spawnCreature(CreatureKind.HeroArcher, hx + 1, hy - 4);
+    h1.job = JobType.Fight;
+    h2.job = JobType.Fight;
+    h1.jobTarget = { x: hx, y: hy };
+    h2.jobTarget = { x: hx, y: hy };
+    h1.hp = Math.floor(h1.maxHp * 0.7);
+    h2.hp = Math.floor(h2.maxHp * 0.75);
+
+    // Group-select fighters + attack-move toward heroes
+    this.clearSelection();
+    this.selectedGroup = [r1, r2, e1];
+    for (const c of this.selectedGroup) c.selected = true;
+    this.syncSelectionPrimary();
+    this.issueAttackMove(hx, hy - 3, true);
+
+    this.requestStructuralRebuild();
+    this.rebuild();
+    this.hud.sayNow('Squad selected — attack-move into the heroes!');
+    this.hud.say(MENTOR_LINES.groupSelect);
+    this.hud.say(MENTOR_LINES.attackHero);
+    this.hud.say(MENTOR_LINES.heroEngage);
+    this.hud.setTooltip(`(${hx},${hy}) Claimed · squad ${this.selectedGroup.length} attack-move`);
+    const focus = this.grid.tileToWorld(hx + 1, hy - 2);
+    this.camTarget.set(focus.x, 0, focus.z);
+    this.renderer.camera.position.set(focus.x + 1.5, 21, focus.z + 12);
+    this.renderer.camera.lookAt(this.camTarget);
+  }
+
   update(dt: number): void {
     if (this.renderer.contextLost) {
       // Still tick HUD so reload overlay stays usable
@@ -2193,10 +2560,11 @@ export class Game {
       });
       // Drop stale held/selected refs
       if (this.held && !this.held.alive) this.held = null;
-      if (this.selected && !this.selected.alive) {
-        this.selected = null;
-        this.hud.hideInspector();
-      }
+      const beforeSel = this.selectedGroup.length;
+      this.selectedGroup = this.selectedGroup.filter((c) => c.alive);
+      if (this.selected && !this.selected.alive) this.selected = null;
+      if (beforeSel !== this.selectedGroup.length) this.syncSelectionPrimary();
+      else if (!this.selected && this.selectedGroup.length === 0) this.hud.hideInspector();
     } catch (err) {
       console.error('[underkeep] update failed', err);
       throw err; // let main.ts frame guard count toward recovery
@@ -2450,6 +2818,31 @@ export class Game {
     // non-worker jobs: eat / sleep / train / fight
     for (const c of this.creatures) {
       if (!c.alive || c.isWorker || c.isHero || c.held || c.stunTimer > 0) continue;
+
+      // Sticky attack-move orders (Pass 6.4) — engage heroes en route, keep destination
+      if (c.job === JobType.AttackMove && c.jobTarget) {
+        const enemy = this.creatures.find(
+          (h) => h.alive && h.isHero && Math.hypot(h.x - c.x, h.y - c.y) < 9
+        );
+        if (enemy) {
+          if (c.bedKey) this.releaseBed(c);
+          if (Math.hypot(c.x - enemy.x, c.y - enemy.y) > 1.2) {
+            const path = this.grid.findPath(c.x, c.y, enemy.x, enemy.y);
+            if (path) c.setPath(path);
+          } else {
+            c.setPath(null);
+          }
+        } else if (c.path.length === 0) {
+          const tx = c.jobTarget.x;
+          const ty = c.jobTarget.y;
+          if (c.x !== tx || c.y !== ty) {
+            const path = this.grid.findPath(c.x, c.y, tx, ty);
+            if (path) c.setPath(path);
+          }
+        }
+        continue;
+      }
+
       // fight if hero near
       const enemy = this.creatures.find(
         (h) => h.alive && h.isHero && Math.hypot(h.x - c.x, h.y - c.y) < 10
@@ -2501,6 +2894,7 @@ export class Game {
       if (c.job === JobType.Guard) {
         c.job = JobType.Idle;
       }
+      // Never idle-wipe AttackMove here — handled as sticky above
 
       // Hurt creatures seek Lair to rest/heal (interrupts class jobs)
       const hurt = c.hp < c.maxHp * 0.65;
@@ -2608,23 +3002,31 @@ export class Game {
       }
     }
 
-    // heroes path to heart (closed doors block heroes)
+    // heroes path to heart (closed doors block heroes) — Pass 6.4 clearer fight loop
     for (const h of this.creatures) {
       if (!h.alive || !h.isHero || h.stunTimer > 0) continue;
-      const minion = this.creatures.find(
-        (c) => c.alive && !c.isHero && !c.isWorker && Math.hypot(c.x - h.x, c.y - h.y) < 6
-      );
+      // Prefer nearest combat minion in wider aggro; else march on Heart
+      let minion: Creature | null = null;
+      let best = 8.5;
+      for (const c of this.creatures) {
+        if (!c.alive || c.isHero || c.isWorker || c.held) continue;
+        const d = Math.hypot(c.x - h.x, c.y - h.y);
+        if (d < best) {
+          best = d;
+          minion = c;
+        }
+      }
       if (minion) {
         h.job = JobType.Fight;
         h.jobTarget = { x: minion.x, y: minion.y };
-        if (Math.hypot(h.x - minion.x, h.y - minion.y) > 1.2) {
+        if (Math.hypot(h.x - minion.x, h.y - minion.y) > 1.15) {
           h.setPath(this.grid.findPath(h.x, h.y, minion.x, minion.y, { forHero: true }));
         } else h.setPath(null);
       } else {
         h.job = JobType.Fight;
         const hx = this.grid.heartPos.x;
         const hy = this.grid.heartPos.y;
-        if (h.path.length === 0 || Math.random() < 0.02) {
+        if (h.path.length === 0 || Math.random() < 0.045) {
           // path toward heart — closed doors block; walk claimed/dirt only
           const path = this.grid.findPath(h.x, h.y, hx, hy, { forHero: true });
           if (path) h.setPath(path);
@@ -3110,6 +3512,18 @@ export class Game {
         );
       }
       if (c.trainNeed < 5) c.job = JobType.Idle;
+    } else if (c.job === JobType.AttackMove) {
+      this.doCombat(c, dt);
+      if (arrived && c.jobTarget && c.x === c.jobTarget.x && c.y === c.jobTarget.y) {
+        // Hold the ordered tile; keep AttackMove so assignJobs stays sticky until heroes gone
+        const nearHero = this.creatures.some(
+          (h) => h.alive && h.isHero && Math.hypot(h.x - c.x, h.y - c.y) < 12
+        );
+        if (!nearHero) {
+          // Convert to Guard hold at ordered tile (rally-attack destination)
+          c.job = JobType.Guard;
+        }
+      }
     } else if (c.job === JobType.Fight) {
       this.doCombat(c, dt);
     } else if (c.job === JobType.Wander && arrived) {
@@ -3143,24 +3557,38 @@ export class Game {
 
   private heartHp = 500;
 
-  private doCombat(c: Creature, dt: number): void {
+  private doCombat(c: Creature, _dt: number): void {
+    const meleeR = c.isHero ? 1.65 : 1.55;
     const foes = this.creatures.filter(
-      (o) => o.alive && o !== c && o.isHero !== c.isHero && !o.isWorker && Math.hypot(o.x - c.x, o.y - c.y) < 1.5
+      (o) => o.alive && o !== c && o.isHero !== c.isHero && !o.isWorker && Math.hypot(o.x - c.x, o.y - c.y) < meleeR
     );
     // workers also get hit if heroes adjacent
     const extra =
       c.isHero
         ? this.creatures.filter(
-            (o) => o.alive && o.isWorker && Math.hypot(o.x - c.x, o.y - c.y) < 1.2
+            (o) => o.alive && o.isWorker && Math.hypot(o.x - c.x, o.y - c.y) < 1.35
           )
         : [];
     const targets = foes.length ? foes : extra;
     if (!targets.length) return;
+    if (!this.heroEngageAnnounced && (c.isHero || targets.some((t) => t.isHero))) {
+      this.heroEngageAnnounced = true;
+      this.hud.say(MENTOR_LINES.heroEngage);
+    }
     if (c.attackCooldown > 0) return;
-    c.attackCooldown = 0.9;
+    // Level scales minion damage slightly; heroes hit a bit harder for readable pressure
+    const levelBonus = c.isHero ? 1 : 1 + (c.level - 1) * 0.12;
+    c.attackCooldown = c.isHero ? 0.85 : 0.78;
     const target = targets[0];
-    target.takeDamage(c.damage * (0.9 + Math.random() * 0.2));
-    this.renderer.spawnFx(new THREE.Vector3(target.wx, 0.8, target.wz), 0xff4040, 0.25);
+    const beforeAlive = target.alive;
+    const dmg = c.damage * (0.95 + Math.random() * 0.25) * levelBonus;
+    target.takeDamage(dmg);
+    this.renderer.spawnFx(new THREE.Vector3(target.wx, 0.85, target.wz), c.isHero ? 0x88aaff : 0xff4040, 0.32);
+    this.renderer.spawnFx(new THREE.Vector3(target.wx, 1.15, target.wz), 0xffddaa, 0.18);
+    if (beforeAlive && !target.alive && target.isHero) {
+      this.hud.sayNow(MENTOR_LINES.heroDown);
+      this.renderer.spawnFx(new THREE.Vector3(target.wx, 1.2, target.wz), 0xffee88, 0.7);
+    }
   }
 
   private announceSpecies(kind: CreatureKind, mentorLine: string): void {
@@ -3268,7 +3696,7 @@ export class Game {
       // win check
       if (!this.won && !this.gameOver) {
         const heroesLeft = this.creatures.some((c) => c.alive && c.isHero);
-        if (!heroesLeft && this.time > this.heroWaveTimer + 2) {
+        if (!heroesLeft && this.time > 2) {
           this.won = true;
           this.hud.say(MENTOR_LINES.win);
           this.hud.showOverlay('Victory', MENTOR_LINES.win + ' The Underkeep stands.', 'Reign Again');
@@ -3278,40 +3706,76 @@ export class Game {
       return;
     }
     this.heroWaveTimer -= dt;
+    if (!this.heroWarn30 && this.heroWaveTimer <= 30 && this.heroWaveTimer > 10) {
+      this.heroWarn30 = true;
+      this.hud.sayNow(MENTOR_LINES.heroesSoon);
+    }
+    if (!this.heroWarn10 && this.heroWaveTimer <= 10 && this.heroWaveTimer > 0) {
+      this.heroWarn10 = true;
+      this.hud.sayNow(MENTOR_LINES.heroesImminent);
+    }
     if (this.heroWaveTimer > 0) return;
     this.heroWaveSpawned = true;
+    this.hud.sayNow(MENTOR_LINES.heroes);
     this.hud.say(MENTOR_LINES.heroes);
 
-    // spawn at north edge of dug corridor / map
+    // Spawn at north edge — carve a clear entry corridor so pathing/fight loop reads
     const cx = this.grid.heartPos.x;
-    let sy = 3;
+    const hy = this.grid.heartPos.y;
+    let sy = 2;
     let sx = cx;
-    for (let y = 3; y < this.grid.height / 2; y++) {
+    for (let y = 2; y < Math.min(hy - 1, this.grid.height / 2); y++) {
       if (this.grid.isWalkable(cx, y)) {
         sy = y;
         sx = cx;
         break;
       }
     }
-    // ensure spawn walkable — carve a small entry if needed
-    for (let x = cx - 1; x <= cx + 1; x++) {
-      const t = this.grid.get(x, sy);
-      if (t && (t.kind === TileKind.Earth || t.kind === TileKind.Gold)) {
-        t.kind = TileKind.Dirt;
-        this.gridDirty = true;
+    // Carve 3-wide dirt corridor from spawn toward heart for readable approach
+    for (let y = sy; y <= Math.min(sy + 4, hy - 2); y++) {
+      for (let x = cx - 1; x <= cx + 1; x++) {
+        const tile = this.grid.get(x, y);
+        if (!tile || tile.kind === TileKind.Heart || tile.kind === TileKind.Rock) continue;
+        if (tile.kind === TileKind.Earth || tile.kind === TileKind.Gold || tile.kind === TileKind.Wall) {
+          tile.kind = TileKind.Dirt;
+          tile.fortified = false;
+          tile.digProgress = 0;
+          this.gridDirty = true;
+        }
       }
     }
     if (!this.grid.isWalkable(sx, sy)) {
-      const t = this.grid.get(sx, sy);
-      if (t) {
-        t.kind = TileKind.Dirt;
+      const tile = this.grid.get(sx, sy);
+      if (tile && tile.kind !== TileKind.Rock && tile.kind !== TileKind.Heart) {
+        tile.kind = TileKind.Dirt;
         this.gridDirty = true;
       }
     }
+    this.requestStructuralRebuild();
 
-    this.spawnCreature(CreatureKind.HeroKnight, sx, sy);
-    this.spawnCreature(CreatureKind.HeroKnight, sx + 1, sy);
-    this.spawnCreature(CreatureKind.HeroArcher, sx - 1, sy);
+    const k1 = this.spawnCreature(CreatureKind.HeroKnight, sx, sy);
+    const k2 = this.spawnCreature(CreatureKind.HeroKnight, sx + 1, sy);
+    const a1 = this.spawnCreature(CreatureKind.HeroArcher, sx - 1, sy);
+    // Slightly tougher wave so doors/traps/fighters matter
+    for (const h of [k1, k2, a1]) {
+      h.job = JobType.Fight;
+      h.jobTarget = { ...this.grid.heartPos };
+      h.hp = Math.floor(h.maxHp * 1.05);
+      h.maxHp = h.hp;
+      const w = this.grid.tileToWorld(h.x, h.y);
+      this.renderer.spawnFx(new THREE.Vector3(w.x, 1.2, w.z), 0xa0c0ff, 0.65);
+    }
+    // Optional 4th skirmisher if dungeon is well developed
+    if (this.grid.countClaimed() >= 40) {
+      const k3 = this.spawnCreature(CreatureKind.HeroKnight, sx, sy + 1);
+      k3.job = JobType.Fight;
+      k3.jobTarget = { ...this.grid.heartPos };
+      this.renderer.spawnFx(
+        new THREE.Vector3(k3.wx, 1.2, k3.wz),
+        0xa0c0ff,
+        0.5
+      );
+    }
   }
 
   private checkHeart(): void {

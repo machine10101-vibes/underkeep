@@ -1,5 +1,7 @@
 import { SpellId, ToolMode } from '../game/types';
 
+const ROOM_TOOLS: ToolMode[] = ['treasury', 'lair', 'hatchery', 'training', 'library', 'portal'];
+
 export class HUD {
   private goldEl: HTMLElement;
   private manaEl: HTMLElement;
@@ -12,6 +14,10 @@ export class HUD {
   private overlay: HTMLElement;
   private overlayTitle: HTMLElement;
   private overlayMsg: HTMLElement;
+  private buildSheet: HTMLElement;
+  private spellsSheet: HTMLElement;
+  private btnBuild: HTMLElement | null;
+  private btnSpells: HTMLElement | null;
   private mentorTimer = 0;
   private mentorQueue: string[] = [];
 
@@ -31,30 +37,81 @@ export class HUD {
     this.overlay = document.getElementById('overlay')!;
     this.overlayTitle = document.getElementById('overlay-title')!;
     this.overlayMsg = document.getElementById('overlay-msg')!;
+    this.buildSheet = document.getElementById('build-sheet')!;
+    this.spellsSheet = document.getElementById('spells-sheet')!;
+    this.btnBuild = document.getElementById('btn-build');
+    this.btnSpells = document.getElementById('btn-spells');
 
     document.querySelectorAll('.tool').forEach((btn) => {
       btn.addEventListener('click', () => {
         const tool = (btn as HTMLElement).dataset.tool as ToolMode;
         this.setActiveTool(tool);
         this.onToolChange?.(tool);
+        if (ROOM_TOOLS.includes(tool)) this.closeSheets();
       });
     });
     document.querySelectorAll('.spell').forEach((btn) => {
       btn.addEventListener('click', () => {
         const spell = (btn as HTMLElement).dataset.spell as SpellId;
         this.onSpell?.(spell);
+        if (spell === 'speed' || spell === 'lightning') this.closeSheet('spells');
       });
     });
     document.getElementById('overlay-btn')!.addEventListener('click', () => {
       this.hideOverlay();
       this.onOverlayContinue?.();
     });
+
+    this.btnBuild?.addEventListener('click', () => this.toggleSheet('build'));
+    this.btnSpells?.addEventListener('click', () => this.toggleSheet('spells'));
+    document.querySelectorAll('.sheet-close').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const which = (btn as HTMLElement).dataset.close;
+        if (which === 'build' || which === 'spells') this.closeSheet(which);
+      });
+    });
+    document.getElementById('mentor-dismiss')?.addEventListener('click', () => this.dismissMentor());
+  }
+
+  private toggleSheet(which: 'build' | 'spells'): void {
+    const sheet = which === 'build' ? this.buildSheet : this.spellsSheet;
+    const other = which === 'build' ? this.spellsSheet : this.buildSheet;
+    const open = sheet.hasAttribute('hidden');
+    other.setAttribute('hidden', '');
+    this.btnBuild?.classList.toggle('active', false);
+    this.btnSpells?.classList.toggle('active', false);
+    if (open) {
+      sheet.removeAttribute('hidden');
+      (which === 'build' ? this.btnBuild : this.btnSpells)?.classList.add('active');
+      (which === 'build' ? this.btnBuild : this.btnSpells)?.setAttribute('aria-expanded', 'true');
+    } else {
+      sheet.setAttribute('hidden', '');
+      (which === 'build' ? this.btnBuild : this.btnSpells)?.setAttribute('aria-expanded', 'false');
+    }
+  }
+
+  private closeSheet(which: 'build' | 'spells'): void {
+    const sheet = which === 'build' ? this.buildSheet : this.spellsSheet;
+    sheet.setAttribute('hidden', '');
+    const btn = which === 'build' ? this.btnBuild : this.btnSpells;
+    btn?.classList.remove('active');
+    btn?.setAttribute('aria-expanded', 'false');
+  }
+
+  private closeSheets(): void {
+    this.closeSheet('build');
+    this.closeSheet('spells');
   }
 
   setActiveTool(tool: ToolMode): void {
     document.querySelectorAll('.tool').forEach((b) => {
       b.classList.toggle('active', (b as HTMLElement).dataset.tool === tool);
     });
+    if (ROOM_TOOLS.includes(tool)) {
+      this.btnBuild?.classList.add('active');
+    } else if (tool === 'select' || tool === 'dig' || tool === 'claim' || tool === 'fortify') {
+      this.btnBuild?.classList.remove('active');
+    }
   }
 
   updateStats(gold: number, mana: number, maxMana: number, workers: number, creatures: number): void {
@@ -66,13 +123,20 @@ export class HUD {
   }
 
   setSpellAffordable(spell: SpellId, ok: boolean): void {
-    const btn = document.querySelector(`.spell[data-spell="${spell}"]`) as HTMLButtonElement | null;
-    if (btn) btn.disabled = !ok;
+    document.querySelectorAll(`.spell[data-spell="${spell}"]`).forEach((el) => {
+      (el as HTMLButtonElement).disabled = !ok;
+    });
   }
 
   say(line: string): void {
     this.mentorQueue.push(line);
     if (this.mentorTimer <= 0) this.popMentor();
+  }
+
+  dismissMentor(): void {
+    this.mentorTimer = 0;
+    this.mentorQueue.length = 0;
+    this.mentorEl.classList.remove('visible');
   }
 
   private popMentor(): void {
@@ -83,7 +147,7 @@ export class HUD {
     }
     this.mentorText.textContent = line;
     this.mentorEl.classList.add('visible');
-    this.mentorTimer = 4.5;
+    this.mentorTimer = 3.8;
   }
 
   setTooltip(text: string): void {

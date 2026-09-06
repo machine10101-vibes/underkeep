@@ -77,7 +77,7 @@ export class Game {
     // center camera on heart
     const hw = this.grid.tileToWorld(this.grid.heartPos.x, this.grid.heartPos.y);
     this.camTarget.set(hw.x, 0, hw.z);
-    this.renderer.camera.position.set(hw.x + 8, 26, hw.z + 18);
+    this.renderer.camera.position.set(hw.x + 6, 30, hw.z + 20);
     this.renderer.camera.lookAt(this.camTarget);
 
     this.bindInput(canvas);

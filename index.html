@@ -18,27 +18,64 @@
           <div class="stat" id="stat-workers"><span class="label">Scrabblers</span><span class="value" id="workers-value">0</span></div>
           <div class="stat" id="stat-creatures"><span class="label">Minions</span><span class="value" id="creatures-value">0</span></div>
         </div>
-        <div id="toolbar">
+
+        <!-- Desktop: full tool row -->
+        <div id="toolbar" class="desktop-toolbar">
           <button class="tool active" data-tool="select" title="Select / Hand (1)">✋ Hand</button>
           <button class="tool" data-tool="dig" title="Mark Dig (2)">⛏ Dig</button>
           <button class="tool" data-tool="claim" title="Mark Claim (3)">⚑ Claim</button>
           <button class="tool" data-tool="fortify" title="Fortify (4)">🧱 Fortify</button>
-          <button class="tool" data-tool="treasury" title="Treasury (5)">💰 Treasury</button>
-          <button class="tool" data-tool="lair" title="Lair (6)">🛏 Lair</button>
-          <button class="tool" data-tool="hatchery" title="Hatchery (7)">🍗 Hatchery</button>
-          <button class="tool" data-tool="training" title="Training (8)">⚔ Training</button>
-          <button class="tool" data-tool="library" title="Library (9)">📚 Library</button>
-          <button class="tool" data-tool="portal" title="Portal (0)">🌀 Portal</button>
+          <button class="tool room-tool" data-tool="treasury" title="Treasury (5)">💰 Treasury</button>
+          <button class="tool room-tool" data-tool="lair" title="Lair (6)">🛏 Lair</button>
+          <button class="tool room-tool" data-tool="hatchery" title="Hatchery (7)">🍗 Hatchery</button>
+          <button class="tool room-tool" data-tool="training" title="Training (8)">⚔ Training</button>
+          <button class="tool room-tool" data-tool="library" title="Library (9)">📚 Library</button>
+          <button class="tool room-tool" data-tool="portal" title="Portal (0)">🌀 Portal</button>
         </div>
-        <div id="spells">
+        <div id="spells" class="desktop-spells">
           <button class="spell" data-spell="createWorker" title="Create Scrabbler (Q)">✨ Create Worker</button>
           <button class="spell" data-spell="speed" title="Speed Burst (E)">💨 Speed</button>
           <button class="spell" data-spell="lightning" title="Lightning (R)">⚡ Lightning</button>
         </div>
-        <div id="pan-zone" title="Drag to pan camera" aria-label="Pan camera">✥ Pan</div>
-        <div id="mentor"><span id="mentor-text">The earth awaits your cruelty, Keeper.</span></div>
+
+        <!-- Mobile: compact primary bar -->
+        <div id="mobile-bar" class="mobile-only-ui" aria-label="Primary tools">
+          <button class="tool active" data-tool="select" title="Hand">✋</button>
+          <button class="tool" data-tool="dig" title="Dig">⛏</button>
+          <button class="tool" data-tool="claim" title="Claim">⚑</button>
+          <button class="tool" data-tool="fortify" title="Fortify">🧱</button>
+          <button class="spell" data-spell="createWorker" title="Create Worker">✨</button>
+          <button type="button" id="btn-build" class="sheet-toggle" title="Build rooms" aria-expanded="false">🏗</button>
+          <button type="button" id="btn-spells" class="sheet-toggle" title="Spells" aria-expanded="false">🪄</button>
+        </div>
+
+        <div id="build-sheet" class="sheet" hidden>
+          <div class="sheet-head"><span>Build</span><button type="button" class="sheet-close" data-close="build" aria-label="Close">✕</button></div>
+          <div class="sheet-grid">
+            <button class="tool room-tool" data-tool="treasury" title="Treasury">💰 Treasury</button>
+            <button class="tool room-tool" data-tool="lair" title="Lair">🛏 Lair</button>
+            <button class="tool room-tool" data-tool="hatchery" title="Hatchery">🍗 Hatchery</button>
+            <button class="tool room-tool" data-tool="training" title="Training">⚔ Training</button>
+            <button class="tool room-tool" data-tool="library" title="Library">📚 Library</button>
+            <button class="tool room-tool" data-tool="portal" title="Portal">🌀 Portal</button>
+          </div>
+        </div>
+
+        <div id="spells-sheet" class="sheet" hidden>
+          <div class="sheet-head"><span>Spells</span><button type="button" class="sheet-close" data-close="spells" aria-label="Close">✕</button></div>
+          <div class="sheet-row">
+            <button class="spell" data-spell="speed" title="Speed Burst">💨 Speed</button>
+            <button class="spell" data-spell="lightning" title="Lightning">⚡ Lightning</button>
+          </div>
+        </div>
+
+        <div id="pan-zone" title="Drag to pan camera" aria-label="Pan camera">✥</div>
+        <div id="mentor">
+          <span id="mentor-text">The earth awaits your cruelty, Keeper.</span>
+          <button type="button" id="mentor-dismiss" aria-label="Dismiss">✕</button>
+        </div>
         <div id="tooltip"></div>
-        <div id="touch-hint" class="mobile-only">Tap tool · Long-press slap · Drag pan · Pinch zoom</div>
+        <div id="touch-hint" class="mobile-only">Tap · Long-press slap · Drag pan · Pinch zoom</div>
       </div>
       <div id="overlay" class="hidden">
         <div id="overlay-panel">

@@ -6,6 +6,7 @@ import { ShaderPass } from 'three/examples/jsm/postprocessing/ShaderPass.js';
 import { Grid } from '../game/Grid';
 import { TILE_SIZE, TileKind } from '../game/types';
 import {
+  makeBlockEdgeGeo,
   makeCreatureMesh,
   makeFloorGeo,
   makeGoldVeinGeo,
@@ -20,10 +21,10 @@ import {
 const ColorGradeShader = {
   uniforms: {
     tDiffuse: { value: null as THREE.Texture | null },
-    uContrast: { value: 1.15 },
-    uSaturation: { value: 1.1 },
-    uVignette: { value: 0.45 },
-    uTint: { value: new THREE.Color(1.05, 0.95, 0.85) },
+    uContrast: { value: 1.05 },
+    uSaturation: { value: 1.08 },
+    uVignette: { value: 0.22 },
+    uTint: { value: new THREE.Color(1.02, 0.98, 0.92) },
   },
   vertexShader: /* glsl */ `
     varying vec2 vUv;
@@ -46,7 +47,8 @@ const ColorGradeShader = {
       c.rgb = mix(vec3(luma), c.rgb, uSaturation);
       c.rgb *= uTint;
       float d = distance(vUv, vec2(0.5));
-      c.rgb *= smoothstep(0.95, 0.35, d * uVignette + (1.0 - uVignette));
+      // Soft vignette — keep map readable on phones
+      c.rgb *= mix(1.0, smoothstep(1.05, 0.25, d), uVignette);
       gl_FragColor = c;
     }
   `,
@@ -57,6 +59,7 @@ export class DungeonRenderer {
   readonly camera: THREE.PerspectiveCamera;
   readonly renderer: THREE.WebGLRenderer;
   private composer: EffectComposer;
+  private bloomPass: UnrealBloomPass;
   private gridGroup = new THREE.Group();
   private entityGroup = new THREE.Group();
   private fxGroup = new THREE.Group();
@@ -68,59 +71,103 @@ export class DungeonRenderer {
   private clock = 0;
   private dirtFloorMat: THREE.MeshStandardMaterial;
   private claimedFloorMat: THREE.MeshStandardMaterial;
+  private edgeMat: THREE.LineBasicMaterial;
+  private earthEdgeMat: THREE.LineBasicMaterial;
+  private goldEdgeMat: THREE.LineBasicMaterial;
 
   constructor(canvas: HTMLCanvasElement) {
     this.scene = new THREE.Scene();
-    this.scene.background = new THREE.Color(0x08060a);
-    this.scene.fog = new THREE.FogExp2(0x0c0810, 0.028);
+    this.scene.background = new THREE.Color(0x1c1822);
+    this.scene.fog = new THREE.FogExp2(0x1a161c, 0.008);
 
-    this.camera = new THREE.PerspectiveCamera(50, 1, 0.1, 200);
-    this.camera.position.set(0, 28, 22);
+    this.camera = new THREE.PerspectiveCamera(52, 1, 0.1, 220);
+    this.camera.position.set(0, 32, 24);
     this.camera.lookAt(0, 0, 0);
 
     this.renderer = new THREE.WebGLRenderer({
       canvas,
       antialias: true,
       powerPreference: 'high-performance',
+      alpha: false,
     });
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    this.renderer.toneMappingExposure = 1.05;
+    this.renderer.toneMappingExposure = 1.55;
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
 
-    const amb = new THREE.AmbientLight(0x2a2030, 0.35);
+    // Bright enough ambient + hemisphere so PBR tiles read on mobile GPUs
+    const amb = new THREE.AmbientLight(0xd0c4b0, 0.95);
     this.scene.add(amb);
-    const dir = new THREE.DirectionalLight(0xffe0c0, 0.55);
-    dir.position.set(20, 40, 10);
+    const hemi = new THREE.HemisphereLight(0xfff0e0, 0x3a3040, 0.7);
+    hemi.position.set(0, 40, 0);
+    this.scene.add(hemi);
+
+    const dir = new THREE.DirectionalLight(0xfff0d8, 1.15);
+    dir.position.set(22, 48, 14);
     dir.castShadow = true;
-    dir.shadow.mapSize.set(2048, 2048);
+    dir.shadow.mapSize.set(1024, 1024);
     dir.shadow.camera.near = 5;
-    dir.shadow.camera.far = 100;
-    dir.shadow.camera.left = -50;
-    dir.shadow.camera.right = 50;
-    dir.shadow.camera.top = 50;
-    dir.shadow.camera.bottom = -50;
-    dir.shadow.bias = -0.0005;
+    dir.shadow.camera.far = 120;
+    dir.shadow.camera.left = -55;
+    dir.shadow.camera.right = 55;
+    dir.shadow.camera.top = 55;
+    dir.shadow.camera.bottom = -55;
+    dir.shadow.bias = -0.0008;
+    dir.shadow.intensity = 0.45;
     this.scene.add(dir);
-    const fill = new THREE.DirectionalLight(0x4060a0, 0.15);
-    fill.position.set(-15, 20, -10);
+
+    const fill = new THREE.DirectionalLight(0x7090c8, 0.35);
+    fill.position.set(-18, 28, -14);
     this.scene.add(fill);
+
+    // Subtle ground plane under the grid for depth / silhouette
+    const ground = new THREE.Mesh(
+      new THREE.PlaneGeometry(200, 200),
+      new THREE.MeshStandardMaterial({
+        color: 0x1a1418,
+        metalness: 0.05,
+        roughness: 1,
+      })
+    );
+    ground.rotation.x = -Math.PI / 2;
+    ground.position.y = -0.35;
+    ground.receiveShadow = true;
+    this.scene.add(ground);
 
     this.scene.add(this.gridGroup);
     this.scene.add(this.entityGroup);
     this.scene.add(this.fxGroup);
 
     this.dirtFloorMat = new THREE.MeshStandardMaterial({
-      color: 0x3a2a1c,
-      metalness: 0.05,
-      roughness: 0.95,
+      color: 0x8a6540,
+      metalness: 0.02,
+      roughness: 0.9,
+      emissive: 0x1a1008,
+      emissiveIntensity: 0.08,
     });
     this.claimedFloorMat = new THREE.MeshStandardMaterial({
-      color: 0x4a3a32,
-      metalness: 0.2,
-      roughness: 0.7,
+      color: 0x8a7460,
+      metalness: 0.15,
+      roughness: 0.58,
+      emissive: 0x201810,
+      emissiveIntensity: 0.1,
+    });
+    this.edgeMat = new THREE.LineBasicMaterial({
+      color: 0x2a2218,
+      transparent: true,
+      opacity: 0.55,
+    });
+    this.earthEdgeMat = new THREE.LineBasicMaterial({
+      color: 0x3a2818,
+      transparent: true,
+      opacity: 0.7,
+    });
+    this.goldEdgeMat = new THREE.LineBasicMaterial({
+      color: 0x8a6810,
+      transparent: true,
+      opacity: 0.85,
     });
 
     this.markerMesh = new THREE.Mesh(
@@ -133,7 +180,7 @@ export class DungeonRenderer {
       })
     );
     this.markerMesh.rotation.x = -Math.PI / 2;
-    this.markerMesh.position.y = 0.05;
+    this.markerMesh.position.y = 0.14;
     this.markerMesh.visible = false;
     this.scene.add(this.markerMesh);
 
@@ -142,14 +189,22 @@ export class DungeonRenderer {
       new THREE.MeshBasicMaterial({ color: 0xffcc66, transparent: true, opacity: 0.8, side: THREE.DoubleSide })
     );
     this.selectRing.rotation.x = -Math.PI / 2;
-    this.selectRing.position.y = 0.08;
+    this.selectRing.position.y = 0.16;
     this.selectRing.visible = false;
     this.scene.add(this.selectRing);
 
     this.composer = new EffectComposer(this.renderer);
     this.composer.addPass(new RenderPass(this.scene, this.camera));
-    const bloom = new UnrealBloomPass(new THREE.Vector2(1, 1), 0.35, 0.6, 0.85);
-    this.composer.addPass(bloom);
+    // Cap bloom so non-emissive earth/floors stay visible
+    // Keep bloom subtle — high strength was crushing non-emissive tiles to black
+    const isCoarse = typeof window !== 'undefined' && window.matchMedia?.('(pointer: coarse)').matches;
+    this.bloomPass = new UnrealBloomPass(
+      new THREE.Vector2(1, 1),
+      isCoarse ? 0.1 : 0.14,
+      0.35,
+      0.95
+    );
+    this.composer.addPass(this.bloomPass);
     this.composer.addPass(new ShaderPass(ColorGradeShader));
 
     this.onResize();
@@ -166,16 +221,9 @@ export class DungeonRenderer {
   }
 
   rebuildGrid(grid: Grid): void {
-    // clear
     while (this.gridGroup.children.length) {
       const c = this.gridGroup.children.pop()!;
       this.gridGroup.remove(c);
-      c.traverse((o) => {
-        const m = o as THREE.Mesh;
-        if (m.geometry && m.geometry !== makeFloorGeo() && m.geometry !== makeWallGeo()) {
-          // shared geos — don't dispose shared
-        }
-      });
     }
     this.tileMeshes.clear();
     this.torches = [];
@@ -191,6 +239,7 @@ export class DungeonRenderer {
         mesh.castShadow = true;
         mesh.receiveShadow = true;
         this.gridGroup.add(mesh);
+        this.addEdge(w.x, w.z, 2.85, this.edgeMat);
         this.tileMeshes.set(key, mesh);
         continue;
       }
@@ -202,20 +251,25 @@ export class DungeonRenderer {
         mesh.castShadow = true;
         mesh.receiveShadow = true;
         this.gridGroup.add(mesh);
+        this.addEdge(
+          w.x,
+          w.z,
+          2.35,
+          tile.kind === TileKind.Gold ? this.goldEdgeMat : this.earthEdgeMat
+        );
         this.tileMeshes.set(key, mesh);
-        // mark overlay
         if (tile.mark) {
           const mark = new THREE.Mesh(
             new THREE.PlaneGeometry(TILE_SIZE * 0.6, TILE_SIZE * 0.6),
             new THREE.MeshBasicMaterial({
               color: tile.mark === 1 ? 0xff4422 : tile.mark === 2 ? 0x44aaff : 0xaaaaaa,
               transparent: true,
-              opacity: 0.5,
+              opacity: 0.55,
               depthWrite: false,
             })
           );
           mark.rotation.x = -Math.PI / 2;
-          mark.position.set(w.x, 2.45, w.z);
+          mark.position.set(w.x, 2.42, w.z);
           this.gridGroup.add(mark);
         }
         continue;
@@ -227,11 +281,12 @@ export class DungeonRenderer {
         mesh.castShadow = true;
         mesh.receiveShadow = true;
         this.gridGroup.add(mesh);
+        this.addEdge(w.x, w.z, 2.35, this.edgeMat);
         this.tileMeshes.set(key, mesh);
         continue;
       }
 
-      // floors
+      // floors — Claimed / Dirt / Heart
       const floor = new THREE.Mesh(
         makeFloorGeo(),
         tile.kind === TileKind.Claimed || tile.kind === TileKind.Heart
@@ -252,7 +307,7 @@ export class DungeonRenderer {
 
       const decal = makeRoomDecal(tile.room);
       if (decal) {
-        decal.position.set(w.x, 0.03, w.z);
+        decal.position.set(w.x, 0.14, w.z);
         this.gridGroup.add(decal);
       }
 
@@ -262,12 +317,12 @@ export class DungeonRenderer {
           new THREE.MeshBasicMaterial({
             color: tile.mark === 1 ? 0xff4422 : tile.mark === 2 ? 0x44aaff : 0xccccaa,
             transparent: true,
-            opacity: 0.4,
+            opacity: 0.45,
             depthWrite: false,
           })
         );
         mark.rotation.x = -Math.PI / 2;
-        mark.position.set(w.x, 0.06, w.z);
+        mark.position.set(w.x, 0.16, w.z);
         this.gridGroup.add(mark);
       }
 
@@ -276,7 +331,6 @@ export class DungeonRenderer {
           flame?: THREE.Mesh;
           torchLight?: THREE.PointLight;
         };
-        // place against a wall direction
         torch.position.set(w.x + 0.7, 0, w.z);
         this.gridGroup.add(torch);
         this.torches.push(torch);
@@ -284,7 +338,12 @@ export class DungeonRenderer {
     }
   }
 
-  /** Cheaper partial update — rebuild for Phase 1 simplicity when dirty */
+  private addEdge(x: number, z: number, height: number, mat: THREE.LineBasicMaterial): void {
+    const line = new THREE.Line(makeBlockEdgeGeo(height), mat);
+    line.position.set(x, 0, z);
+    this.gridGroup.add(line);
+  }
+
   setHover(wx: number, wz: number, visible: boolean, color = 0xffaa20): void {
     this.markerMesh.visible = visible;
     if (visible) {
@@ -353,25 +412,22 @@ export class DungeonRenderer {
 
   update(dt: number): void {
     this.clock += dt;
-    // heart pulse
     if (this.heartGroup?.heartCore) {
-      const s = 1 + Math.sin(this.clock * 3) * 0.06;
+      const s = 1 + Math.sin(this.clock * 3) * 0.05;
       this.heartGroup.heartCore.scale.setScalar(s);
       if (this.heartGroup.heartLight) {
-        this.heartGroup.heartLight.intensity = 3.5 + Math.sin(this.clock * 3) * 1.2;
+        this.heartGroup.heartLight.intensity = 2.0 + Math.sin(this.clock * 3) * 0.5;
       }
       this.heartGroup.rotation.y += dt * 0.3;
     }
-    // torch flicker
     for (const t of this.torches) {
       if (t.torchLight) {
-        t.torchLight.intensity = 1.2 + Math.random() * 0.8 + Math.sin(this.clock * 8 + t.position.x) * 0.3;
+        t.torchLight.intensity = 2.0 + Math.random() * 0.6 + Math.sin(this.clock * 8 + t.position.x) * 0.25;
       }
       if (t.flame) {
         t.flame.scale.setScalar(0.9 + Math.random() * 0.25);
       }
     }
-    // fx cleanup
     for (let i = this.fxGroup.children.length - 1; i >= 0; i--) {
       const c = this.fxGroup.children[i] as THREE.Object3D & { _fxStart?: number; _fxLife?: number };
       if (c._fxStart !== undefined && c._fxLife !== undefined) {
@@ -391,7 +447,6 @@ export class DungeonRenderer {
     this.composer.render();
   }
 
-  /** Raycast to ground plane y=0 */
   raycastGround(nx: number, ny: number): THREE.Vector3 | null {
     const raycaster = new THREE.Raycaster();
     raycaster.setFromCamera(new THREE.Vector2(nx, ny), this.camera);

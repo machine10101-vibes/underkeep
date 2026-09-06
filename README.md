@@ -2,15 +2,21 @@
 
 Original-IP dungeon management game inspired by **Dungeon Keeper 2** (3D). Dark-fantasy keeper sim: dig, claim, fortify, build rooms, attract minions, and crush heroes. Protect the **Dungeon Heart**.
 
-## Run
+## Play online
+
+**https://machine10101-vibes.github.io/underkeep/**
+
+Works on desktop and phones (touch controls).
+
+## Run locally
 
 ```bash
-cd /workspace/underkeep/game
+cd game   # or repo root if checked out flat
 npm install
 npm run dev
 ```
 
-Open the URL Vite prints (default `http://localhost:5173`).
+Open the URL Vite prints (default `http://localhost:5173/underkeep/`).
 
 Production build:
 
@@ -19,7 +25,9 @@ npm run build
 npm run preview
 ```
 
-## Controls
+`vite` `base` is `/underkeep/` for GitHub Pages project hosting.
+
+## Desktop controls
 
 | Input | Action |
 |-------|--------|
@@ -36,6 +44,21 @@ npm run preview
 | **Q** | Create Scrabbler (gold; cost scales) |
 | **E** | Speed Burst (mana) — haste all minions |
 | **R** | Lightning (mana) — strike nearest hero |
+
+## Mobile / touch controls
+
+| Gesture | Action |
+|---------|--------|
+| **Tap** | Same as left-click — use tool / pick up with Hand |
+| **Long-press** (~0.45s) | Same as right-click — slap / cancel mark / drop |
+| **Two-finger tap** | Same as right-click |
+| **One-finger drag** (Hand on empty ground) | Pan camera |
+| **One-finger drag** (Dig/Claim/etc.) | Paint marks / place rooms |
+| **Pinch** | Zoom |
+| **Pan pad** (✥ bottom-right) | Dedicated camera pan zone |
+| **HUD buttons** | Tools & spells (Create Worker / Speed / Lightning) — large touch targets |
+
+Browser page scroll/zoom on the game is disabled (`touch-action: none`, viewport `user-scalable=no`). Safe-area insets apply on notched phones.
 
 Dropping a creature into a fight **stuns** them briefly (DK2-style).
 

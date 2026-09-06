@@ -45,6 +45,17 @@ export class Game {
   private camTarget = new THREE.Vector3(0, 0, 0);
   private keys = new Set<string>();
   private mentored = new Set<string>();
+  // touch / mobile
+  private touchMode: 'none' | 'tap' | 'pan' | 'paint' | 'pinch' | 'longpress' = 'none';
+  private touchStartTime = 0;
+  private touchStartClient = { clientX: 0, clientY: 0 };
+  private touchMoved = false;
+  private longPressTimer: number | null = null;
+  private pinchStartDist = 0;
+  private pinchStartCamY = 0;
+  private activeTouches = new Map<number, { clientX: number; clientY: number }>();
+  private ignoreMouseUntil = 0;
+  private panAccum = { x: 0, y: 0 };
 
   constructor(canvas: HTMLCanvasElement) {
     this.grid = new Grid(40, 40);
@@ -139,90 +150,373 @@ export class Game {
 
     canvas.addEventListener('contextmenu', (e) => e.preventDefault());
 
+    // Prevent browser scroll/zoom gestures on the game surface
+    const blockGesture = (e: Event) => e.preventDefault();
+    canvas.addEventListener('gesturestart', blockGesture as EventListener, { passive: false });
+    canvas.addEventListener('gesturechange', blockGesture as EventListener, { passive: false });
+
     canvas.addEventListener('mousedown', (e) => {
+      if (performance.now() < this.ignoreMouseUntil) return;
       if (this.gameOver) return;
       const hit = this.pointerToWorld(e, canvas);
       if (!hit) return;
       const tp = this.grid.worldToTile(hit.x, hit.z);
 
       if (e.button === 2) {
-        // slap / cancel marks / drop
-        if (this.held) {
-          this.dropHeld();
-          return;
-        }
-        const c = this.creatureAt(tp.x, tp.y);
-        if (c && !c.isHero) {
-          this.slap(c);
-        } else {
-          const tile = this.grid.get(tp.x, tp.y);
-          if (tile && tile.mark !== MarkType.None) {
-            tile.mark = MarkType.None;
-            this.gridDirty = true;
-          }
-        }
+        this.handleSecondaryAt(tp.x, tp.y);
         return;
       }
 
       if (e.button === 0) {
-        if (this.tool === 'select') {
-          if (this.held) {
-            this.dropHeldAt(tp.x, tp.y);
-            return;
-          }
-          const c = this.creatureAt(tp.x, tp.y);
-          if (c && !c.isHero) {
-            this.pickUp(c);
-            return;
-          }
-        } else {
-          this.paint = true;
-          this.applyTool(tp.x, tp.y);
-          this.lastPaint = { ...tp };
-        }
+        this.handlePrimaryAt(tp.x, tp.y, hit);
       }
     });
 
     canvas.addEventListener('mouseup', () => {
+      if (performance.now() < this.ignoreMouseUntil) return;
       this.paint = false;
       this.lastPaint = null;
     });
 
     canvas.addEventListener('mousemove', (e) => {
-      const hit = this.pointerToWorld(e, canvas);
-      if (!hit) {
-        this.renderer.setHover(0, 0, false);
-        return;
-      }
-      const tp = this.grid.worldToTile(hit.x, hit.z);
-      const w = this.grid.tileToWorld(tp.x, tp.y);
-      this.renderer.setHover(w.x, w.z, this.grid.inBounds(tp.x, tp.y), this.toolColor());
-      const tile = this.grid.get(tp.x, tp.y);
-      if (tile) {
-        const room =
-          tile.room !== RoomType.None ? ` · ${['', 'Treasury', 'Lair', 'Hatchery', 'Training', 'Library', 'Portal'][tile.room]}` : '';
-        this.hud.setTooltip(`(${tp.x},${tp.y}) ${TileKind[tile.kind]}${tile.fortified ? ' [fortified]' : ''}${room}`);
-      }
+      if (performance.now() < this.ignoreMouseUntil) return;
+      this.updatePointerHover(e, canvas);
       if (this.paint && this.tool !== 'select') {
+        const hit = this.pointerToWorld(e, canvas);
+        if (!hit) return;
+        const tp = this.grid.worldToTile(hit.x, hit.z);
         if (!this.lastPaint || this.lastPaint.x !== tp.x || this.lastPaint.y !== tp.y) {
           this.applyTool(tp.x, tp.y);
           this.lastPaint = { ...tp };
         }
       }
       if (this.held) {
-        this.held.wx = hit.x;
-        this.held.wz = hit.z;
+        const hit = this.pointerToWorld(e, canvas);
+        if (hit) {
+          this.held.wx = hit.x;
+          this.held.wz = hit.z;
+        }
       }
     });
 
     canvas.addEventListener('wheel', (e) => {
       e.preventDefault();
-      const cam = this.renderer.camera;
-      const dir = new THREE.Vector3();
-      cam.getWorldDirection(dir);
-      cam.position.addScaledVector(dir, -Math.sign(e.deltaY) * 1.5);
-      cam.position.y = THREE.MathUtils.clamp(cam.position.y, 12, 45);
+      this.zoomBy(-Math.sign(e.deltaY) * 1.5);
     }, { passive: false });
+
+    // --- Touch controls ---
+    canvas.addEventListener('touchstart', (e) => {
+      e.preventDefault();
+      this.ignoreMouseUntil = performance.now() + 600;
+      for (let i = 0; i < e.changedTouches.length; i++) {
+        const t = e.changedTouches[i];
+        this.activeTouches.set(t.identifier, { clientX: t.clientX, clientY: t.clientY });
+      }
+      const touches = [...this.activeTouches.values()];
+
+      if (touches.length >= 2) {
+        this.clearLongPress();
+        // Two-finger: pinch zoom, or quick two-finger tap = secondary
+        const [a, b] = touches;
+        this.pinchStartDist = Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY);
+        this.pinchStartCamY = this.renderer.camera.position.y;
+        if (this.touchMode === 'tap' && !this.touchMoved && performance.now() - this.touchStartTime < 280) {
+          // second finger arrived quickly → treat as two-finger tap (secondary)
+          const hit = this.pointerToWorld(this.touchStartClient, canvas);
+          if (hit) {
+            const tp = this.grid.worldToTile(hit.x, hit.z);
+            this.handleSecondaryAt(tp.x, tp.y);
+          }
+          this.touchMode = 'none';
+          this.activeTouches.clear();
+          return;
+        }
+        this.touchMode = 'pinch';
+        this.paint = false;
+        return;
+      }
+
+      if (touches.length === 1) {
+        const p = touches[0];
+        this.touchStartClient = { clientX: p.clientX, clientY: p.clientY };
+        this.touchStartTime = performance.now();
+        this.touchMoved = false;
+        this.panAccum = { x: 0, y: 0 };
+        this.touchMode = 'tap';
+
+        // Long-press → secondary (slap / cancel / drop)
+        this.clearLongPress();
+        this.longPressTimer = window.setTimeout(() => {
+          if (this.touchMode !== 'tap' || this.touchMoved) return;
+          this.touchMode = 'longpress';
+          const hit = this.pointerToWorld(this.touchStartClient, canvas);
+          if (hit) {
+            const tp = this.grid.worldToTile(hit.x, hit.z);
+            this.handleSecondaryAt(tp.x, tp.y);
+          }
+          // haptic if available
+          try { navigator.vibrate?.(15); } catch { /* ignore */ }
+        }, 450);
+      }
+    }, { passive: false });
+
+    canvas.addEventListener('touchmove', (e) => {
+      e.preventDefault();
+      this.ignoreMouseUntil = performance.now() + 600;
+      for (let i = 0; i < e.changedTouches.length; i++) {
+        const t = e.changedTouches[i];
+        this.activeTouches.set(t.identifier, { clientX: t.clientX, clientY: t.clientY });
+      }
+      const touches = [...this.activeTouches.values()];
+
+      if (this.touchMode === 'pinch' || touches.length >= 2) {
+        this.clearLongPress();
+        this.touchMode = 'pinch';
+        if (touches.length >= 2) {
+          const [a, b] = touches;
+          const dist = Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY);
+          if (this.pinchStartDist > 0) {
+            const ratio = dist / this.pinchStartDist;
+            // pinch out = zoom in (lower cam Y toward ground along look dir)
+            const cam = this.renderer.camera;
+            const targetY = THREE.MathUtils.clamp(this.pinchStartCamY / ratio, 12, 45);
+            const dy = targetY - cam.position.y;
+            if (Math.abs(dy) > 0.01) {
+              const dir = new THREE.Vector3();
+              cam.getWorldDirection(dir);
+              // move along view so look-at stays sensible
+              cam.position.y = targetY;
+              // nudge xz with height change for isometric feel
+              const scale = dy * 0.35;
+              cam.position.x += dir.x * -scale;
+              cam.position.z += dir.z * -scale;
+              cam.lookAt(this.camTarget.x, 0, this.camTarget.z);
+            }
+          }
+        }
+        return;
+      }
+
+      if (touches.length !== 1) return;
+      const p = touches[0];
+      const dx = p.clientX - this.touchStartClient.clientX;
+      const dy = p.clientY - this.touchStartClient.clientY;
+      const dist = Math.hypot(dx, dy);
+
+      if (!this.touchMoved && dist > 12) {
+        this.touchMoved = true;
+        this.clearLongPress();
+
+        if (this.tool !== 'select' && !this.held) {
+          // paint with current tool
+          this.touchMode = 'paint';
+          this.paint = true;
+          const hit = this.pointerToWorld(p, canvas);
+          if (hit) {
+            const tp = this.grid.worldToTile(hit.x, hit.z);
+            this.applyTool(tp.x, tp.y);
+            this.lastPaint = { ...tp };
+          }
+        } else if (this.held) {
+          this.touchMode = 'tap'; // drag held creature
+        } else {
+          // pan camera on empty-space drag
+          this.touchMode = 'pan';
+        }
+      }
+
+      if (this.touchMode === 'paint') {
+        const hit = this.pointerToWorld(p, canvas);
+        if (hit) {
+          const tp = this.grid.worldToTile(hit.x, hit.z);
+          if (!this.lastPaint || this.lastPaint.x !== tp.x || this.lastPaint.y !== tp.y) {
+            this.applyTool(tp.x, tp.y);
+            this.lastPaint = { ...tp };
+          }
+          this.updatePointerHover(p, canvas);
+        }
+      } else if (this.touchMode === 'pan') {
+        const moveDx = p.clientX - (this.touchStartClient.clientX + this.panAccum.x);
+        const moveDy = p.clientY - (this.touchStartClient.clientY + this.panAccum.y);
+        this.panAccum.x = dx;
+        this.panAccum.y = dy;
+        this.panCameraByScreen(-moveDx, -moveDy);
+      } else if (this.held) {
+        const hit = this.pointerToWorld(p, canvas);
+        if (hit) {
+          this.held.wx = hit.x;
+          this.held.wz = hit.z;
+        }
+        this.updatePointerHover(p, canvas);
+      } else {
+        this.updatePointerHover(p, canvas);
+      }
+    }, { passive: false });
+
+    canvas.addEventListener('touchend', (e) => {
+      e.preventDefault();
+      this.ignoreMouseUntil = performance.now() + 600;
+      for (let i = 0; i < e.changedTouches.length; i++) {
+        this.activeTouches.delete(e.changedTouches[i].identifier);
+      }
+
+      if (this.touchMode === 'pinch') {
+        if (this.activeTouches.size < 2) {
+          this.touchMode = this.activeTouches.size === 1 ? 'pan' : 'none';
+          this.pinchStartDist = 0;
+        }
+        if (this.activeTouches.size === 0) {
+          this.touchMode = 'none';
+          this.paint = false;
+          this.lastPaint = null;
+        }
+        return;
+      }
+
+      if (this.activeTouches.size > 0) return;
+
+      const mode = this.touchMode;
+      this.clearLongPress();
+
+      if (mode === 'tap' && !this.touchMoved && !this.gameOver) {
+        const hit = this.pointerToWorld(this.touchStartClient, canvas);
+        if (hit) {
+          const tp = this.grid.worldToTile(hit.x, hit.z);
+          this.handlePrimaryAt(tp.x, tp.y, hit);
+        }
+      }
+
+      this.touchMode = 'none';
+      this.paint = false;
+      this.lastPaint = null;
+    }, { passive: false });
+
+    canvas.addEventListener('touchcancel', (e) => {
+      for (let i = 0; i < e.changedTouches.length; i++) {
+        this.activeTouches.delete(e.changedTouches[i].identifier);
+      }
+      this.clearLongPress();
+      this.touchMode = 'none';
+      this.paint = false;
+      this.lastPaint = null;
+      this.pinchStartDist = 0;
+    });
+
+    // Dedicated pan zone (mobile)
+    const panZone = document.getElementById('pan-zone');
+    if (panZone) {
+      let panLast: { x: number; y: number } | null = null;
+      panZone.addEventListener('touchstart', (e) => {
+        e.preventDefault();
+        const t = e.changedTouches[0];
+        panLast = { x: t.clientX, y: t.clientY };
+      }, { passive: false });
+      panZone.addEventListener('touchmove', (e) => {
+        e.preventDefault();
+        const t = e.changedTouches[0];
+        if (!panLast) {
+          panLast = { x: t.clientX, y: t.clientY };
+          return;
+        }
+        this.panCameraByScreen(-(t.clientX - panLast.x), -(t.clientY - panLast.y));
+        panLast = { x: t.clientX, y: t.clientY };
+      }, { passive: false });
+      panZone.addEventListener('touchend', () => { panLast = null; });
+      panZone.addEventListener('touchcancel', () => { panLast = null; });
+    }
+  }
+
+  private clearLongPress(): void {
+    if (this.longPressTimer !== null) {
+      clearTimeout(this.longPressTimer);
+      this.longPressTimer = null;
+    }
+  }
+
+  private handlePrimaryAt(tx: number, ty: number, hit: THREE.Vector3): void {
+    if (this.tool === 'select') {
+      if (this.held) {
+        this.dropHeldAt(tx, ty);
+        return;
+      }
+      const c = this.creatureAt(tx, ty);
+      if (c && !c.isHero) {
+        this.pickUp(c);
+        return;
+      }
+    } else {
+      this.paint = true;
+      this.applyTool(tx, ty);
+      this.lastPaint = { x: tx, y: ty };
+    }
+    void hit;
+  }
+
+  private handleSecondaryAt(tx: number, ty: number): void {
+    if (this.held) {
+      this.dropHeld();
+      return;
+    }
+    const c = this.creatureAt(tx, ty);
+    if (c && !c.isHero) {
+      this.slap(c);
+    } else {
+      const tile = this.grid.get(tx, ty);
+      if (tile && tile.mark !== MarkType.None) {
+        tile.mark = MarkType.None;
+        this.gridDirty = true;
+      }
+    }
+  }
+
+  private updatePointerHover(e: { clientX: number; clientY: number }, canvas: HTMLCanvasElement): void {
+    const hit = this.pointerToWorld(e, canvas);
+    if (!hit) {
+      this.renderer.setHover(0, 0, false);
+      return;
+    }
+    const tp = this.grid.worldToTile(hit.x, hit.z);
+    const w = this.grid.tileToWorld(tp.x, tp.y);
+    this.renderer.setHover(w.x, w.z, this.grid.inBounds(tp.x, tp.y), this.toolColor());
+    const tile = this.grid.get(tp.x, tp.y);
+    if (tile) {
+      const room =
+        tile.room !== RoomType.None ? ` · ${['', 'Treasury', 'Lair', 'Hatchery', 'Training', 'Library', 'Portal'][tile.room]}` : '';
+      this.hud.setTooltip(`(${tp.x},${tp.y}) ${TileKind[tile.kind]}${tile.fortified ? ' [fortified]' : ''}${room}`);
+    }
+  }
+
+  private panCameraByScreen(dx: number, dy: number): void {
+    const cam = this.renderer.camera;
+    const forward = new THREE.Vector3();
+    cam.getWorldDirection(forward);
+    forward.y = 0;
+    forward.normalize();
+    const right = new THREE.Vector3().crossVectors(forward, new THREE.Vector3(0, 1, 0)).normalize();
+    const scale = cam.position.y * 0.0028;
+    const move = right.multiplyScalar(dx * scale).add(forward.multiplyScalar(-dy * scale));
+    cam.position.add(move);
+    this.camTarget.add(move);
+    cam.lookAt(this.camTarget.x, 0, this.camTarget.z);
+  }
+
+  private zoomBy(amount: number): void {
+    const cam = this.renderer.camera;
+    const dir = new THREE.Vector3();
+    cam.getWorldDirection(dir);
+    cam.position.addScaledVector(dir, amount);
+    cam.position.y = THREE.MathUtils.clamp(cam.position.y, 12, 45);
+    cam.lookAt(this.camTarget.x, 0, this.camTarget.z);
+  }
+
+  private pointerToWorld(
+    e: MouseEvent | PointerEvent | { clientX: number; clientY: number },
+    canvas: HTMLCanvasElement
+  ): THREE.Vector3 | null {
+    const rect = canvas.getBoundingClientRect();
+    const nx = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+    const ny = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+    return this.renderer.raycastGround(nx, ny);
   }
 
   private toolColor(): number {
@@ -238,13 +532,6 @@ export class Game {
       default:
         return 0x88ff66;
     }
-  }
-
-  private pointerToWorld(e: MouseEvent, canvas: HTMLCanvasElement): THREE.Vector3 | null {
-    const rect = canvas.getBoundingClientRect();
-    const nx = ((e.clientX - rect.left) / rect.width) * 2 - 1;
-    const ny = -((e.clientY - rect.top) / rect.height) * 2 + 1;
-    return this.renderer.raycastGround(nx, ny);
   }
 
   private creatureAt(x: number, y: number): Creature | null {

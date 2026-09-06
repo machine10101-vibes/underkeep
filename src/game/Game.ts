@@ -493,7 +493,7 @@ export class Game {
       const hit = this.pointerToWorld(e, canvas) ?? new THREE.Vector3();
 
       if (e.button === 2) {
-        this.handleSecondaryAt(tp.x, tp.y);
+        this.handleSecondaryAt(tp.x, tp.y, hit);
         return;
       }
 
@@ -779,21 +779,32 @@ export class Game {
     }
   }
 
-  private handleSecondaryAt(tx: number, ty: number): void {
-    if (this.held) {
+  private handleSecondaryAt(tx: number, ty: number, worldHit?: THREE.Vector3): void {
+    // Hand tool: right-click / long-press = conclusive slap (hovered, selected, or held)
+    if (this.tool === 'select') {
+      let c: Creature | null = null;
+      if (this.held && !this.held.isHero) {
+        c = this.held;
+      } else {
+        c = this.creatureAt(tx, ty, worldHit);
+        if ((!c || c.isHero) && this.selected && this.selected.alive && !this.selected.isHero) {
+          c = this.selected;
+        }
+      }
+      if (c && !c.isHero) {
+        if (!c.held) this.selectCreature(c);
+        this.slap(c);
+        return;
+      }
+    } else if (this.held) {
+      // Non-hand tools: secondary still drops held creature
       this.dropHeld();
       return;
     }
-    const c = this.creatureAt(tx, ty);
-    if (c && !c.isHero) {
-      this.selectCreature(c);
-      this.slap(c);
-    } else {
-      const tile = this.grid.get(tx, ty);
-      if (tile && tile.mark !== MarkType.None) {
-        tile.mark = MarkType.None;
-        this.gridDirty = true;
-      }
+    const tile = this.grid.get(tx, ty);
+    if (tile && tile.mark !== MarkType.None) {
+      tile.mark = MarkType.None;
+      this.gridDirty = true;
     }
   }
 
@@ -827,7 +838,7 @@ export class Game {
       if (this.tool === 'select') {
         const c = this.creatureAt(tp.x, tp.y);
         if (c && !c.isHero) {
-          tip += ` · ${c.kind} mood ${Math.floor(c.mood)}`;
+          tip += ` · ${c.kind} mood ${Math.floor(c.mood)} · eff ${Math.round(c.workEfficiency() * 100)}%`;
         } else if (this.held) {
           tip += ' · drop here';
         }
@@ -962,6 +973,7 @@ export class Game {
       hunger: c.hunger,
       tired: c.sleepNeed,
       mood: c.mood,
+      efficiency: c.workEfficiency(),
       held: c.held,
     });
   }
@@ -1098,13 +1110,18 @@ export class Game {
     c.hunger = Math.max(0, c.hunger - 4);
     c.mood = Math.min(100, c.mood + 8);
     c.setPath(null);
+    c.workTimer = 0;
     if (c.job !== JobType.Sleep && c.job !== JobType.Eat) {
       c.job = JobType.Idle;
       c.jobTarget = null;
     }
-    this.renderer.spawnFx(new THREE.Vector3(c.wx, 0.7, c.wz), 0xffee88, 0.55);
-    this.renderer.spawnFx(new THREE.Vector3(c.wx, 1.1, c.wz), 0xffaa44, 0.4);
-    this.hud.say(MENTOR_LINES.slap);
+    // Brief slap VFX (impact + flash)
+    this.renderer.spawnFx(new THREE.Vector3(c.wx, 0.7, c.wz), 0xffee88, 0.7);
+    this.renderer.spawnFx(new THREE.Vector3(c.wx, 1.15, c.wz), 0xffaa44, 0.55);
+    this.renderer.spawnFx(new THREE.Vector3(c.wx + 0.25, 0.9, c.wz), 0xffffff, 0.35);
+    this.renderer.spawnDigDebris(c.wx, c.wz, 0xffdd88);
+    // Conclusive toast on EVERY successful slap
+    this.hud.sayNow(MENTOR_LINES.slap);
     this.refreshInspector();
   }
 
@@ -1419,6 +1436,43 @@ export class Game {
       this.renderer.camera.position.set(focusW.x + 2, 18, focusW.z + 11);
       this.renderer.camera.lookAt(this.camTarget);
       this.hud.say(MENTOR_LINES.pickUp);
+    }
+  }
+
+  /** QA/screenshot: Pass 6.1b slap toast + efficiency in inspector. */
+  preparePass61bShot(focus: 'both' | 'slap' | 'efficiency' = 'both'): void {
+    this.preparePass5bShot();
+    this.tool = 'select';
+    this.hud.setActiveTool('select');
+    const workers = this.creatures.filter((c) => c.isWorker && c.alive);
+    const target = workers.find((c) => c.job !== JobType.Sleep && c.job !== JobType.Eat) ?? workers[0];
+    if (!target) return;
+    // Low mood → ~62% efficiency (workEfficiency ≈ 0.5 + 0.17)
+    target.mood = 24;
+    target.hunger = 70;
+    target.sleepNeed = 55;
+    target.hp = target.maxHp * 0.65;
+    target.efficiencyWarned = true;
+    this.held = null;
+    for (const c of this.creatures) c.held = false;
+    this.selectCreature(target);
+    const focusW = this.grid.tileToWorld(target.x, target.y);
+    this.camTarget.set(focusW.x, 0, focusW.z);
+    this.renderer.camera.position.set(focusW.x + 2, 17, focusW.z + 10);
+    this.renderer.camera.lookAt(this.camTarget);
+    this.refreshInspector();
+    if (focus === 'efficiency') {
+      this.hud.sayNow(MENTOR_LINES.sluggishDig);
+    } else {
+      // Stun + VFX + conclusive slap toast (do not rely on mood bump for inspector %)
+      const moodKeep = target.mood;
+      this.slap(target);
+      target.mood = moodKeep;
+      this.refreshInspector();
+      if (focus === 'both') {
+        // Keep slap line visible; efficiency still on inspector panel
+        this.hud.sayNow(MENTOR_LINES.slap);
+      }
     }
   }
 
@@ -2118,6 +2172,14 @@ export class Game {
       } else if (c.mood > 35) {
         c.leaveWarned = false;
       }
+      // Mood → dig speed: toast once when efficiency drops below ~75%
+      const eff = c.workEfficiency();
+      if (c.isWorker && eff < 0.75 && !c.efficiencyWarned) {
+        c.efficiencyWarned = true;
+        this.hud.say(MENTOR_LINES.sluggishDig);
+      } else if (eff >= 0.82) {
+        c.efficiencyWarned = false;
+      }
       // Soft leave: very low mood idle creatures may despawn slowly (non-workers less sticky)
       if (c.mood < 6 && !c.isWorker && c.job === JobType.Idle && Math.random() < dt * 0.015) {
         c.alive = false;
@@ -2188,8 +2250,9 @@ export class Game {
       const tw = this.grid.tileToWorld(t.x, t.y);
       c.faceToward(tw.x, tw.z);
       c.workTimer += dt;
-      // Chip cadence ~0.38s; earth fully dug after ~3 chips
-      if (c.workTimer >= 0.38) {
+      // Chip cadence ~0.38s at full efficiency; low mood digs visibly slower
+      const digCadence = 0.38 / Math.max(0.5, Math.min(1.25, c.workEfficiency()));
+      if (c.workTimer >= digCadence) {
         c.workTimer = 0;
         const wpos = this.grid.tileToWorld(t.x, t.y);
         this.renderer.spawnDigDebris(wpos.x, wpos.z, t.kind === TileKind.Gold ? 0xe0b040 : 0xc08040);

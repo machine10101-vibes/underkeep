@@ -38,6 +38,8 @@ export class Creature {
   /** 0–100. Affects work efficiency; very low → leave threat. */
   mood = 72;
   leaveWarned = false;
+  /** Fired once while workEfficiency is below sluggish threshold. */
+  efficiencyWarned = false;
   selected = false;
   trainNeed = 0;
   held = false;

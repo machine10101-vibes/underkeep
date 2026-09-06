@@ -29,6 +29,7 @@ export class HUD {
   private inspTired: HTMLElement;
   private inspMood: HTMLElement;
   private inspMoodBar: HTMLElement;
+  private inspEfficiency: HTMLElement;
 
   onToolChange: ((tool: ToolMode) => void) | null = null;
   onSpell: ((spell: SpellId) => void) | null = null;
@@ -61,6 +62,7 @@ export class HUD {
     this.inspTired = document.getElementById('insp-tired')!;
     this.inspMood = document.getElementById('insp-mood')!;
     this.inspMoodBar = document.getElementById('insp-mood-bar')!;
+    this.inspEfficiency = document.getElementById('insp-efficiency')!;
     document.getElementById('insp-close')?.addEventListener('click', () => {
       this.hideInspector();
       this.onInspectorClose?.();
@@ -180,6 +182,14 @@ export class HUD {
     if (this.mentorTimer <= 0) this.popMentor();
   }
 
+  /** Immediate mentor toast — preempts queue (slap feedback must be conclusive). */
+  sayNow(line: string): void {
+    this.mentorQueue.length = 0;
+    this.mentorText.textContent = line;
+    this.mentorEl.classList.add('visible');
+    this.mentorTimer = 3.8;
+  }
+
   dismissMentor(): void {
     this.mentorTimer = 0;
     this.mentorQueue.length = 0;
@@ -217,6 +227,7 @@ export class HUD {
     hunger: number;
     tired: number;
     mood: number;
+    efficiency: number;
     held?: boolean;
   }): void {
     this.inspName.textContent = data.held ? `${data.kind} (held)` : data.kind;
@@ -229,6 +240,8 @@ export class HUD {
       data.mood >= 75 ? 'Happy' : data.mood >= 50 ? 'Content' : data.mood >= 30 ? 'Grumpy' : data.mood >= 15 ? 'Angry' : 'Leaving?';
     this.inspMood.textContent = `${Math.floor(data.mood)} · ${moodLabel}`;
     this.inspMoodBar.style.width = `${Math.max(0, Math.min(100, data.mood))}%`;
+    const effPct = Math.round(Math.max(0, data.efficiency) * 100);
+    this.inspEfficiency.textContent = `${effPct}%`;
     this.inspectorEl.classList.remove('hidden');
   }
 
@@ -272,7 +285,8 @@ export const MENTOR_LINES = {
   heartHurt: "Your Heart bleeds! Protect it, or this story ends poorly.",
   win: "The heroes fall. The dark endures. For now.",
   lose: "The Heart is silent. The Underkeep… underwhelms.",
-  slap: "A firm slap. Morale through violence — classic.",
+  slap: "A firm slap. Back to work!",
+  slapAlt: "A firm slap. Morale through violence — classic.",
   speed: "Haste, my little nightmares. The clock is cruel.",
   lightning: "Heaven's temper, redirected. Delightful.",
   claim: "Claimed land feeds your mana. Ambition has a wattage.",
@@ -288,5 +302,6 @@ export const MENTOR_LINES = {
   pickUp: "Into the Hand. Drop them where the work is — or slap sense into them.",
   drop: "Back on their feet. Back to the dirt.",
   moodLow: "A minion's mood is crumbling. Beds, food, and space — or they may leave.",
+  sluggishDig: "Sluggish claws… mood is dragging the dig.",
   leaveThreat: "A minion threatens to leave the Underkeep…",
 };

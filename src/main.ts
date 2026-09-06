@@ -73,7 +73,11 @@ if (
     params.get('shot') === '5c-heal' ||
     params.get('shot') === '5c-feast' ||
     params.get('shot') === '6.1' ||
-    params.get('shot') === '61')
+    params.get('shot') === '61' ||
+    params.get('shot') === '6.1b' ||
+    params.get('shot') === '61b' ||
+    params.get('shot') === '6.1b-slap' ||
+    params.get('shot') === '6.1b-eff')
 ) {
   // Auto-arrange evidence shots
   setTimeout(() => {
@@ -84,10 +88,14 @@ if (
       preparePass5bShot?: () => void;
       preparePass5cShot?: (focus?: 'both' | 'heal' | 'feast') => void;
       preparePass61Shot?: () => void;
+      preparePass61bShot?: (focus?: 'both' | 'slap' | 'efficiency') => void;
     };
     g.hud.hideOverlay();
     const shot = params.get('shot');
-    if (shot === '6.1' || shot === '61') g.preparePass61Shot?.();
+    if (shot === '6.1b-slap') g.preparePass61bShot?.('slap');
+    else if (shot === '6.1b-eff') g.preparePass61bShot?.('efficiency');
+    else if (shot === '6.1b' || shot === '61b') g.preparePass61bShot?.('both');
+    else if (shot === '6.1' || shot === '61') g.preparePass61Shot?.();
     else if (shot === '5c-heal') g.preparePass5cShot?.('heal');
     else if (shot === '5c-feast') g.preparePass5cShot?.('feast');
     else if (shot === '5c' || shot === '5b') {

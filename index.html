@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Underkeep</title>
+    <link rel="stylesheet" href="/src/style.css" />
+  </head>
+  <body>
+    <div id="app">
+      <canvas id="game-canvas"></canvas>
+      <div id="hud">
+        <div id="hud-top">
+          <div class="stat" id="stat-gold"><span class="label">Gold</span><span class="value" id="gold-value">0</span></div>
+          <div class="stat" id="stat-mana"><span class="label">Mana</span><span class="value" id="mana-value">0</span><div class="bar"><div id="mana-bar"></div></div></div>
+          <div class="stat" id="stat-workers"><span class="label">Scrabblers</span><span class="value" id="workers-value">0</span></div>
+          <div class="stat" id="stat-creatures"><span class="label">Minions</span><span class="value" id="creatures-value">0</span></div>
+        </div>
+        <div id="toolbar">
+          <button class="tool active" data-tool="select" title="Select / Hand (1)">✋ Hand</button>
+          <button class="tool" data-tool="dig" title="Mark Dig (2)">⛏ Dig</button>
+          <button class="tool" data-tool="claim" title="Mark Claim (3)">⚑ Claim</button>
+          <button class="tool" data-tool="fortify" title="Fortify (4)">🧱 Fortify</button>
+          <button class="tool" data-tool="treasury" title="Treasury (5)">💰 Treasury</button>
+          <button class="tool" data-tool="lair" title="Lair (6)">🛏 Lair</button>
+          <button class="tool" data-tool="hatchery" title="Hatchery (7)">🍗 Hatchery</button>
+          <button class="tool" data-tool="training" title="Training (8)">⚔ Training</button>
+          <button class="tool" data-tool="library" title="Library (9)">📚 Library</button>
+          <button class="tool" data-tool="portal" title="Portal (0)">🌀 Portal</button>
+        </div>
+        <div id="spells">
+          <button class="spell" data-spell="createWorker" title="Create Scrabbler (Q)">✨ Create Worker</button>
+          <button class="spell" data-spell="speed" title="Speed Burst (E)">💨 Speed</button>
+          <button class="spell" data-spell="lightning" title="Lightning (R)">⚡ Lightning</button>
+        </div>
+        <div id="mentor"><span id="mentor-text">The earth awaits your cruelty, Keeper.</span></div>
+        <div id="tooltip"></div>
+      </div>
+      <div id="overlay" class="hidden">
+        <div id="overlay-panel">
+          <h1 id="overlay-title">Underkeep</h1>
+          <p id="overlay-msg"></p>
+          <button id="overlay-btn">Continue</button>
+        </div>
+      </div>
+    </div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

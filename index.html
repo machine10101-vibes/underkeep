@@ -19,26 +19,17 @@
           <div class="stat" id="stat-creatures"><span class="label">Minions</span><span class="value" id="creatures-value">0</span></div>
         </div>
 
-        <!-- Desktop: full tool row -->
-        <div id="toolbar" class="desktop-toolbar">
+        <!-- Compact primary bar (desktop + mobile) — rooms/spells in sheets -->
+        <div id="toolbar" class="desktop-toolbar primary-bar" aria-label="Primary tools">
           <button class="tool active" data-tool="select" title="Select / Hand (1)">✋ Hand</button>
           <button class="tool" data-tool="dig" title="Mark Dig (2)">⛏ Dig</button>
           <button class="tool" data-tool="claim" title="Mark Claim (3)">⚑ Claim</button>
           <button class="tool" data-tool="fortify" title="Fortify (4)">🧱 Fortify</button>
-          <button class="tool room-tool" data-tool="treasury" title="Treasury (5)">💰 Treasury</button>
-          <button class="tool room-tool" data-tool="lair" title="Lair (6)">🛏 Lair</button>
-          <button class="tool room-tool" data-tool="hatchery" title="Hatchery (7)">🍗 Hatchery</button>
-          <button class="tool room-tool" data-tool="training" title="Training (8)">⚔ Training</button>
-          <button class="tool room-tool" data-tool="library" title="Library (9)">📚 Library</button>
-          <button class="tool room-tool" data-tool="portal" title="Portal (0)">🌀 Portal</button>
-        </div>
-        <div id="spells" class="desktop-spells">
-          <button class="spell" data-spell="createWorker" title="Create Scrabbler (Q)">✨ Create Worker</button>
-          <button class="spell" data-spell="speed" title="Speed Burst (E)">💨 Speed</button>
-          <button class="spell" data-spell="lightning" title="Lightning (R)">⚡ Lightning</button>
+          <button class="spell" data-spell="createWorker" title="Create Scrabbler (Q)">✨ Worker</button>
+          <button type="button" id="btn-build-desktop" class="sheet-toggle" title="Build rooms" aria-expanded="false">🏗 Build</button>
+          <button type="button" id="btn-spells-desktop" class="sheet-toggle" title="Spells" aria-expanded="false">🪄 Spells</button>
         </div>
 
-        <!-- Mobile: compact primary bar -->
         <div id="mobile-bar" class="mobile-only-ui" aria-label="Primary tools">
           <button class="tool active" data-tool="select" title="Hand">✋</button>
           <button class="tool" data-tool="dig" title="Dig">⛏</button>

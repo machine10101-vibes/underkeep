@@ -54,6 +54,76 @@ function applyBaseAo(geo: THREE.BufferGeometry, baseY: number, height: number, s
   geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
 }
 
+
+/** Claimed floor: 2×2 fitted stone slabs + dark mortar (no canvas map required). */
+export function makeClaimedFloorMesh(room: RoomType): THREE.Group {
+  const g = new THREE.Group();
+
+  // Room tint overrides for slab color
+  const roomTint: Partial<Record<RoomType, number>> = {
+    [RoomType.Treasury]: 0xc4a050,
+    [RoomType.Lair]: 0x9a7088,
+    [RoomType.Hatchery]: 0x8a9850,
+    [RoomType.Training]: 0xa87868,
+    [RoomType.Library]: 0x6878a8,
+    [RoomType.Portal]: 0x8860a8,
+  };
+  const slabColor = roomTint[room] ?? 0xb8a888;
+  const slabEmissive = room === RoomType.None ? 0x2a2418 : 0x201810;
+
+  const mortar = new THREE.MeshStandardMaterial({
+    color: 0x2a2218,
+    metalness: 0.04,
+    roughness: 0.95,
+  });
+  const under = new THREE.Mesh(
+    new THREE.BoxGeometry(TILE_SIZE * 0.98, 0.18, TILE_SIZE * 0.98),
+    mortar
+  );
+  under.position.y = 0.02;
+  under.receiveShadow = true;
+  g.add(under);
+
+  const slabMat = new THREE.MeshStandardMaterial({
+    color: slabColor,
+    metalness: room === RoomType.Treasury ? 0.45 : 0.18,
+    roughness: room === RoomType.Treasury ? 0.4 : 0.62,
+    emissive: slabEmissive,
+    emissiveIntensity: 0.14,
+  });
+
+  const slab = TILE_SIZE * 0.44;
+  const gap = 0.06;
+  const offsets = [-0.5, 0.5];
+  for (const ox of offsets) {
+    for (const oz of offsets) {
+      const s = new THREE.Mesh(
+        new THREE.BoxGeometry(slab, 0.12, slab),
+        slabMat
+      );
+      s.position.set(ox * (slab / 2 + gap), 0.16, oz * (slab / 2 + gap));
+      s.receiveShadow = true;
+      s.castShadow = false;
+      g.add(s);
+    }
+  }
+
+  // Subtle bevel lip
+  const lip = new THREE.Mesh(
+    new THREE.BoxGeometry(TILE_SIZE * 0.99, 0.025, TILE_SIZE * 0.99),
+    new THREE.MeshStandardMaterial({
+      color: 0xd0c0a8,
+      metalness: 0.12,
+      roughness: 0.55,
+      emissive: 0x3a3020,
+      emissiveIntensity: 0.1,
+    })
+  );
+  lip.position.y = 0.11;
+  g.add(lip);
+  return g;
+}
+
 export function makeFloorGeo(): THREE.BufferGeometry {
   return cachedGeo('floor', () => {
     const g = new THREE.BoxGeometry(TILE_SIZE * 0.98, 0.28, TILE_SIZE * 0.98, 2, 1, 2);
@@ -160,7 +230,7 @@ export function makeHeartGeo(): THREE.Group {
     new THREE.MeshStandardMaterial({
       color: 0x6a1820,
       emissive: 0xff3048,
-      emissiveIntensity: 0.85,
+      emissiveIntensity: 0.55,
       metalness: 0.35,
       roughness: 0.4,
     })
@@ -226,7 +296,7 @@ export function makeHeartGeo(): THREE.Group {
     group.add(ember);
   }
 
-  const light = new THREE.PointLight(0xff4058, 2.0, 11, 2);
+  const light = new THREE.PointLight(0xff4058, 1.15, 8, 2);
   light.position.y = 1.35;
   light.castShadow = false;
   group.add(light);
@@ -272,7 +342,7 @@ export function makeTorchMesh(withLight = true): THREE.Group {
   g.add(glow);
 
   if (withLight) {
-    const light = new THREE.PointLight(0xff8830, 1.9, 9, 1.9);
+    const light = new THREE.PointLight(0xff9944, 3.2, 14, 1.6);
     light.position.y = 1.9;
     light.castShadow = false;
     g.add(light);
@@ -311,55 +381,92 @@ export function makeCreatureMesh(color: number, scale: number, kind: string): TH
   });
 
   if (kind === 'scrabbler') {
-    // Squat beetle-worker: carapace + head + 4 legs + digging claws
-    const body = new THREE.Mesh(new THREE.SphereGeometry(0.32, 12, 10), bodyMat);
-    body.scale.set(1.15, 0.7, 1.25);
-    body.position.y = 0.32;
+    // Compact multi-part beetle-worker readable at overview zoom
+    const body = new THREE.Mesh(new THREE.SphereGeometry(0.36, 12, 10), bodyMat);
+    body.scale.set(1.2, 0.75, 1.3);
+    body.position.y = 0.38;
     body.castShadow = true;
     g.add(body);
 
     const shell = new THREE.Mesh(
-      new THREE.SphereGeometry(0.28, 10, 8),
-      new THREE.MeshStandardMaterial({ color: 0x4a6830, metalness: 0.25, roughness: 0.45 })
+      new THREE.SphereGeometry(0.32, 10, 8),
+      new THREE.MeshStandardMaterial({ color: 0x4a6830, metalness: 0.25, roughness: 0.45, emissive: 0x203010, emissiveIntensity: 0.15 })
     );
-    shell.scale.set(1.1, 0.55, 1.0);
-    shell.position.set(0, 0.42, -0.05);
+    shell.scale.set(1.15, 0.55, 1.05);
+    shell.position.set(0, 0.5, -0.06);
     g.add(shell);
 
     const head = new THREE.Mesh(
-      new THREE.SphereGeometry(0.18, 10, 8),
-      new THREE.MeshStandardMaterial({ color: 0x7a9a50, metalness: 0.15, roughness: 0.55 })
+      new THREE.SphereGeometry(0.2, 10, 8),
+      new THREE.MeshStandardMaterial({ color: 0x8ab050, metalness: 0.15, roughness: 0.55 })
     );
-    head.position.set(0, 0.38, 0.32);
+    head.position.set(0, 0.44, 0.36);
     head.castShadow = true;
     g.add(head);
 
     const eyeMat = new THREE.MeshStandardMaterial({
       color: 0xffee88,
       emissive: 0xffcc44,
-      emissiveIntensity: 0.6,
+      emissiveIntensity: 0.85,
     });
     for (const sx of [-1, 1]) {
-      const eye = new THREE.Mesh(new THREE.SphereGeometry(0.04, 6, 6), eyeMat);
-      eye.position.set(sx * 0.08, 0.42, 0.45);
+      const eye = new THREE.Mesh(new THREE.SphereGeometry(0.05, 6, 6), eyeMat);
+      eye.position.set(sx * 0.09, 0.48, 0.5);
       g.add(eye);
     }
 
     const legMat = new THREE.MeshStandardMaterial({ color: 0x3a4828, roughness: 0.7 });
     for (const sx of [-1, 1]) {
-      for (const sz of [-0.12, 0.14]) {
-        g.add(limb(new THREE.CylinderGeometry(0.03, 0.025, 0.28, 5), legMat, sx * 0.28, 0.12, sz, 0, 0, sx * 0.7));
+      for (const sz of [-0.14, 0.16]) {
+        g.add(limb(new THREE.CylinderGeometry(0.035, 0.028, 0.32, 5), legMat, sx * 0.32, 0.14, sz, 0, 0, sx * 0.7));
       }
       const claw = new THREE.Mesh(
-        new THREE.ConeGeometry(0.07, 0.32, 5),
+        new THREE.ConeGeometry(0.08, 0.34, 5),
         new THREE.MeshStandardMaterial({ color: 0xd0d0a8, metalness: 0.7, roughness: 0.28 })
       );
       claw.rotation.z = sx * 0.85;
       claw.rotation.x = -0.4;
-      claw.position.set(sx * 0.3, 0.28, 0.38);
+      claw.position.set(sx * 0.32, 0.32, 0.42);
       claw.castShadow = true;
       g.add(claw);
     }
+
+    // Pickaxe for dig/work animation
+    const pick = new THREE.Group();
+    const haft = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.025, 0.03, 0.55, 5),
+      new THREE.MeshStandardMaterial({ color: 0x6a4420, roughness: 0.85 })
+    );
+    haft.position.y = 0.2;
+    pick.add(haft);
+    const headPick = new THREE.Mesh(
+      new THREE.BoxGeometry(0.28, 0.08, 0.08),
+      new THREE.MeshStandardMaterial({ color: 0xb0b8c0, metalness: 0.85, roughness: 0.25 })
+    );
+    headPick.position.set(0.06, 0.48, 0);
+    pick.add(headPick);
+    const tip = new THREE.Mesh(
+      new THREE.ConeGeometry(0.05, 0.18, 5),
+      new THREE.MeshStandardMaterial({ color: 0xd0d8e0, metalness: 0.8, roughness: 0.22 })
+    );
+    tip.rotation.z = Math.PI / 2;
+    tip.position.set(0.24, 0.48, 0);
+    pick.add(tip);
+    pick.position.set(0.28, 0.35, 0.15);
+    pick.rotation.z = 0.15;
+    pick.rotation.x = -0.35;
+    g.add(pick);
+    (g as THREE.Group & { pickaxe?: THREE.Object3D }).pickaxe = pick;
+
+    const ring = new THREE.Mesh(
+      new THREE.RingGeometry(0.42, 0.52, 20),
+      new THREE.MeshBasicMaterial({ color: 0xa8e060, transparent: true, opacity: 0.75, side: THREE.DoubleSide, depthWrite: false })
+    );
+    ring.rotation.x = -Math.PI / 2;
+    ring.position.y = 0.05;
+    ring.visible = false;
+    g.add(ring);
+    (g as THREE.Group & { selectRing?: THREE.Object3D }).selectRing = ring;
   } else if (kind === 'skitterwing') {
     // Flying insectoid: thorax + abdomen + wings + legs
     const thorax = new THREE.Mesh(new THREE.SphereGeometry(0.2, 10, 8), bodyMat);
@@ -698,11 +805,11 @@ export function floorMaterial(kind: TileKind, room: RoomType): THREE.MeshStandar
   }
   if (kind === TileKind.Dirt) {
     return texturedMat('floor-dirt', dirtTex(), {
-      metalness: 0.03,
-      roughness: 0.92,
-      emissive: 0x1a1008,
-      emissiveIntensity: 0.06,
-      bump: 0.1,
+      metalness: 0.02,
+      roughness: 0.95,
+      emissive: 0x0a0804,
+      emissiveIntensity: 0.03,
+      bump: 0.12,
     });
   }
   // Claimed — room-specific
@@ -756,12 +863,13 @@ export function floorMaterial(kind: TileKind, room: RoomType): THREE.MeshStandar
         bump: 0.07,
       });
     default:
-      return texturedMat('floor-claimed', claimedStoneTex(), {
-        metalness: 0.18,
-        roughness: 0.62,
-        emissive: 0x181410,
-        emissiveIntensity: 0.08,
-        bump: 0.07,
+      return texturedMat('floor-claimed-v2', claimedStoneTex(), {
+        color: 0xb8a890,
+        metalness: 0.2,
+        roughness: 0.58,
+        emissive: 0x2a2418,
+        emissiveIntensity: 0.1,
+        bump: 0.1,
       });
   }
 }
@@ -850,6 +958,143 @@ export function tileMaterial(kind: TileKind, fortified: boolean, _room: RoomType
     default:
       return cachedMat('default', () => new THREE.MeshStandardMaterial({ color: 0x555555 }));
   }
+}
+
+
+/** 1–2 readable 3D props per room tile (Treasury chests/gold, Lair bedrolls, etc.). */
+export function makeRoomProps(room: RoomType): THREE.Group | null {
+  if (room === RoomType.None) return null;
+  const g = new THREE.Group();
+
+  if (room === RoomType.Treasury) {
+    const goldMat = new THREE.MeshStandardMaterial({
+      color: 0xe0b028,
+      metalness: 0.85,
+      roughness: 0.3,
+      emissive: 0xa07010,
+      emissiveIntensity: 0.45,
+    });
+    const pile = new THREE.Mesh(new THREE.SphereGeometry(0.35, 10, 8), goldMat);
+    pile.scale.set(1.3, 0.55, 1.1);
+    pile.position.set(-0.35, 0.22, 0.15);
+    pile.castShadow = true;
+    g.add(pile);
+    const pile2 = new THREE.Mesh(new THREE.SphereGeometry(0.22, 8, 6), goldMat);
+    pile2.scale.set(1.1, 0.5, 1.0);
+    pile2.position.set(0.15, 0.16, -0.35);
+    g.add(pile2);
+    const chest = new THREE.Mesh(
+      new THREE.BoxGeometry(0.55, 0.35, 0.4),
+      new THREE.MeshStandardMaterial({ color: 0x6a3a18, metalness: 0.25, roughness: 0.7 })
+    );
+    chest.position.set(0.4, 0.28, 0.25);
+    chest.castShadow = true;
+    g.add(chest);
+    const lid = new THREE.Mesh(
+      new THREE.BoxGeometry(0.55, 0.08, 0.42),
+      new THREE.MeshStandardMaterial({ color: 0x8a5020, metalness: 0.3, roughness: 0.65 })
+    );
+    lid.position.set(0.4, 0.48, 0.25);
+    g.add(lid);
+    const band = new THREE.Mesh(
+      new THREE.BoxGeometry(0.58, 0.06, 0.08),
+      new THREE.MeshStandardMaterial({ color: 0xd4a020, metalness: 0.8, roughness: 0.3, emissive: 0x805010, emissiveIntensity: 0.3 })
+    );
+    band.position.set(0.4, 0.3, 0.25);
+    g.add(band);
+  } else if (room === RoomType.Lair) {
+    const cloth = new THREE.MeshStandardMaterial({ color: 0x6a4068, roughness: 0.9, emissive: 0x301028, emissiveIntensity: 0.12 });
+    const roll = new THREE.Mesh(new THREE.CapsuleGeometry(0.18, 0.55, 4, 8), cloth);
+    roll.rotation.z = Math.PI / 2;
+    roll.position.set(-0.2, 0.2, 0.1);
+    roll.castShadow = true;
+    g.add(roll);
+    const roll2 = new THREE.Mesh(new THREE.CapsuleGeometry(0.15, 0.45, 4, 8), cloth);
+    roll2.rotation.z = Math.PI / 2;
+    roll2.rotation.y = 0.4;
+    roll2.position.set(0.35, 0.18, -0.25);
+    g.add(roll2);
+  } else if (room === RoomType.Hatchery) {
+    const nest = new THREE.Mesh(
+      new THREE.TorusGeometry(0.45, 0.14, 8, 16),
+      new THREE.MeshStandardMaterial({ color: 0x6a8030, roughness: 0.85, emissive: 0x304010, emissiveIntensity: 0.15 })
+    );
+    nest.rotation.x = -Math.PI / 2;
+    nest.position.y = 0.16;
+    g.add(nest);
+    const yolk = new THREE.Mesh(
+      new THREE.SphereGeometry(0.18, 8, 6),
+      new THREE.MeshStandardMaterial({ color: 0xe8c040, emissive: 0xa08020, emissiveIntensity: 0.35, roughness: 0.5 })
+    );
+    yolk.position.y = 0.22;
+    g.add(yolk);
+  } else if (room === RoomType.Training) {
+    const wood = new THREE.MeshStandardMaterial({ color: 0x6a4828, roughness: 0.8 });
+    const steel = new THREE.MeshStandardMaterial({ color: 0x8890a0, metalness: 0.75, roughness: 0.35 });
+    const post = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.08, 0.9, 6), wood);
+    post.position.set(-0.35, 0.5, 0);
+    post.castShadow = true;
+    g.add(post);
+    const post2 = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.08, 0.9, 6), wood);
+    post2.position.set(0.35, 0.5, 0);
+    g.add(post2);
+    const rack = new THREE.Mesh(new THREE.BoxGeometry(0.85, 0.08, 0.12), wood);
+    rack.position.set(0, 0.7, 0);
+    g.add(rack);
+    for (const x of [-0.2, 0.05, 0.3]) {
+      const blade = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.45, 0.08), steel);
+      blade.position.set(x, 0.55, 0.05);
+      g.add(blade);
+    }
+  } else if (room === RoomType.Library) {
+    const wood = new THREE.MeshStandardMaterial({ color: 0x5a3a22, roughness: 0.75 });
+    const desk = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.12, 0.45), wood);
+    desk.position.set(0, 0.55, 0);
+    desk.castShadow = true;
+    g.add(desk);
+    const stem = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.12, 0.45, 6), wood);
+    stem.position.set(0, 0.28, 0);
+    g.add(stem);
+    const book = new THREE.Mesh(
+      new THREE.BoxGeometry(0.28, 0.06, 0.22),
+      new THREE.MeshStandardMaterial({ color: 0x3050a0, emissive: 0x102060, emissiveIntensity: 0.25, roughness: 0.6 })
+    );
+    book.position.set(0.05, 0.65, 0);
+    g.add(book);
+    const candle = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.03, 0.035, 0.14, 6),
+      new THREE.MeshStandardMaterial({ color: 0xe8d8a0, emissive: 0xffaa40, emissiveIntensity: 0.4 })
+    );
+    candle.position.set(-0.22, 0.68, 0.08);
+    g.add(candle);
+  } else if (room === RoomType.Portal) {
+    const swirlMat = new THREE.MeshStandardMaterial({
+      color: 0x8030c0,
+      emissive: 0xa040ff,
+      emissiveIntensity: 0.7,
+      metalness: 0.4,
+      roughness: 0.35,
+      transparent: true,
+      opacity: 0.85,
+    });
+    const pillar = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.28, 1.4, 10), swirlMat);
+    pillar.position.y = 0.75;
+    pillar.castShadow = true;
+    g.add(pillar);
+    const ring = new THREE.Mesh(new THREE.TorusGeometry(0.42, 0.06, 8, 20), swirlMat);
+    ring.position.y = 1.15;
+    ring.rotation.x = Math.PI / 2;
+    g.add(ring);
+    const core = new THREE.Mesh(
+      new THREE.SphereGeometry(0.18, 10, 8),
+      new THREE.MeshStandardMaterial({ color: 0xe0a0ff, emissive: 0xc060ff, emissiveIntensity: 1.1, roughness: 0.3 })
+    );
+    core.position.y = 1.15;
+    g.add(core);
+  } else {
+    return null;
+  }
+  return g;
 }
 
 export function disposeMat(m: THREE.Material | THREE.Material[]): void {

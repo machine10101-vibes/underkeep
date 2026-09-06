@@ -64,6 +64,10 @@ export class HUD {
 
     this.btnBuild?.addEventListener('click', () => this.toggleSheet('build'));
     this.btnSpells?.addEventListener('click', () => this.toggleSheet('spells'));
+    // Desktop sheet toggles share the same sheets
+    document.getElementById('btn-build-desktop')?.addEventListener('click', () => this.toggleSheet('build'));
+    document.getElementById('btn-spells-desktop')?.addEventListener('click', () => this.toggleSheet('spells'));
+
     document.querySelectorAll('.sheet-close').forEach((btn) => {
       btn.addEventListener('click', () => {
         const which = (btn as HTMLElement).dataset.close;
@@ -73,29 +77,41 @@ export class HUD {
     document.getElementById('mentor-dismiss')?.addEventListener('click', () => this.dismissMentor());
   }
 
+  private sheetButtons(which: 'build' | 'spells'): HTMLElement[] {
+    const ids =
+      which === 'build'
+        ? ['btn-build', 'btn-build-desktop']
+        : ['btn-spells', 'btn-spells-desktop'];
+    return ids.map((id) => document.getElementById(id)).filter((el): el is HTMLElement => !!el);
+  }
+
   private toggleSheet(which: 'build' | 'spells'): void {
     const sheet = which === 'build' ? this.buildSheet : this.spellsSheet;
     const other = which === 'build' ? this.spellsSheet : this.buildSheet;
     const open = sheet.hasAttribute('hidden');
     other.setAttribute('hidden', '');
-    this.btnBuild?.classList.toggle('active', false);
-    this.btnSpells?.classList.toggle('active', false);
+    for (const b of [...this.sheetButtons('build'), ...this.sheetButtons('spells')]) {
+      b.classList.remove('active');
+      b.setAttribute('aria-expanded', 'false');
+    }
     if (open) {
       sheet.removeAttribute('hidden');
-      (which === 'build' ? this.btnBuild : this.btnSpells)?.classList.add('active');
-      (which === 'build' ? this.btnBuild : this.btnSpells)?.setAttribute('aria-expanded', 'true');
+      for (const b of this.sheetButtons(which)) {
+        b.classList.add('active');
+        b.setAttribute('aria-expanded', 'true');
+      }
     } else {
       sheet.setAttribute('hidden', '');
-      (which === 'build' ? this.btnBuild : this.btnSpells)?.setAttribute('aria-expanded', 'false');
     }
   }
 
   private closeSheet(which: 'build' | 'spells'): void {
     const sheet = which === 'build' ? this.buildSheet : this.spellsSheet;
     sheet.setAttribute('hidden', '');
-    const btn = which === 'build' ? this.btnBuild : this.btnSpells;
-    btn?.classList.remove('active');
-    btn?.setAttribute('aria-expanded', 'false');
+    for (const b of this.sheetButtons(which)) {
+      b.classList.remove('active');
+      b.setAttribute('aria-expanded', 'false');
+    }
   }
 
   private closeSheets(): void {

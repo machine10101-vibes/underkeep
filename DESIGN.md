@@ -64,3 +64,13 @@ Playable Vite + TypeScript + Three.js slice at `/workspace/underkeep/game`.
 Implemented: grid dig/claim/fortify/mine, Dungeon Heart lose condition, Scrabblers + Create Worker, mana from claimed tiles, Speed + Lightning, hand pick/drop/slap (combat stun on drop), rooms (Treasury/Lair/Hatchery/Training/Library stub/Portal), Portal attraction (Skitterwing/Rattlekin/Emberling), sleep/eat/train/fight jobs, one hero wave, HUD + mentor lines, PBR + shadows + fog + bloom/color grade + emissive heart/torches.
 
 Gaps / later: possess, traps/doors, Combat Pit, research, workshop, Prison/Torture conversion, richer pathing through walls for heroes, audio, GLTF art upgrades.
+
+## Visual north star (YT X35cKEjvgrc from 2:20)
+Feel targets only — original IP art:
+- Distinct dirt / solid rock / claimed stone (strong ownership readability)
+- Dig: workers chip, blocks shrink/crumble, then open
+- Claim: dirt → paved stone immediately obvious
+- Rooms: floor material + props (not outline-only)
+- Creatures: readable silhouettes at overview zoom
+- Warm torch pools; heart glow secondary to terrain readability
+- Angled elevated camera; clear tile seams; FoW optional later

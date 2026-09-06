@@ -21,6 +21,7 @@ export class Grid {
           fortified: false,
           goldAmount: 0,
           claimedProgress: 0,
+          digProgress: 0,
           torch: false,
         });
       }
@@ -207,29 +208,40 @@ export class Grid {
     return out;
   }
 
+
+  /** True if a diggable tile has at least one orthogonal walkable neighbor. */
+  isReachableSolid(x: number, y: number): boolean {
+    return this.neighbors4(x, y).some((t) => this.isWalkable(t.x, t.y));
+  }
+
   hasAdjacentClaimed(x: number, y: number): boolean {
     return this.neighbors4(x, y).some(
       (t) => t.kind === TileKind.Claimed || t.kind === TileKind.Heart
     );
   }
 
-  /** A* pathfinding on walkable tiles */
+  /** A* pathfinding on walkable tiles (goal may be diggable solid when explicitly targeted). */
   findPath(sx: number, sy: number, gx: number, gy: number): Vec2[] | null {
     if (!this.inBounds(sx, sy) || !this.inBounds(gx, gy)) return null;
-    if (!this.isWalkable(gx, gy) && !(gx === this.heartPos.x && gy === this.heartPos.y)) {
-      // allow targeting adjacent to solid for dig jobs — caller handles
-    }
+    if (sx === gx && sy === gy) return [{ x: gx, y: gy }];
+
     const key = (x: number, y: number) => y * this.width + x;
     const open: { x: number; y: number; f: number }[] = [{ x: sx, y: sy, f: 0 }];
     const came = new Map<number, number>();
     const gScore = new Map<number, number>();
     gScore.set(key(sx, sy), 0);
     const closed = new Set<number>();
-
     const h = (x: number, y: number) => Math.abs(x - gx) + Math.abs(y - gy);
+    const passable = (nx: number, ny: number): boolean => {
+      if (this.isWalkable(nx, ny)) return true;
+      // Allow stepping onto diggable goal only (stand-in for adjacent jobs uses walkable goals)
+      if (nx === gx && ny === gy && this.isDiggable(nx, ny)) return true;
+      if (nx === gx && ny === gy && (nx === this.heartPos.x && ny === this.heartPos.y)) return true;
+      return false;
+    };
 
     let guard = 0;
-    while (open.length && guard++ < 4000) {
+    while (open.length && guard++ < 5000) {
       open.sort((a, b) => a.f - b.f);
       const cur = open.shift()!;
       const ck = key(cur.x, cur.y);
@@ -254,12 +266,7 @@ export class Grid {
       ] as const) {
         const nx = cur.x + dx;
         const ny = cur.y + dy;
-        if (!this.inBounds(nx, ny)) continue;
-        const walk =
-          this.isWalkable(nx, ny) || (nx === gx && ny === gy && this.isDiggable(nx, ny));
-        // Allow standing next to dig target: if goal is diggable solid, path to adjacent walkable
-        if (!walk && !(nx === gx && ny === gy)) continue;
-        if (!this.isWalkable(nx, ny) && !(nx === gx && ny === gy)) continue;
+        if (!this.inBounds(nx, ny) || !passable(nx, ny)) continue;
         const nk = key(nx, ny);
         if (closed.has(nk)) continue;
         const tent = (gScore.get(ck) ?? Infinity) + 1;

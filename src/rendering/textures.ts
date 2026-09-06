@@ -245,25 +245,26 @@ export function rockTex(): THREE.CanvasTexture {
 export function dirtTex(): THREE.CanvasTexture {
   return paintNoise(64, {
     seed: 33,
-    base: [110, 78, 48],
-    dark: [58, 40, 24],
-    light: [140, 108, 70],
+    base: [88, 58, 36],
+    dark: [42, 28, 16],
+    light: [118, 84, 52],
     scale: 6,
-    contrast: 1.2,
-    speck: 0.06,
-    speckColor: [90, 70, 40],
+    contrast: 1.25,
+    speck: 0.07,
+    speckColor: [70, 50, 30],
   });
 }
 
 export function claimedStoneTex(): THREE.CanvasTexture {
+  // Bright fitted flagstones — obvious seams, clearly brighter than dirt
   return paintNoise(64, {
     seed: 44,
-    base: [118, 102, 88],
-    dark: [62, 52, 44],
-    light: [150, 136, 118],
-    scale: 3.5,
-    contrast: 1.15,
-    bricks: { bw: 16, bh: 10, mortar: [48, 40, 34], mortarW: 1 },
+    base: [168, 158, 142],
+    dark: [110, 100, 88],
+    light: [210, 200, 185],
+    scale: 2.8,
+    contrast: 1.25,
+    bricks: { bw: 20, bh: 14, mortar: [52, 44, 38], mortarW: 2 },
   });
 }
 

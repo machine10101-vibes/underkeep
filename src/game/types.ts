@@ -60,6 +60,8 @@ export interface Tile {
   fortified: boolean;
   goldAmount: number;
   claimedProgress: number;
+  /** 0 = intact solid, 1 = fully excavated (earth/gold). */
+  digProgress: number;
   torch: boolean;
 }
 
@@ -92,7 +94,7 @@ export const CREATURE_STATS: Record<
   CreatureKind,
   { hp: number; speed: number; damage: number; goldWage: number; color: number; scale: number }
 > = {
-  [CreatureKind.Scrabbler]: { hp: 40, speed: 3.2, damage: 4, goldWage: 0, color: 0x6a8a40, scale: 0.55 },
+  [CreatureKind.Scrabbler]: { hp: 40, speed: 3.8, damage: 4, goldWage: 0, color: 0x6a8a40, scale: 1.55 },
   [CreatureKind.Skitterwing]: { hp: 50, speed: 4.0, damage: 6, goldWage: 8, color: 0x40c0a0, scale: 0.6 },
   [CreatureKind.Rattlekin]: { hp: 80, speed: 2.6, damage: 12, goldWage: 15, color: 0x8a7050, scale: 0.75 },
   [CreatureKind.Emberling]: { hp: 90, speed: 2.4, damage: 16, goldWage: 25, color: 0xe05020, scale: 0.8 },

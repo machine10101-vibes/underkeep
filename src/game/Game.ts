@@ -74,10 +74,10 @@ export class Game {
     this.spawnCreature(CreatureKind.Scrabbler, this.grid.heartPos.x - 1, this.grid.heartPos.y);
     this.spawnCreature(CreatureKind.Scrabbler, this.grid.heartPos.x, this.grid.heartPos.y + 1);
 
-    // center camera on heart
+    // ~55° elevated camera for DK2-style overview readability
     const hw = this.grid.tileToWorld(this.grid.heartPos.x, this.grid.heartPos.y);
     this.camTarget.set(hw.x, 0, hw.z);
-    this.renderer.camera.position.set(hw.x + 6, 30, hw.z + 20);
+    this.renderer.camera.position.set(hw.x + 4, 28, hw.z + 18);
     this.renderer.camera.lookAt(this.camTarget);
 
     this.bindInput(canvas);
@@ -106,6 +106,9 @@ export class Game {
       stats.scale
     );
     c.setMesh(mesh);
+    const extras = mesh as THREE.Group & { pickaxe?: THREE.Object3D; selectRing?: THREE.Object3D };
+    c.pickaxe = extras.pickaxe ?? null;
+    c.selectRing = extras.selectRing ?? null;
     this.renderer.addEntityMesh(mesh);
     this.creatures.push(c);
     return c;
@@ -156,9 +159,9 @@ export class Game {
     canvas.addEventListener('mousedown', (e) => {
       if (performance.now() < this.ignoreMouseUntil) return;
       if (this.gameOver) return;
-      const hit = this.pointerToWorld(e, canvas);
-      if (!hit) return;
-      const tp = this.grid.worldToTile(hit.x, hit.z);
+      const tp = this.pointerToTile(e, canvas);
+      if (!tp) return;
+      const hit = this.pointerToWorld(e, canvas) ?? new THREE.Vector3();
 
       if (e.button === 2) {
         this.handleSecondaryAt(tp.x, tp.y);
@@ -180,9 +183,8 @@ export class Game {
       if (performance.now() < this.ignoreMouseUntil) return;
       this.updatePointerHover(e, canvas);
       if (this.paint && this.tool !== 'select') {
-        const hit = this.pointerToWorld(e, canvas);
-        if (!hit) return;
-        const tp = this.grid.worldToTile(hit.x, hit.z);
+        const tp = this.pointerToTile(e, canvas);
+        if (!tp) return;
         if (!this.lastPaint || this.lastPaint.x !== tp.x || this.lastPaint.y !== tp.y) {
           this.applyTool(tp.x, tp.y);
           this.lastPaint = { ...tp };
@@ -220,9 +222,8 @@ export class Game {
         this.pinchStartCamY = this.renderer.camera.position.y;
         if (this.touchMode === 'tap' && !this.touchMoved && performance.now() - this.touchStartTime < 280) {
           // second finger arrived quickly → treat as two-finger tap (secondary)
-          const hit = this.pointerToWorld(this.touchStartClient, canvas);
-          if (hit) {
-            const tp = this.grid.worldToTile(hit.x, hit.z);
+          const tp = this.pointerToTile(this.touchStartClient, canvas);
+          if (tp) {
             this.handleSecondaryAt(tp.x, tp.y);
           }
           this.touchMode = 'none';
@@ -247,9 +248,8 @@ export class Game {
         this.longPressTimer = window.setTimeout(() => {
           if (this.touchMode !== 'tap' || this.touchMoved) return;
           this.touchMode = 'longpress';
-          const hit = this.pointerToWorld(this.touchStartClient, canvas);
-          if (hit) {
-            const tp = this.grid.worldToTile(hit.x, hit.z);
+          const tp = this.pointerToTile(this.touchStartClient, canvas);
+          if (tp) {
             this.handleSecondaryAt(tp.x, tp.y);
           }
           // haptic if available
@@ -309,9 +309,8 @@ export class Game {
           // paint with current tool
           this.touchMode = 'paint';
           this.paint = true;
-          const hit = this.pointerToWorld(p, canvas);
-          if (hit) {
-            const tp = this.grid.worldToTile(hit.x, hit.z);
+          const tp = this.pointerToTile(p, canvas);
+          if (tp) {
             this.applyTool(tp.x, tp.y);
             this.lastPaint = { ...tp };
           }
@@ -324,9 +323,8 @@ export class Game {
       }
 
       if (this.touchMode === 'paint') {
-        const hit = this.pointerToWorld(p, canvas);
-        if (hit) {
-          const tp = this.grid.worldToTile(hit.x, hit.z);
+        const tp = this.pointerToTile(p, canvas);
+        if (tp) {
           if (!this.lastPaint || this.lastPaint.x !== tp.x || this.lastPaint.y !== tp.y) {
             this.applyTool(tp.x, tp.y);
             this.lastPaint = { ...tp };
@@ -377,9 +375,9 @@ export class Game {
       this.clearLongPress();
 
       if (mode === 'tap' && !this.touchMoved && !this.gameOver) {
+        const tp = this.pointerToTile(this.touchStartClient, canvas);
         const hit = this.pointerToWorld(this.touchStartClient, canvas);
-        if (hit) {
-          const tp = this.grid.worldToTile(hit.x, hit.z);
+        if (tp && hit) {
           this.handlePrimaryAt(tp.x, tp.y, hit);
         }
       }
@@ -468,19 +466,19 @@ export class Game {
   }
 
   private updatePointerHover(e: { clientX: number; clientY: number }, canvas: HTMLCanvasElement): void {
-    const hit = this.pointerToWorld(e, canvas);
-    if (!hit) {
+    const tp = this.pointerToTile(e, canvas);
+    if (!tp || !this.grid.inBounds(tp.x, tp.y)) {
       this.renderer.setHover(0, 0, false);
       return;
     }
-    const tp = this.grid.worldToTile(hit.x, hit.z);
     const w = this.grid.tileToWorld(tp.x, tp.y);
-    this.renderer.setHover(w.x, w.z, this.grid.inBounds(tp.x, tp.y), this.toolColor());
+    this.renderer.setHover(w.x, w.z, true, this.toolColor());
     const tile = this.grid.get(tp.x, tp.y);
     if (tile) {
       const room =
         tile.room !== RoomType.None ? ` · ${['', 'Treasury', 'Lair', 'Hatchery', 'Training', 'Library', 'Portal'][tile.room]}` : '';
-      this.hud.setTooltip(`(${tp.x},${tp.y}) ${TileKind[tile.kind]}${tile.fortified ? ' [fortified]' : ''}${room}`);
+      const dig = tile.digProgress > 0 ? ` · dig ${Math.floor(tile.digProgress * 100)}%` : '';
+      this.hud.setTooltip(`(${tp.x},${tp.y}) ${TileKind[tile.kind]}${tile.fortified ? ' [fortified]' : ''}${room}${dig}`);
     }
   }
 
@@ -507,14 +505,39 @@ export class Game {
     cam.lookAt(this.camTarget.x, 0, this.camTarget.z);
   }
 
+  private pointerNdc(
+    e: MouseEvent | PointerEvent | { clientX: number; clientY: number },
+    canvas: HTMLCanvasElement
+  ): { nx: number; ny: number } {
+    const rect = canvas.getBoundingClientRect();
+    return {
+      nx: ((e.clientX - rect.left) / rect.width) * 2 - 1,
+      ny: -((e.clientY - rect.top) / rect.height) * 2 + 1,
+    };
+  }
+
   private pointerToWorld(
     e: MouseEvent | PointerEvent | { clientX: number; clientY: number },
     canvas: HTMLCanvasElement
   ): THREE.Vector3 | null {
-    const rect = canvas.getBoundingClientRect();
-    const nx = ((e.clientX - rect.left) / rect.width) * 2 - 1;
-    const ny = -((e.clientY - rect.top) / rect.height) * 2 + 1;
-    return this.renderer.raycastGround(nx, ny);
+    const { nx, ny } = this.pointerNdc(e, canvas);
+    const hit = this.renderer.pickTile(nx, ny);
+    if (!hit) return null;
+    return new THREE.Vector3(hit.x, 0, hit.z);
+  }
+
+  /** Height-aware tile pick — dig marks land on intended earth tops, not unreachable tiles behind. */
+  private pointerToTile(
+    e: MouseEvent | PointerEvent | { clientX: number; clientY: number },
+    canvas: HTMLCanvasElement
+  ): Vec2 | null {
+    const { nx, ny } = this.pointerNdc(e, canvas);
+    const hit = this.renderer.pickTile(nx, ny);
+    if (!hit) return null;
+    if (typeof hit.tileX === 'number' && typeof hit.tileY === 'number') {
+      return { x: hit.tileX, y: hit.tileY };
+    }
+    return this.grid.worldToTile(hit.x, hit.z);
   }
 
   private toolColor(): number {
@@ -553,6 +576,7 @@ export class Game {
     if (this.tool === 'dig') {
       if (this.grid.isDiggable(x, y)) {
         tile.mark = MarkType.Dig;
+        if (tile.digProgress <= 0) tile.digProgress = 0;
         this.gridDirty = true;
       }
     } else if (this.tool === 'claim') {
@@ -718,6 +742,118 @@ export class Game {
     return MANA_MAX_BASE + Math.floor(this.grid.countClaimed() * 0.5);
   }
 
+
+  /** QA/screenshot: dig-in-progress + claimed stone + Treasury props in frame. */
+  preparePass3Shot(): void {
+    const hx = this.grid.heartPos.x;
+    const hy = this.grid.heartPos.y;
+
+    // Carve a small wing west of heart and claim it
+    const wing: Vec2[] = [];
+    for (let x = hx - 6; x <= hx - 3; x++) {
+      for (let y = hy - 1; y <= hy + 1; y++) {
+        const t = this.grid.get(x, y);
+        if (!t || t.kind === TileKind.Rock || t.kind === TileKind.Heart) continue;
+        t.kind = TileKind.Claimed;
+        t.claimedProgress = 1;
+        t.mark = MarkType.None;
+        t.digProgress = 0;
+        t.fortified = false;
+        wing.push({ x, y });
+      }
+    }
+    // Treasury on two tiles
+    for (const pos of wing.slice(0, 2)) {
+      const t = this.grid.get(pos.x, pos.y)!;
+      t.room = RoomType.Treasury;
+    }
+    // Dirt strip waiting to show contrast next to claimed
+    for (let y = hy - 1; y <= hy + 1; y++) {
+      const t = this.grid.get(hx - 2, y);
+      if (t && t.kind !== TileKind.Heart) {
+        t.kind = TileKind.Dirt;
+        t.room = RoomType.None;
+        t.mark = MarkType.None;
+      }
+    }
+    // Dig-in-progress blocks north of corridor
+    const digTargets = [
+      { x: hx - 1, y: hy - 4 },
+      { x: hx, y: hy - 4 },
+      { x: hx + 1, y: hy - 4 },
+      { x: hx - 1, y: hy - 5 },
+    ];
+    for (const [i, pos] of digTargets.entries()) {
+      const t = this.grid.get(pos.x, pos.y);
+      if (!t) continue;
+      t.kind = TileKind.Earth;
+      t.fortified = false;
+      t.mark = MarkType.Dig;
+      t.digProgress = i === 1 ? 0.72 : i === 0 ? 0.45 : i === 2 ? 0.28 : 0.12;
+      t.room = RoomType.None;
+    }
+    // Ensure corridor to dig targets is claimed
+    for (let y = hy - 3; y <= hy - 1; y++) {
+      for (let x = hx - 1; x <= hx + 1; x++) {
+        const t = this.grid.get(x, y);
+        if (t && t.kind !== TileKind.Heart && t.kind !== TileKind.Rock) {
+          if (t.kind === TileKind.Earth || t.kind === TileKind.Gold) {
+            t.kind = TileKind.Claimed;
+            t.claimedProgress = 1;
+            t.mark = MarkType.None;
+            t.digProgress = 0;
+          }
+        }
+      }
+    }
+
+    // Park workers at dig face
+    const workers = this.creatures.filter((c) => c.isWorker && c.alive);
+    for (let i = 0; i < workers.length; i++) {
+      const w = workers[i];
+      const tx = hx - 1 + (i % 3);
+      const ty = hy - 3;
+      const world = this.grid.tileToWorld(tx, ty);
+      w.x = tx;
+      w.y = ty;
+      w.wx = world.x;
+      w.wz = world.z;
+      w.job = JobType.Idle;
+      w.jobTarget = digTargets[Math.min(i, digTargets.length - 1)];
+      w.workTimer = 0.15;
+      w.setPath(null);
+      // Show work pose without completing excavation during the shot
+      w.job = JobType.Dig;
+      if (w.selectRing) w.selectRing.visible = true;
+    }
+
+    this.grid.refreshTorches();
+    this.gridDirty = true;
+    this.rebuild();
+
+    // Keep dig-in-progress blocks visible for evidence (don't let AI finish them instantly)
+    for (const [i, pos] of digTargets.entries()) {
+      const tile = this.grid.get(pos.x, pos.y);
+      if (!tile) continue;
+      tile.kind = TileKind.Earth;
+      tile.mark = MarkType.Dig;
+      tile.digProgress = i === 1 ? 0.72 : i === 0 ? 0.48 : i === 2 ? 0.3 : 0.15;
+      tile.fortified = false;
+    }
+    this.rebuild();
+    // Spawn dust near dig face
+    for (const pos of digTargets.slice(0, 2)) {
+      const w = this.grid.tileToWorld(pos.x, pos.y);
+      this.renderer.spawnDigDebris(w.x, w.z, 0xc08040);
+    }
+
+    // Frame the action
+    const focus = this.grid.tileToWorld(hx - 2, hy - 2);
+    this.camTarget.set(focus.x, 0, focus.z);
+    this.renderer.camera.position.set(focus.x + 5, 26, focus.z + 16);
+    this.renderer.camera.lookAt(this.camTarget);
+  }
+
   update(dt: number): void {
     if (!this.gameOver) {
       this.time += dt;
@@ -835,9 +971,9 @@ export class Game {
     const claimMarks: Vec2[] = [];
     const fortMarks: Vec2[] = [];
     for (const t of this.grid.tiles) {
-      if (t.mark === MarkType.Dig) digMarks.push({ x: t.x, y: t.y });
-      if (t.mark === MarkType.Claim) claimMarks.push({ x: t.x, y: t.y });
-      if (t.mark === MarkType.Fortify) fortMarks.push({ x: t.x, y: t.y });
+      if (t.mark === MarkType.Dig && this.grid.isDiggable(t.x, t.y)) digMarks.push({ x: t.x, y: t.y });
+      if (t.mark === MarkType.Claim && t.kind === TileKind.Dirt) claimMarks.push({ x: t.x, y: t.y });
+      if (t.mark === MarkType.Fortify && !t.fortified) fortMarks.push({ x: t.x, y: t.y });
     }
 
     const claimedTargets = new Set<string>();
@@ -845,16 +981,34 @@ export class Game {
       if (w.jobTarget && (w.job === JobType.Dig || w.job === JobType.Mine || w.job === JobType.Claim || w.job === JobType.Fortify)) {
         claimedTargets.add(`${w.jobTarget.x},${w.jobTarget.y}`);
       }
+      // Unstick: dig/mine job whose mark vanished or became unreachable
+      if (
+        (w.job === JobType.Dig || w.job === JobType.Mine) &&
+        w.jobTarget &&
+        (!this.grid.get(w.jobTarget.x, w.jobTarget.y) ||
+          this.grid.get(w.jobTarget.x, w.jobTarget.y)!.mark !== MarkType.Dig ||
+          !this.grid.isDiggable(w.jobTarget.x, w.jobTarget.y))
+      ) {
+        w.job = JobType.Idle;
+        w.jobTarget = null;
+        w.setPath(null);
+      }
     }
 
     const idle = workers.filter((w) => w.job === JobType.Idle || (w.job === JobType.Flee && w.fleeTimer <= 0));
     for (const w of idle) {
       w.job = JobType.Idle;
-      // prefer dig/mine
+      w.jobTarget = null;
       let assigned = false;
-      for (const m of digMarks) {
+
+      // Prefer nearest reachable dig marks (edge of cavern first)
+      const digSorted = digMarks
+        .map((m) => ({ m, d: Math.abs(m.x - w.x) + Math.abs(m.y - w.y) }))
+        .sort((a, b) => a.d - b.d);
+      for (const { m } of digSorted) {
         const key = `${m.x},${m.y}`;
         if (claimedTargets.has(key)) continue;
+        if (!this.grid.isReachableSolid(m.x, m.y)) continue;
         const tile = this.grid.get(m.x, m.y)!;
         const path = this.grid.findPathAdjacent(w.x, w.y, m.x, m.y);
         if (!path) continue;
@@ -867,7 +1021,11 @@ export class Game {
         break;
       }
       if (assigned) continue;
-      for (const m of claimMarks) {
+
+      const claimSorted = claimMarks
+        .map((m) => ({ m, d: Math.abs(m.x - w.x) + Math.abs(m.y - w.y) }))
+        .sort((a, b) => a.d - b.d);
+      for (const { m } of claimSorted) {
         const key = `${m.x},${m.y}`;
         if (claimedTargets.has(key)) continue;
         const path = this.grid.findPath(w.x, w.y, m.x, m.y);
@@ -881,9 +1039,11 @@ export class Game {
         break;
       }
       if (assigned) continue;
+
       for (const m of fortMarks) {
         const key = `${m.x},${m.y}`;
         if (claimedTargets.has(key)) continue;
+        if (!this.grid.isReachableSolid(m.x, m.y)) continue;
         const path = this.grid.findPathAdjacent(w.x, w.y, m.x, m.y);
         if (!path) continue;
         w.job = JobType.Fortify;
@@ -895,7 +1055,6 @@ export class Game {
         break;
       }
       if (!assigned && w.goldCarried > 0) {
-        // haul to treasury or heart
         const treasury = this.grid.tiles.find((t) => t.room === RoomType.Treasury);
         const tx = treasury?.x ?? this.grid.heartPos.x;
         const ty = treasury?.y ?? this.grid.heartPos.y;
@@ -1062,8 +1221,9 @@ export class Game {
 
     if (c.job === JobType.Dig || c.job === JobType.Mine) {
       if (!arrived && c.pathIndex < c.path.length) return;
-      // adjacent check
-      if (Math.hypot(c.x - t.x, c.y - t.y) > 1.6) {
+      // Must stand on an orthogonal neighbor
+      const manhattan = Math.abs(c.x - t.x) + Math.abs(c.y - t.y);
+      if (manhattan !== 1 && Math.hypot(c.x - t.x, c.y - t.y) > 1.55) {
         const path = this.grid.findPathAdjacent(c.x, c.y, t.x, t.y);
         if (path) c.setPath(path);
         else {
@@ -1072,52 +1232,81 @@ export class Game {
         }
         return;
       }
+      // Face the block and chip
+      const tw = this.grid.tileToWorld(t.x, t.y);
+      c.mesh.lookAt(tw.x, c.mesh.position.y, tw.z);
       c.workTimer += dt;
-      if (c.workTimer >= 1.2) {
+      // Chip cadence ~0.35s; earth fully dug after ~3 chips (~1.05s)
+      if (c.workTimer >= 0.35) {
         c.workTimer = 0;
+        const wpos = this.grid.tileToWorld(t.x, t.y);
+        this.renderer.spawnDigDebris(wpos.x, wpos.z, t.kind === TileKind.Gold ? 0xe0b040 : 0xc08040);
+        this.renderer.spawnFx(new THREE.Vector3(c.wx, 0.4, c.wz), 0xd0a060, 0.25);
+
         if (t.kind === TileKind.Gold) {
-          const mined = Math.min(50, t.goldAmount);
+          const mined = Math.min(40, t.goldAmount);
           t.goldAmount -= mined;
           c.goldCarried += mined;
+          t.digProgress = Math.min(1, t.digProgress + 0.2);
+          this.gridDirty = true;
           this.mentioneOnce('firstGold', MENTOR_LINES.firstGold);
           if (t.goldAmount <= 0) {
             t.kind = TileKind.Dirt;
             t.mark = MarkType.None;
             t.goldAmount = 0;
+            t.digProgress = 0;
             this.gridDirty = true;
             c.job = JobType.Idle;
             c.jobTarget = null;
           }
         } else if (t.kind === TileKind.Earth) {
-          t.kind = TileKind.Dirt;
-          t.mark = MarkType.None;
+          t.digProgress = Math.min(1, t.digProgress + 0.34);
           this.gridDirty = true;
-          c.job = JobType.Idle;
-          c.jobTarget = null;
+          if (t.digProgress >= 1) {
+            t.kind = TileKind.Dirt;
+            t.mark = MarkType.None;
+            t.digProgress = 0;
+            this.gridDirty = true;
+            c.job = JobType.Idle;
+            c.jobTarget = null;
+          }
         } else {
           t.mark = MarkType.None;
+          t.digProgress = 0;
           c.job = JobType.Idle;
           c.jobTarget = null;
           this.gridDirty = true;
         }
-        this.renderer.spawnFx(new THREE.Vector3(c.wx, 0.3, c.wz), 0xc08040, 0.3);
       }
     } else if (c.job === JobType.Claim) {
-      if (!arrived) return;
+      if (!arrived && c.pathIndex < c.path.length) return;
+      if (Math.hypot(c.x - t.x, c.y - t.y) > 1.2) {
+        const path = this.grid.findPath(c.x, c.y, t.x, t.y);
+        if (path) c.setPath(path);
+        else {
+          c.job = JobType.Idle;
+          c.jobTarget = null;
+        }
+        return;
+      }
       if (t.kind !== TileKind.Dirt) {
         t.mark = MarkType.None;
         c.job = JobType.Idle;
+        c.jobTarget = null;
         this.gridDirty = true;
         return;
       }
       c.workTimer += dt;
-      if (c.workTimer >= 0.9) {
+      // Fast claim — stone floor appears almost instantly
+      if (c.workTimer >= 0.35) {
         t.kind = TileKind.Claimed;
         t.claimedProgress = 1;
         t.mark = MarkType.None;
         this.gridDirty = true;
         c.job = JobType.Idle;
         c.jobTarget = null;
+        const wpos = this.grid.tileToWorld(t.x, t.y);
+        this.renderer.spawnFx(new THREE.Vector3(wpos.x, 0.3, wpos.z), 0xc8bca8, 0.4);
         this.mentioneOnce('claim', MENTOR_LINES.claim);
       }
     } else if (c.job === JobType.Fortify) {

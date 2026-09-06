@@ -278,8 +278,31 @@ html, body, #app {
   #touch-hint { display: none !important; }
 }
 
-/* Wide desktop keeps room tools in main toolbar */
+/* Wide desktop: compact primary bar + Build/Spells sheets (no 13-button wall) */
 @media (min-width: 901px) and (pointer: fine) {
-  .mobile-only-ui, .sheet { display: none !important; }
+  .mobile-only-ui { display: none !important; }
   #pan-zone { display: none !important; }
+  /* Sheets stay available — only hidden via [hidden] attribute */
+  .sheet { display: block; }
+  .sheet[hidden] { display: none !important; }
+  #toolbar.primary-bar {
+    bottom: calc(14px + env(safe-area-inset-bottom, 0px));
+    gap: 8px;
+  }
+  #toolbar.primary-bar .tool,
+  #toolbar.primary-bar .spell,
+  #toolbar.primary-bar .sheet-toggle {
+    min-height: 40px;
+    padding: 8px 14px;
+    font-size: 13px;
+  }
+  .sheet {
+    bottom: calc(64px + env(safe-area-inset-bottom, 0px));
+    width: min(420px, calc(100vw - 24px));
+  }
+  #tooltip {
+    bottom: 70px;
+  }
 }
+
+.desktop-spells { display: none !important; }

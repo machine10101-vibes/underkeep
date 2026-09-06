@@ -44,6 +44,10 @@ export class Creature {
 
   mesh: THREE.Group;
   private bobPhase: number;
+  digAnim = 0;
+  /** Optional pickaxe sub-mesh for dig swing (set by visual). */
+  pickaxe: THREE.Object3D | null = null;
+  selectRing: THREE.Object3D | null = null;
 
   constructor(kind: CreatureKind, tileX: number, tileY: number, grid: Grid) {
     this.id = nextId++;
@@ -75,15 +79,34 @@ export class Creature {
       return;
     }
     this.mesh.visible = true;
+    const digging = this.job === JobType.Dig || this.job === JobType.Mine || this.job === JobType.Claim || this.job === JobType.Fortify;
     const bob =
       this.kind === CreatureKind.Skitterwing
         ? Math.sin(time * 6 + this.bobPhase) * 0.25 + 0.4
-        : Math.sin(time * 8 + this.bobPhase) * 0.04;
+        : digging
+          ? Math.sin(time * 14 + this.bobPhase) * 0.06
+          : Math.sin(time * 8 + this.bobPhase) * 0.04;
     this.mesh.position.set(this.wx, bob, this.wz);
     if (this.stunTimer > 0) {
       this.mesh.rotation.z = Math.sin(time * 20) * 0.3;
     } else {
       this.mesh.rotation.z = 0;
+    }
+    if (this.pickaxe) {
+      if (digging && this.workTimer > 0) {
+        this.digAnim += 0.35;
+        this.pickaxe.rotation.x = -0.6 + Math.sin(this.digAnim * 10) * 0.85;
+        this.pickaxe.rotation.z = Math.sin(this.digAnim * 10) * 0.25;
+        this.pickaxe.visible = true;
+      } else {
+        this.pickaxe.rotation.x = -0.35;
+        this.pickaxe.rotation.z = 0.15;
+        this.pickaxe.visible = this.isWorker;
+      }
+    }
+    if (this.selectRing) {
+      this.selectRing.visible = digging || this.held;
+      this.selectRing.rotation.z = time * 1.5;
     }
   }
 

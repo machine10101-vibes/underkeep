@@ -8,12 +8,14 @@ import { TILE_SIZE, TileKind } from '../game/types';
 import {
   floorMaterial,
   makeBlockEdgeGeo,
+  makeClaimedFloorMesh,
   makeCreatureMesh,
   makeFloorGeo,
   makeGoldVeinGeo,
   makeHeartGeo,
   makeRockGeo,
   makeRoomDecal,
+  makeRoomProps,
   makeTorchMesh,
   makeWallGeo,
   tileMaterial,
@@ -76,8 +78,8 @@ export class DungeonRenderer {
 
   constructor(canvas: HTMLCanvasElement) {
     this.scene = new THREE.Scene();
-    this.scene.background = new THREE.Color(0x18141c);
-    this.scene.fog = new THREE.FogExp2(0x16121a, 0.0075);
+    this.scene.background = new THREE.Color(0x221c24);
+    this.scene.fog = new THREE.FogExp2(0x1e1820, 0.0055);
 
     this.camera = new THREE.PerspectiveCamera(52, 1, 0.1, 220);
     this.camera.position.set(0, 32, 24);
@@ -93,17 +95,17 @@ export class DungeonRenderer {
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    this.renderer.toneMappingExposure = 1.55;
+    this.renderer.toneMappingExposure = 1.6;
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
 
     // Bright enough ambient + hemisphere so PBR tiles read on mobile GPUs
-    const amb = new THREE.AmbientLight(0xd0c4b0, 0.95);
+    const amb = new THREE.AmbientLight(0xe0d4c0, 1.0);
     this.scene.add(amb);
-    const hemi = new THREE.HemisphereLight(0xfff0e0, 0x3a3040, 0.7);
+    const hemi = new THREE.HemisphereLight(0xfff2e4, 0x4a3848, 0.85);
     hemi.position.set(0, 40, 0);
     this.scene.add(hemi);
 
-    const dir = new THREE.DirectionalLight(0xfff0d8, 1.15);
+    const dir = new THREE.DirectionalLight(0xfff2e0, 1.25);
     dir.position.set(22, 48, 14);
     dir.castShadow = true;
     dir.shadow.mapSize.set(1024, 1024);
@@ -117,7 +119,7 @@ export class DungeonRenderer {
     dir.shadow.intensity = 0.55;
     this.scene.add(dir);
 
-    const fill = new THREE.DirectionalLight(0x7090c8, 0.35);
+    const fill = new THREE.DirectionalLight(0x90a8d0, 0.45);
     fill.position.set(-18, 28, -14);
     this.scene.add(fill);
 
@@ -223,60 +225,98 @@ export class DungeonRenderer {
         mesh.position.set(w.x, 0, w.z);
         mesh.castShadow = true;
         mesh.receiveShadow = true;
+        mesh.userData.tileX = tile.x;
+        mesh.userData.tileY = tile.y;
         this.gridGroup.add(mesh);
         this.addEdge(w.x, w.z, 2.85, this.edgeMat);
         this.tileMeshes.set(key, mesh);
         continue;
       }
 
-      if (tile.kind === TileKind.Earth || (tile.kind === TileKind.Gold && !tile.fortified)) {
-        const geo = tile.kind === TileKind.Gold ? makeGoldVeinGeo() : makeWallGeo();
-        const mesh = new THREE.Mesh(geo, tileMaterial(tile.kind, false, tile.room));
-        mesh.position.set(w.x, 0, w.z);
-        mesh.castShadow = true;
-        mesh.receiveShadow = true;
-        this.gridGroup.add(mesh);
-        this.addEdge(
-          w.x,
-          w.z,
-          2.35,
-          tile.kind === TileKind.Gold ? this.goldEdgeMat : this.earthEdgeMat
-        );
-        this.tileMeshes.set(key, mesh);
-        if (tile.mark) {
-          const mark = new THREE.Mesh(
-            new THREE.PlaneGeometry(TILE_SIZE * 0.6, TILE_SIZE * 0.6),
-            new THREE.MeshBasicMaterial({
-              color: tile.mark === 1 ? 0xff4422 : tile.mark === 2 ? 0x44aaff : 0xaaaaaa,
-              transparent: true,
-              opacity: 0.55,
-              depthWrite: false,
-            })
-          );
-          mark.rotation.x = -Math.PI / 2;
-          mark.position.set(w.x, 2.42, w.z);
-          this.gridGroup.add(mark);
-        }
-        continue;
-      }
-
+      // Fortified walls first (kind may still be Earth/Gold)
       if (tile.fortified) {
         const mesh = new THREE.Mesh(makeWallGeo(true), tileMaterial(TileKind.Earth, true, tile.room));
         mesh.position.set(w.x, 0, w.z);
         mesh.castShadow = true;
         mesh.receiveShadow = true;
+        mesh.userData.tileX = tile.x;
+        mesh.userData.tileY = tile.y;
         this.gridGroup.add(mesh);
-        this.addEdge(w.x, w.z, 2.35, this.edgeMat);
+        this.addEdge(w.x, w.z, 2.45, this.edgeMat);
         this.tileMeshes.set(key, mesh);
         continue;
       }
 
-      // floors — Claimed / Dirt / Heart with room-specific materials
-      const floor = new THREE.Mesh(makeFloorGeo(), floorMaterial(tile.kind, tile.room));
-      floor.position.set(w.x, 0, w.z);
-      floor.receiveShadow = true;
-      this.gridGroup.add(floor);
-      this.tileMeshes.set(key, floor);
+      if (tile.kind === TileKind.Earth || tile.kind === TileKind.Gold) {
+        const geo = tile.kind === TileKind.Gold ? makeGoldVeinGeo() : makeWallGeo();
+        const mesh = new THREE.Mesh(geo, tileMaterial(tile.kind, false, tile.room));
+        mesh.position.set(w.x, 0, w.z);
+        // Visual chip/shrink while diggers work (digProgress 0→1)
+        const dig = Math.max(0, Math.min(0.95, tile.digProgress || 0));
+        const s = 1 - dig * 0.7;
+        const sy = 1 - dig * 0.85;
+        mesh.scale.set(s, sy, s);
+        mesh.position.y = -dig * 1.15;
+        mesh.castShadow = true;
+        mesh.receiveShadow = true;
+        mesh.userData.tileX = tile.x;
+        mesh.userData.tileY = tile.y;
+        this.gridGroup.add(mesh);
+        const edgeH = 2.35 * sy + mesh.position.y;
+        this.addEdge(
+          w.x,
+          w.z,
+          Math.max(0.4, edgeH),
+          tile.kind === TileKind.Gold ? this.goldEdgeMat : this.earthEdgeMat
+        );
+        this.tileMeshes.set(key, mesh);
+        if (tile.mark) {
+          const mark = new THREE.Mesh(
+            new THREE.PlaneGeometry(TILE_SIZE * 0.7, TILE_SIZE * 0.7),
+            new THREE.MeshBasicMaterial({
+              color: tile.mark === 1 ? 0xff3322 : tile.mark === 2 ? 0x44aaff : 0xccccaa,
+              transparent: true,
+              opacity: 0.7,
+              depthWrite: false,
+            })
+          );
+          mark.rotation.x = -Math.PI / 2;
+          mark.position.set(w.x, Math.max(0.5, 2.42 * sy + mesh.position.y), w.z);
+          this.gridGroup.add(mark);
+          // Red wireframe cube like DK dig tags
+          if (tile.mark === 1) {
+            const wire = new THREE.LineSegments(
+              new THREE.EdgesGeometry(new THREE.BoxGeometry(TILE_SIZE * 0.92, 2.2 * sy, TILE_SIZE * 0.92)),
+              new THREE.LineBasicMaterial({ color: 0xff4422, transparent: true, opacity: 0.85 })
+            );
+            wire.position.set(w.x, 1.1 * sy + mesh.position.y, w.z);
+            this.gridGroup.add(wire);
+          }
+        }
+        continue;
+      }
+
+      // floors — Claimed uses geometric fitted stone; Dirt/Heart stay simple
+      if (tile.kind === TileKind.Claimed) {
+        const claimed = makeClaimedFloorMesh(tile.room);
+        claimed.position.set(w.x, 0, w.z);
+        claimed.userData.tileX = tile.x;
+        claimed.userData.tileY = tile.y;
+        claimed.traverse((o) => {
+          o.userData.tileX = tile.x;
+          o.userData.tileY = tile.y;
+        });
+        this.gridGroup.add(claimed);
+        this.tileMeshes.set(key, claimed);
+      } else {
+        const floor = new THREE.Mesh(makeFloorGeo(), floorMaterial(tile.kind, tile.room));
+        floor.position.set(w.x, 0, w.z);
+        floor.receiveShadow = true;
+        floor.userData.tileX = tile.x;
+        floor.userData.tileY = tile.y;
+        this.gridGroup.add(floor);
+        this.tileMeshes.set(key, floor);
+      }
 
       if (tile.kind === TileKind.Heart) {
         const heart = makeHeartGeo();
@@ -287,33 +327,38 @@ export class DungeonRenderer {
 
       const decal = makeRoomDecal(tile.room);
       if (decal) {
-        decal.position.set(w.x, 0.14, w.z);
+        decal.position.set(w.x, 0.18, w.z);
         this.gridGroup.add(decal);
+      }
+
+      const props = makeRoomProps(tile.room);
+      if (props) {
+        props.position.set(w.x, 0.14, w.z);
+        this.gridGroup.add(props);
       }
 
       if (tile.mark) {
         const mark = new THREE.Mesh(
-          new THREE.PlaneGeometry(TILE_SIZE * 0.7, TILE_SIZE * 0.7),
+          new THREE.PlaneGeometry(TILE_SIZE * 0.75, TILE_SIZE * 0.75),
           new THREE.MeshBasicMaterial({
             color: tile.mark === 1 ? 0xff4422 : tile.mark === 2 ? 0x44aaff : 0xccccaa,
             transparent: true,
-            opacity: 0.45,
+            opacity: 0.55,
             depthWrite: false,
           })
         );
         mark.rotation.x = -Math.PI / 2;
-        mark.position.set(w.x, 0.16, w.z);
+        mark.position.set(w.x, 0.2, w.z);
         this.gridGroup.add(mark);
       }
 
       if (tile.torch) {
-        // Limit real point lights for mobile perf — every other torch is emissive-only
-        const withLight = this.torches.filter((x) => x.torchLight).length < 14 && (tile.x + tile.y) % 2 === 0;
+        // Denser warm pools — more real lights
+        const withLight = this.torches.filter((x) => x.torchLight).length < 22;
         const torch = makeTorchMesh(withLight) as THREE.Group & {
           flame?: THREE.Mesh;
           torchLight?: THREE.PointLight;
         };
-        // Nestle against nearest solid wall
         let ox = 0.65;
         let oz = 0;
         const neighbors: Array<[number, number, number, number]> = [
@@ -386,10 +431,51 @@ export class DungeonRenderer {
     m.position.copy(pos);
     m.position.y += 0.5;
     this.fxGroup.add(m);
-    const start = this.clock;
-    const obj = m as THREE.Mesh & { _fxStart?: number; _fxLife?: number };
-    obj._fxStart = start;
+    const obj = m as THREE.Mesh & { _fxStart?: number; _fxLife?: number; _vx?: number; _vy?: number; _vz?: number };
+    obj._fxStart = this.clock;
     obj._fxLife = life;
+  }
+
+  /** Dirt/rock chip burst while digging. */
+  spawnDigDebris(wx: number, wz: number, color = 0xc08040): void {
+    for (let i = 0; i < 7; i++) {
+      const m = new THREE.Mesh(
+        new THREE.BoxGeometry(0.08 + Math.random() * 0.1, 0.06 + Math.random() * 0.08, 0.08 + Math.random() * 0.1),
+        new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.95 })
+      );
+      m.position.set(wx + (Math.random() - 0.5) * 0.6, 0.6 + Math.random() * 0.8, wz + (Math.random() - 0.5) * 0.6);
+      const obj = m as THREE.Mesh & { _fxStart?: number; _fxLife?: number; _vx?: number; _vy?: number; _vz?: number };
+      obj._fxStart = this.clock;
+      obj._fxLife = 0.45 + Math.random() * 0.35;
+      obj._vx = (Math.random() - 0.5) * 3;
+      obj._vy = 1.5 + Math.random() * 2.5;
+      obj._vz = (Math.random() - 0.5) * 3;
+      this.fxGroup.add(m);
+    }
+  }
+
+  /** Raycast tile meshes (correct for tall earth tops) — falls back to ground plane. */
+  pickTile(nx: number, ny: number): { x: number; z: number; tileX?: number; tileY?: number } | null {
+    const raycaster = new THREE.Raycaster();
+    raycaster.setFromCamera(new THREE.Vector2(nx, ny), this.camera);
+    const hits = raycaster.intersectObjects(this.gridGroup.children, true);
+    for (const h of hits) {
+      let o: THREE.Object3D | null = h.object;
+      while (o) {
+        if (o.userData && typeof o.userData.tileX === 'number') {
+          return {
+            x: h.point.x,
+            z: h.point.z,
+            tileX: o.userData.tileX as number,
+            tileY: o.userData.tileY as number,
+          };
+        }
+        o = o.parent;
+      }
+    }
+    const ground = this.raycastGround(nx, ny);
+    if (!ground) return null;
+    return { x: ground.x, z: ground.z };
   }
 
   spawnLightning(from: THREE.Vector3, to: THREE.Vector3): void {
@@ -415,20 +501,26 @@ export class DungeonRenderer {
       const s = 1 + Math.sin(this.clock * 3) * 0.05;
       this.heartGroup.heartCore.scale.setScalar(s);
       if (this.heartGroup.heartLight) {
-        this.heartGroup.heartLight.intensity = 2.0 + Math.sin(this.clock * 3) * 0.5;
+        this.heartGroup.heartLight.intensity = 1.1 + Math.sin(this.clock * 3) * 0.25;
       }
       this.heartGroup.rotation.y += dt * 0.3;
     }
     for (const t of this.torches) {
       if (t.torchLight) {
-        t.torchLight.intensity = 2.0 + Math.random() * 0.6 + Math.sin(this.clock * 8 + t.position.x) * 0.25;
+        t.torchLight.intensity = 2.8 + Math.random() * 0.8 + Math.sin(this.clock * 8 + t.position.x) * 0.35;
       }
       if (t.flame) {
         t.flame.scale.setScalar(0.9 + Math.random() * 0.25);
       }
     }
     for (let i = this.fxGroup.children.length - 1; i >= 0; i--) {
-      const c = this.fxGroup.children[i] as THREE.Object3D & { _fxStart?: number; _fxLife?: number };
+      const c = this.fxGroup.children[i] as THREE.Object3D & {
+        _fxStart?: number;
+        _fxLife?: number;
+        _vx?: number;
+        _vy?: number;
+        _vz?: number;
+      };
       if (c._fxStart !== undefined && c._fxLife !== undefined) {
         const age = this.clock - c._fxStart;
         if (age > c._fxLife) {
@@ -436,7 +528,16 @@ export class DungeonRenderer {
         } else if ((c as THREE.Mesh).material) {
           const mat = (c as THREE.Mesh).material as THREE.MeshBasicMaterial;
           if (mat.opacity !== undefined) mat.opacity = 1 - age / c._fxLife;
-          c.position.y += dt * 1.5;
+          if (c._vx !== undefined) {
+            c.position.x += (c._vx ?? 0) * dt;
+            c.position.y += (c._vy ?? 0) * dt;
+            c.position.z += (c._vz ?? 0) * dt;
+            c._vy = (c._vy ?? 0) - 6 * dt;
+            c.rotation.x += dt * 4;
+            c.rotation.z += dt * 3;
+          } else {
+            c.position.y += dt * 1.5;
+          }
         }
       }
     }

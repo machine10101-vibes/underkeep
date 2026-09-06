@@ -1,3 +1,48 @@
+
+/* Boot splash — covers black canvas + hides zero HUD until Game.markReady() */
+body.booting #hud {
+  visibility: hidden;
+  opacity: 0;
+  pointer-events: none;
+}
+#boot-splash {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background:
+    radial-gradient(ellipse at 50% 40%, rgba(80, 40, 16, 0.45) 0%, transparent 55%),
+    radial-gradient(ellipse at center, #1a1008 0%, #080604 72%);
+  color: #e8d5b0;
+  pointer-events: none;
+}
+body:not(.booting) #boot-splash {
+  display: none;
+}
+.boot-splash-inner {
+  text-align: center;
+  padding: 28px 36px;
+  border: 1px solid #6a4020;
+  border-radius: 12px;
+  background: rgba(12, 8, 6, 0.72);
+  box-shadow: 0 0 40px rgba(180, 80, 20, 0.35), inset 0 0 24px rgba(0, 0, 0, 0.5);
+}
+.boot-splash-inner h1 {
+  font-size: 34px;
+  color: #f0a040;
+  margin-bottom: 10px;
+  text-shadow: 0 0 22px rgba(240, 100, 20, 0.65);
+  letter-spacing: 0.06em;
+}
+.boot-splash-inner p {
+  font-size: 14px;
+  color: #c8a870;
+  font-style: italic;
+  letter-spacing: 0.04em;
+}
+
 * { box-sizing: border-box; margin: 0; padding: 0; }
 html, body, #app {
   width: 100%; height: 100%; overflow: hidden;

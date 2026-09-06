@@ -11,6 +11,7 @@ import {
   makeClaimedFloorMesh,
   makeCreatureMesh,
   makeFloorGeo,
+  makeGoldGlitter,
   makeGoldVeinGeo,
   makeHeartGeo,
   makeRockGeo,
@@ -75,6 +76,7 @@ export class DungeonRenderer {
   private edgeMat: THREE.LineBasicMaterial;
   private earthEdgeMat: THREE.LineBasicMaterial;
   private goldEdgeMat: THREE.LineBasicMaterial;
+  private rockEdgeMat: THREE.LineBasicMaterial;
 
   constructor(canvas: HTMLCanvasElement) {
     this.scene = new THREE.Scene();
@@ -147,14 +149,19 @@ export class DungeonRenderer {
       opacity: 0.55,
     });
     this.earthEdgeMat = new THREE.LineBasicMaterial({
-      color: 0x3a2818,
-      transparent: true,
-      opacity: 0.7,
-    });
-    this.goldEdgeMat = new THREE.LineBasicMaterial({
-      color: 0x8a6810,
+      color: 0xa06028,
       transparent: true,
       opacity: 0.85,
+    });
+    this.goldEdgeMat = new THREE.LineBasicMaterial({
+      color: 0xffcc44,
+      transparent: true,
+      opacity: 0.95,
+    });
+    this.rockEdgeMat = new THREE.LineBasicMaterial({
+      color: 0x8890a8,
+      transparent: true,
+      opacity: 0.8,
     });
 
     this.markerMesh = new THREE.Mesh(
@@ -228,7 +235,7 @@ export class DungeonRenderer {
         mesh.userData.tileX = tile.x;
         mesh.userData.tileY = tile.y;
         this.gridGroup.add(mesh);
-        this.addEdge(w.x, w.z, 2.85, this.edgeMat);
+        this.addEdge(w.x, w.z, 3.5, this.rockEdgeMat);
         this.tileMeshes.set(key, mesh);
         continue;
       }
@@ -262,6 +269,12 @@ export class DungeonRenderer {
         mesh.userData.tileX = tile.x;
         mesh.userData.tileY = tile.y;
         this.gridGroup.add(mesh);
+        if (tile.kind === TileKind.Gold && dig < 0.85) {
+          const glitter = makeGoldGlitter();
+          glitter.position.set(w.x, mesh.position.y, w.z);
+          glitter.scale.set(s, sy, s);
+          this.gridGroup.add(glitter);
+        }
         const edgeH = 2.35 * sy + mesh.position.y;
         this.addEdge(
           w.x,

@@ -61,15 +61,28 @@ export function makeClaimedFloorMesh(room: RoomType): THREE.Group {
 
   // Room tint overrides for slab color
   const roomTint: Partial<Record<RoomType, number>> = {
-    [RoomType.Treasury]: 0xc4a050,
-    [RoomType.Lair]: 0x9a7088,
-    [RoomType.Hatchery]: 0x8a9850,
-    [RoomType.Training]: 0xa87868,
-    [RoomType.Library]: 0x6878a8,
-    [RoomType.Portal]: 0x8860a8,
+    [RoomType.Treasury]: 0xd4b040,
+    [RoomType.Lair]: 0xb070a0,
+    [RoomType.Hatchery]: 0x98b040,
+    [RoomType.Training]: 0xc06050,
+    [RoomType.Library]: 0x5070c8,
+    [RoomType.Portal]: 0xa050d0,
   };
   const slabColor = roomTint[room] ?? 0xb8a888;
-  const slabEmissive = room === RoomType.None ? 0x2a2418 : 0x201810;
+  const slabEmissive =
+    room === RoomType.None
+      ? 0x2a2418
+      : room === RoomType.Treasury
+        ? 0x4a3010
+        : room === RoomType.Lair
+          ? 0x401028
+          : room === RoomType.Hatchery
+            ? 0x304010
+            : room === RoomType.Training
+              ? 0x401010
+              : room === RoomType.Library
+                ? 0x101848
+                : 0x301048;
 
   const mortar = new THREE.MeshStandardMaterial({
     color: 0x2a2218,
@@ -86,10 +99,10 @@ export function makeClaimedFloorMesh(room: RoomType): THREE.Group {
 
   const slabMat = new THREE.MeshStandardMaterial({
     color: slabColor,
-    metalness: room === RoomType.Treasury ? 0.45 : 0.18,
+    metalness: room === RoomType.Treasury ? 0.45 : room === RoomType.Portal ? 0.35 : 0.18,
     roughness: room === RoomType.Treasury ? 0.4 : 0.62,
     emissive: slabEmissive,
-    emissiveIntensity: 0.14,
+    emissiveIntensity: room === RoomType.None ? 0.14 : 0.28,
   });
 
   const slab = TILE_SIZE * 0.44;
@@ -171,18 +184,19 @@ export function makeWallGeo(fortified = false): THREE.BufferGeometry {
 }
 
 export function makeRockGeo(): THREE.BufferGeometry {
-  return cachedGeo('rock', () => {
-    const g = new THREE.BoxGeometry(TILE_SIZE * 0.98, 2.9, TILE_SIZE * 0.98, 3, 4, 3);
+  return cachedGeo('rock-v2', () => {
+    // Taller + denser than diggable earth so Rock reads as impassable
+    const g = new THREE.BoxGeometry(TILE_SIZE * 0.99, 3.55, TILE_SIZE * 0.99, 3, 5, 3);
     const pos = g.attributes.position as THREE.BufferAttribute;
     for (let i = 0; i < pos.count; i++) {
-      pos.setX(i, pos.getX(i) + Math.sin(i * 3.1) * 0.06);
-      pos.setY(i, pos.getY(i) + Math.cos(i * 2.3) * 0.05);
-      pos.setZ(i, pos.getZ(i) + Math.sin(i * 4.7) * 0.06);
+      pos.setX(i, pos.getX(i) + Math.sin(i * 3.1) * 0.045);
+      pos.setY(i, pos.getY(i) + Math.cos(i * 2.3) * 0.035);
+      pos.setZ(i, pos.getZ(i) + Math.sin(i * 4.7) * 0.045);
     }
     pos.needsUpdate = true;
-    applyBaseAo(g, -1.45, 2.9, 0.55);
+    applyBaseAo(g, -1.775, 3.55, 0.62);
     g.computeVertexNormals();
-    g.translate(0, 1.45, 0);
+    g.translate(0, 1.775, 0);
     return g;
   });
 }
@@ -431,32 +445,52 @@ export function makeCreatureMesh(color: number, scale: number, kind: string): TH
       g.add(claw);
     }
 
-    // Pickaxe for dig/work animation
+    // Dig arm + oversized pickaxe — readable swing at overview zoom
+    const digArm = new THREE.Group();
+    const upper = new THREE.Mesh(
+      new THREE.CapsuleGeometry(0.07, 0.28, 3, 6),
+      new THREE.MeshStandardMaterial({ color: 0x5a7030, roughness: 0.65 })
+    );
+    upper.position.set(0, 0.18, 0);
+    upper.rotation.z = 0.35;
+    digArm.add(upper);
     const pick = new THREE.Group();
     const haft = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.025, 0.03, 0.55, 5),
-      new THREE.MeshStandardMaterial({ color: 0x6a4420, roughness: 0.85 })
+      new THREE.CylinderGeometry(0.04, 0.05, 0.85, 6),
+      new THREE.MeshStandardMaterial({ color: 0x7a5028, roughness: 0.85 })
     );
-    haft.position.y = 0.2;
+    haft.position.y = 0.35;
     pick.add(haft);
     const headPick = new THREE.Mesh(
-      new THREE.BoxGeometry(0.28, 0.08, 0.08),
-      new THREE.MeshStandardMaterial({ color: 0xb0b8c0, metalness: 0.85, roughness: 0.25 })
+      new THREE.BoxGeometry(0.48, 0.12, 0.12),
+      new THREE.MeshStandardMaterial({
+        color: 0xd0d8e8,
+        metalness: 0.9,
+        roughness: 0.22,
+        emissive: 0x405060,
+        emissiveIntensity: 0.25,
+      })
     );
-    headPick.position.set(0.06, 0.48, 0);
+    headPick.position.set(0.08, 0.78, 0);
     pick.add(headPick);
     const tip = new THREE.Mesh(
-      new THREE.ConeGeometry(0.05, 0.18, 5),
-      new THREE.MeshStandardMaterial({ color: 0xd0d8e0, metalness: 0.8, roughness: 0.22 })
+      new THREE.ConeGeometry(0.08, 0.28, 6),
+      new THREE.MeshStandardMaterial({ color: 0xe8f0ff, metalness: 0.85, roughness: 0.2 })
     );
     tip.rotation.z = Math.PI / 2;
-    tip.position.set(0.24, 0.48, 0);
+    tip.position.set(0.38, 0.78, 0);
     pick.add(tip);
-    pick.position.set(0.28, 0.35, 0.15);
-    pick.rotation.z = 0.15;
-    pick.rotation.x = -0.35;
-    g.add(pick);
-    (g as THREE.Group & { pickaxe?: THREE.Object3D }).pickaxe = pick;
+    const tip2 = tip.clone();
+    tip2.rotation.z = -Math.PI / 2;
+    tip2.position.set(-0.22, 0.78, 0);
+    pick.add(tip2);
+    pick.position.set(0.05, 0.05, 0.05);
+    digArm.add(pick);
+    digArm.position.set(0.42, 0.38, 0.22);
+    digArm.rotation.z = 0.2;
+    digArm.rotation.x = -0.45;
+    g.add(digArm);
+    (g as THREE.Group & { pickaxe?: THREE.Object3D }).pickaxe = digArm;
 
     const ring = new THREE.Mesh(
       new THREE.RingGeometry(0.42, 0.52, 20),
@@ -923,29 +957,29 @@ export function tileMaterial(kind: TileKind, fortified: boolean, _room: RoomType
   }
   switch (kind) {
     case TileKind.Rock:
-      return texturedMat('rock', rockTex(), {
-        metalness: 0.12,
-        roughness: 0.85,
-        emissive: 0x101018,
-        emissiveIntensity: 0.04,
+      return texturedMat('rock-v3', rockTex(), {
+        metalness: 0.18,
+        roughness: 0.72,
+        emissive: 0x282838,
+        emissiveIntensity: 0.12,
         bump: 0.12,
         vertexColors: true,
       });
     case TileKind.Earth:
-      return texturedMat('earth', earthTex(), {
+      return texturedMat('earth-v2', earthTex(), {
         metalness: 0.04,
-        roughness: 0.88,
-        emissive: 0x2a1808,
-        emissiveIntensity: 0.1,
-        bump: 0.14,
+        roughness: 0.9,
+        emissive: 0x3a2008,
+        emissiveIntensity: 0.16,
+        bump: 0.15,
         vertexColors: true,
       });
     case TileKind.Gold:
-      return texturedMat('gold', goldVeinTex(), {
-        metalness: 0.72,
-        roughness: 0.32,
-        emissive: 0x6a4808,
-        emissiveIntensity: 0.3,
+      return texturedMat('gold-v2', goldVeinTex(), {
+        metalness: 0.82,
+        roughness: 0.26,
+        emissive: 0xa07010,
+        emissiveIntensity: 0.55,
         bump: 0.1,
         vertexColors: true,
       });
@@ -1016,8 +1050,8 @@ export function makeRoomProps(room: RoomType): THREE.Group | null {
     g.add(roll2);
   } else if (room === RoomType.Hatchery) {
     const nest = new THREE.Mesh(
-      new THREE.TorusGeometry(0.45, 0.14, 8, 16),
-      new THREE.MeshStandardMaterial({ color: 0x6a8030, roughness: 0.85, emissive: 0x304010, emissiveIntensity: 0.15 })
+      new THREE.TorusGeometry(0.55, 0.16, 8, 16),
+      new THREE.MeshStandardMaterial({ color: 0x6a8030, roughness: 0.85, emissive: 0x405018, emissiveIntensity: 0.28 })
     );
     nest.rotation.x = -Math.PI / 2;
     nest.position.y = 0.16;
@@ -1046,6 +1080,19 @@ export function makeRoomProps(room: RoomType): THREE.Group | null {
       blade.position.set(x, 0.55, 0.05);
       g.add(blade);
     }
+    const dummy = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.18, 0.22, 0.7, 8),
+      new THREE.MeshStandardMaterial({ color: 0x8a6050, roughness: 0.75, emissive: 0x401010, emissiveIntensity: 0.15 })
+    );
+    dummy.position.set(0, 0.4, -0.45);
+    dummy.castShadow = true;
+    g.add(dummy);
+    const head = new THREE.Mesh(
+      new THREE.SphereGeometry(0.16, 8, 6),
+      new THREE.MeshStandardMaterial({ color: 0xc09070, roughness: 0.7 })
+    );
+    head.position.set(0, 0.85, -0.45);
+    g.add(head);
   } else if (room === RoomType.Library) {
     const wood = new THREE.MeshStandardMaterial({ color: 0x5a3a22, roughness: 0.75 });
     const desk = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.12, 0.45), wood);
@@ -1094,6 +1141,47 @@ export function makeRoomProps(room: RoomType): THREE.Group | null {
   } else {
     return null;
   }
+  return g;
+}
+
+
+/** Bright sparkle accents for gold seams (overview-readable). */
+export function makeGoldGlitter(): THREE.Group {
+  const g = new THREE.Group();
+  const mat = new THREE.MeshStandardMaterial({
+    color: 0xffe080,
+    emissive: 0xffcc40,
+    emissiveIntensity: 1.1,
+    metalness: 0.95,
+    roughness: 0.15,
+  });
+  const spots = [
+    [0.35, 1.7, 0.2],
+    [-0.4, 1.35, -0.3],
+    [0.1, 2.0, -0.45],
+    [-0.25, 1.9, 0.4],
+    [0.45, 1.1, 0.35],
+    [-0.5, 2.15, 0.05],
+  ];
+  for (const [x, y, z] of spots) {
+    const s = new THREE.Mesh(new THREE.OctahedronGeometry(0.09 + (Math.abs(x) % 0.05), 0), mat);
+    s.position.set(x, y, z);
+    g.add(s);
+  }
+  // Vertical glitter streak
+  const streak = new THREE.Mesh(
+    new THREE.BoxGeometry(0.12, 1.6, 0.12),
+    new THREE.MeshStandardMaterial({
+      color: 0xffd060,
+      emissive: 0xe0a020,
+      emissiveIntensity: 0.85,
+      metalness: 0.9,
+      roughness: 0.2,
+    })
+  );
+  streak.position.set(0.15, 1.4, -0.1);
+  streak.rotation.z = 0.2;
+  g.add(streak);
   return g;
 }
 

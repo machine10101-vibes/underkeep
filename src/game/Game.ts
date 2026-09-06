@@ -16,6 +16,14 @@ import {
   Vec2,
   TileKind,
 } from './types';
+import {
+  SaveData,
+  clearSave,
+  loadSave,
+  packTiles,
+  unpackTiles,
+  writeSave,
+} from './Save';
 
 const WORKER_BASE_COST = 150;
 const MANA_MAX_BASE = 100;
@@ -56,6 +64,8 @@ export class Game {
   private activeTouches = new Map<number, { clientX: number; clientY: number }>();
   private ignoreMouseUntil = 0;
   private panAccum = { x: 0, y: 0 };
+  private saveAcc = 0;
+  private restoredFromSave = false;
 
   constructor(canvas: HTMLCanvasElement) {
     this.grid = new Grid(40, 40);
@@ -66,35 +76,170 @@ export class Game {
     };
     this.hud.onSpell = (s) => this.castSpell(s);
     this.hud.onOverlayContinue = () => {
-      if (this.gameOver) location.reload();
+      if (this.gameOver) {
+        clearSave();
+        location.reload();
+      }
     };
+    this.hud.onNewGame = () => this.confirmNewGame();
 
-    // starting workers
-    this.spawnCreature(CreatureKind.Scrabbler, this.grid.heartPos.x + 1, this.grid.heartPos.y);
-    this.spawnCreature(CreatureKind.Scrabbler, this.grid.heartPos.x - 1, this.grid.heartPos.y);
-    this.spawnCreature(CreatureKind.Scrabbler, this.grid.heartPos.x, this.grid.heartPos.y + 1);
+    const saved = loadSave();
+    if (saved) {
+      this.applySave(saved);
+      this.restoredFromSave = true;
+      this.hud.say(MENTOR_LINES.resume);
+      // Skip intro — dungeon restored from localStorage
+    } else {
+      // starting workers
+      this.spawnCreature(CreatureKind.Scrabbler, this.grid.heartPos.x + 1, this.grid.heartPos.y);
+      this.spawnCreature(CreatureKind.Scrabbler, this.grid.heartPos.x - 1, this.grid.heartPos.y);
+      this.spawnCreature(CreatureKind.Scrabbler, this.grid.heartPos.x, this.grid.heartPos.y + 1);
 
-    // ~55° elevated camera for DK2-style overview readability
-    const hw = this.grid.tileToWorld(this.grid.heartPos.x, this.grid.heartPos.y);
-    this.camTarget.set(hw.x, 0, hw.z);
-    this.renderer.camera.position.set(hw.x + 4, 28, hw.z + 18);
-    this.renderer.camera.lookAt(this.camTarget);
+      // ~55° elevated camera for DK2-style overview readability
+      const hw = this.grid.tileToWorld(this.grid.heartPos.x, this.grid.heartPos.y);
+      this.camTarget.set(hw.x, 0, hw.z);
+      this.renderer.camera.position.set(hw.x + 4, 28, hw.z + 18);
+      this.renderer.camera.lookAt(this.camTarget);
+
+      this.hud.say(MENTOR_LINES.start);
+      this.hud.showOverlay(
+        'Underkeep',
+        'You are the Keeper of the Underkeep. Dig earth, claim territory, raise rooms, and crush the heroes who dare enter. The Dungeon Heart must not fall.',
+        'Begin'
+      );
+    }
 
     this.bindInput(canvas);
-    this.hud.say(MENTOR_LINES.start);
-    this.hud.showOverlay(
-      'Underkeep',
-      'You are the Keeper of the Underkeep. Dig earth, claim territory, raise rooms, and crush the heroes who dare enter. The Dungeon Heart must not fall.',
-      'Begin'
-    );
-
     this.rebuild();
+    if (saved) this.saveNow();
   }
 
   private mentioneOnce(key: string, line: string): void {
     if (this.mentored.has(key)) return;
     this.mentored.add(key);
     this.hud.say(line);
+  }
+
+  private confirmNewGame(): void {
+    this.hud.showOverlay(
+      'New Game?',
+      'This clears your saved dungeon and starts fresh. Hard refresh will no longer restore the old map.',
+      'Keep Playing',
+      'Erase & Restart'
+    );
+    // Secondary button already wired to onNewGame — temporarily rebind
+    const prev = this.hud.onNewGame;
+    const prevCont = this.hud.onOverlayContinue;
+    this.hud.onOverlayContinue = () => {
+      this.hud.onNewGame = prev;
+      this.hud.onOverlayContinue = prevCont;
+    };
+    this.hud.onNewGame = () => {
+      clearSave();
+      location.reload();
+    };
+  }
+
+  private buildSave(): SaveData {
+    return {
+      v: 1,
+      width: this.grid.width,
+      height: this.grid.height,
+      heartPos: { ...this.grid.heartPos },
+      tiles: packTiles(this.grid.tiles),
+      gold: this.gold,
+      mana: this.mana,
+      creatures: this.creatures
+        .filter((c) => c.alive)
+        .map((c) => ({
+          kind: c.kind,
+          x: c.x,
+          y: c.y,
+          wx: c.wx,
+          wz: c.wz,
+          hp: c.hp,
+          maxHp: c.maxHp,
+          level: c.level,
+          goldCarried: c.goldCarried,
+          hunger: c.hunger,
+          sleepNeed: c.sleepNeed,
+          trainNeed: c.trainNeed,
+          isHero: c.isHero,
+        })),
+      attracted: { ...this.attracted },
+      heroWaveSpawned: this.heroWaveSpawned,
+      heroWaveTimer: this.heroWaveTimer,
+      workerCostScale: this.workerCostScale,
+      portalCooldown: this.portalCooldown,
+      time: this.time,
+      wageAcc: this.wageAcc,
+      mentored: [...this.mentored],
+      gameOver: this.gameOver,
+      won: this.won,
+      cam: {
+        tx: this.camTarget.x,
+        tz: this.camTarget.z,
+        cx: this.renderer.camera.position.x,
+        cy: this.renderer.camera.position.y,
+        cz: this.renderer.camera.position.z,
+      },
+    };
+  }
+
+  private saveNow(): void {
+    if (this.gameOver) return;
+    writeSave(this.buildSave());
+  }
+
+  private applySave(data: SaveData): void {
+    if (data.width !== this.grid.width || data.height !== this.grid.height) {
+      // size mismatch — ignore tiles but still try resources
+    } else {
+      unpackTiles(this.grid.tiles, data.tiles);
+      this.grid.heartPos = { ...data.heartPos };
+    }
+    this.gold = data.gold;
+    this.mana = data.mana;
+    this.attracted = { ...data.attracted };
+    this.heroWaveSpawned = !!data.heroWaveSpawned;
+    this.heroWaveTimer = data.heroWaveTimer ?? 90;
+    this.workerCostScale = data.workerCostScale ?? 0;
+    this.portalCooldown = data.portalCooldown ?? 0;
+    this.time = data.time ?? 0;
+    this.wageAcc = data.wageAcc ?? 0;
+    this.mentored = new Set(data.mentored ?? []);
+    this.gameOver = !!data.gameOver;
+    this.won = !!data.won;
+
+    // Clear default creatures then respawn from save
+    for (const c of this.creatures) {
+      this.renderer.removeEntityMesh(c.mesh);
+      if (c.mesh.parent) c.mesh.parent.remove(c.mesh);
+    }
+    this.creatures = [];
+    for (const sc of data.creatures ?? []) {
+      const c = this.spawnCreature(sc.kind, sc.x, sc.y);
+      c.wx = sc.wx;
+      c.wz = sc.wz;
+      c.hp = sc.hp;
+      c.maxHp = sc.maxHp;
+      c.level = sc.level ?? 1;
+      c.goldCarried = sc.goldCarried ?? 0;
+      c.hunger = sc.hunger ?? 0;
+      c.sleepNeed = sc.sleepNeed ?? 0;
+      c.trainNeed = sc.trainNeed ?? 0;
+      c.syncMesh(this.time);
+    }
+    if (data.cam) {
+      this.camTarget.set(data.cam.tx, 0, data.cam.tz);
+      this.renderer.camera.position.set(data.cam.cx, data.cam.cy, data.cam.cz);
+      this.renderer.camera.lookAt(this.camTarget);
+    } else {
+      const hw = this.grid.tileToWorld(this.grid.heartPos.x, this.grid.heartPos.y);
+      this.camTarget.set(hw.x, 0, hw.z);
+      this.renderer.camera.position.set(hw.x + 4, 28, hw.z + 18);
+      this.renderer.camera.lookAt(this.camTarget);
+    }
   }
 
   private spawnCreature(kind: CreatureKind, x: number, y: number): Creature {
@@ -610,6 +755,7 @@ export class Game {
           this.gridDirty = true;
           this.mentioneOnce('firstRoom', MENTOR_LINES.firstRoom);
           if (room === RoomType.Portal) this.mentioneOnce('portal', MENTOR_LINES.portal);
+          this.saveNow();
         }
       }
     }
@@ -743,6 +889,122 @@ export class Game {
   }
 
 
+
+  /** QA/screenshot: multi-room identity + rock/earth/gold + pickaxe swing. */
+  preparePass4Shot(): void {
+    const hx = this.grid.heartPos.x;
+    const hy = this.grid.heartPos.y;
+
+    const claim = (x: number, y: number, room = RoomType.None) => {
+      const t = this.grid.get(x, y);
+      if (!t || t.kind === TileKind.Heart) return;
+      t.kind = TileKind.Claimed;
+      t.claimedProgress = 1;
+      t.mark = MarkType.None;
+      t.digProgress = 0;
+      t.fortified = false;
+      t.room = room;
+    };
+
+    // Open plaza south/east of heart for rooms
+    for (let x = hx - 1; x <= hx + 5; x++) {
+      for (let y = hy - 1; y <= hy + 4; y++) {
+        claim(x, y);
+      }
+    }
+    // Distinct rooms
+    claim(hx + 2, hy, RoomType.Treasury);
+    claim(hx + 3, hy, RoomType.Treasury);
+    claim(hx + 2, hy + 1, RoomType.Lair);
+    claim(hx + 3, hy + 1, RoomType.Lair);
+    claim(hx + 2, hy + 2, RoomType.Training);
+    claim(hx + 3, hy + 2, RoomType.Training);
+    claim(hx + 4, hy, RoomType.Hatchery);
+    claim(hx + 4, hy + 1, RoomType.Library);
+    claim(hx + 4, hy + 2, RoomType.Portal);
+
+    // Rock | Earth | Gold strip on dig face — unmistakable at overview
+    const faceY = hy - 3;
+    for (let i = 0; i < 2; i++) {
+      const rock = this.grid.get(hx - 1 + i, faceY);
+      if (rock) {
+        rock.kind = TileKind.Rock;
+        rock.fortified = false;
+        rock.mark = MarkType.None;
+        rock.room = RoomType.None;
+        rock.digProgress = 0;
+        rock.goldAmount = 0;
+      }
+    }
+    for (let i = 0; i < 2; i++) {
+      const earth = this.grid.get(hx + 1 + i, faceY);
+      if (earth) {
+        earth.kind = TileKind.Earth;
+        earth.fortified = false;
+        earth.mark = MarkType.Dig;
+        earth.digProgress = i === 0 ? 0.4 : 0.15;
+        earth.room = RoomType.None;
+        earth.goldAmount = 0;
+      }
+    }
+    for (let i = 0; i < 3; i++) {
+      const gold = this.grid.get(hx + 3 + i, faceY);
+      if (gold) {
+        gold.kind = TileKind.Gold;
+        gold.goldAmount = 400;
+        gold.fortified = false;
+        gold.mark = MarkType.Dig;
+        gold.digProgress = 0.08;
+        gold.room = RoomType.None;
+      }
+    }
+    // Corridor to dig face
+    for (let x = hx - 1; x <= hx + 5; x++) {
+      claim(x, hy - 2);
+    }
+
+    // Workers swinging at earth — force mid-swing pose for evidence shot
+    const workers = this.creatures.filter((c) => c.isWorker && c.alive);
+    const digTarget = { x: hx + 1, y: faceY };
+    for (let i = 0; i < workers.length; i++) {
+      const w = workers[i];
+      const tx = hx + (i % 3);
+      const ty = hy - 2;
+      const world = this.grid.tileToWorld(tx, ty);
+      w.x = tx;
+      w.y = ty;
+      w.wx = world.x + (i - 1) * 0.15;
+      w.wz = world.z;
+      w.job = JobType.Dig;
+      w.jobTarget = digTarget;
+      w.workTimer = 0.25;
+      w.digAnim = 0.4 + i * 0.35;
+      w.setPath(null);
+      // Face the dig block and apply one sync so pickaxe is mid-arc
+      const tw = this.grid.tileToWorld(digTarget.x, digTarget.y);
+      w.mesh.lookAt(tw.x, w.mesh.position.y, tw.z);
+      w.syncMesh(this.time + 0.5);
+      if (w.pickaxe) {
+        const wave = Math.sin(w.digAnim * 11);
+        w.pickaxe.rotation.x = -0.9 + wave * 1.35;
+        w.pickaxe.rotation.z = 0.15 + wave * 0.55;
+        w.pickaxe.visible = true;
+      }
+      if (w.selectRing) w.selectRing.visible = true;
+    }
+
+    this.gold = Math.max(this.gold, 800);
+    this.grid.refreshTorches();
+    this.gridDirty = true;
+    this.rebuild();
+    this.saveNow();
+
+    const focus = this.grid.tileToWorld(hx + 2, hy);
+    this.camTarget.set(focus.x, 0, focus.z);
+    this.renderer.camera.position.set(focus.x + 3, 24, focus.z + 14);
+    this.renderer.camera.lookAt(this.camTarget);
+  }
+
   /** QA/screenshot: dig-in-progress + claimed stone + Treasury props in frame. */
   preparePass3Shot(): void {
     const hx = this.grid.heartPos.x;
@@ -865,6 +1127,11 @@ export class Game {
       this.updateHeroWave(dt);
       this.checkHeart();
       this.payWages(dt);
+      this.saveAcc += dt;
+      if (this.saveAcc >= 4) {
+        this.saveAcc = 0;
+        this.saveNow();
+      }
     }
 
     if (this.gridDirty) this.rebuild();
@@ -1269,6 +1536,7 @@ export class Game {
             this.gridDirty = true;
             c.job = JobType.Idle;
             c.jobTarget = null;
+            this.saveNow();
           }
         } else {
           t.mark = MarkType.None;
@@ -1308,6 +1576,7 @@ export class Game {
         const wpos = this.grid.tileToWorld(t.x, t.y);
         this.renderer.spawnFx(new THREE.Vector3(wpos.x, 0.3, wpos.z), 0xc8bca8, 0.4);
         this.mentioneOnce('claim', MENTOR_LINES.claim);
+        this.saveNow();
       }
     } else if (c.job === JobType.Fortify) {
       if (Math.hypot(c.x - t.x, c.y - t.y) > 1.6) return;

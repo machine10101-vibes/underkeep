@@ -24,6 +24,7 @@ export class HUD {
   onToolChange: ((tool: ToolMode) => void) | null = null;
   onSpell: ((spell: SpellId) => void) | null = null;
   onOverlayContinue: (() => void) | null = null;
+  onNewGame: (() => void) | null = null;
 
   constructor() {
     this.goldEl = document.getElementById('gold-value')!;
@@ -60,6 +61,13 @@ export class HUD {
     document.getElementById('overlay-btn')!.addEventListener('click', () => {
       this.hideOverlay();
       this.onOverlayContinue?.();
+    });
+    document.getElementById('overlay-btn-secondary')?.addEventListener('click', () => {
+      this.hideOverlay();
+      this.onNewGame?.();
+    });
+    document.getElementById('btn-new-game')?.addEventListener('click', () => {
+      this.onNewGame?.();
     });
 
     this.btnBuild?.addEventListener('click', () => this.toggleSheet('build'));
@@ -177,10 +185,19 @@ export class HUD {
     }
   }
 
-  showOverlay(title: string, msg: string, btn = 'Continue'): void {
+  showOverlay(title: string, msg: string, btn = 'Continue', secondaryBtn?: string): void {
     this.overlayTitle.textContent = title;
     this.overlayMsg.textContent = msg;
     document.getElementById('overlay-btn')!.textContent = btn;
+    const sec = document.getElementById('overlay-btn-secondary');
+    if (sec) {
+      if (secondaryBtn) {
+        sec.textContent = secondaryBtn;
+        sec.classList.remove('hidden');
+      } else {
+        sec.classList.add('hidden');
+      }
+    }
     this.overlay.classList.remove('hidden');
   }
 
@@ -191,6 +208,8 @@ export class HUD {
 
 export const MENTOR_LINES = {
   start: "The earth awaits your cruelty, Keeper. Dig. Claim. Thrive.",
+  resume: "Welcome back, Keeper. Your dungeon endures — dig on.",
+  newGame: "A fresh Underkeep. The old one is dust.",
   firstGold: "Ah, glittering greed. Stockpile it — Scrabblers don't dig for free forever.",
   firstRoom: "A room! How civilized. Your minions prefer beds to sleeping in the mud.",
   portal: "The Portal hums. Hungry things beyond the veil hear its song.",

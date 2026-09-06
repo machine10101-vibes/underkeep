@@ -89,6 +89,25 @@ export class Grid {
       }
     }
 
+    // Inland rock outcrops (cool gray, taller) so Rock ≠ Earth at overview
+    for (let i = 0; i < 8; i++) {
+      let rx = 5 + Math.floor(Math.random() * (this.width - 10));
+      let ry = 5 + Math.floor(Math.random() * (this.height - 10));
+      // keep clear of heart area
+      if (Math.abs(rx - cx) < 7 && Math.abs(ry - cy) < 7) continue;
+      const blob = 2 + Math.floor(Math.random() * 3);
+      for (let dy = -blob; dy <= blob; dy++) {
+        for (let dx = -blob; dx <= blob; dx++) {
+          if (Math.abs(dx) + Math.abs(dy) > blob) continue;
+          const t = this.get(rx + dx, ry + dy);
+          if (t && t.kind === TileKind.Earth) {
+            t.kind = TileKind.Rock;
+            t.goldAmount = 0;
+          }
+        }
+      }
+    }
+
     // Starting chamber around heart
     for (let dy = -3; dy <= 3; dy++) {
       for (let dx = -3; dx <= 3; dx++) {

@@ -216,29 +216,32 @@ function bumpFromAlbedo(albedo: THREE.CanvasTexture, strength = 1): THREE.Canvas
 }
 
 export function earthTex(): THREE.CanvasTexture {
+  // Warm diggable brown — clearly separate from cool gray rock
   return paintNoise(64, {
     seed: 11,
-    base: [154, 102, 58],
-    dark: [78, 48, 28],
-    light: [186, 140, 88],
+    base: [168, 108, 52],
+    dark: [92, 52, 22],
+    light: [210, 150, 88],
     scale: 5.5,
-    contrast: 1.35,
-    speck: 0.04,
-    speckColor: [120, 90, 50],
+    contrast: 1.45,
+    speck: 0.05,
+    speckColor: [140, 90, 40],
     cracks: true,
   });
 }
 
 export function rockTex(): THREE.CanvasTexture {
+  // Cool dense gray — impassable / taller blocks (must read gray, not black)
   return paintNoise(64, {
     seed: 22,
-    base: [78, 76, 92],
-    dark: [40, 38, 52],
-    light: [110, 112, 128],
-    scale: 4.2,
+    base: [118, 124, 140],
+    dark: [58, 62, 78],
+    light: [175, 182, 198],
+    scale: 3.6,
     contrast: 1.25,
     cracks: true,
-    speck: 0.03,
+    speck: 0.05,
+    speckColor: [210, 215, 230],
   });
 }
 
@@ -282,16 +285,17 @@ export function fortifiedTex(): THREE.CanvasTexture {
 }
 
 export function goldVeinTex(): THREE.CanvasTexture {
+  // Obvious glitter veins readable at overview zoom
   return paintNoise(64, {
     seed: 66,
-    base: [120, 88, 42],
-    dark: [70, 48, 22],
-    light: [200, 160, 60],
-    scale: 4.5,
-    contrast: 1.2,
-    veins: { color: [240, 200, 70], scale: 1.8, thresh: 0.58, seed: 99 },
-    speck: 0.05,
-    speckColor: [255, 220, 100],
+    base: [140, 95, 36],
+    dark: [70, 42, 14],
+    light: [230, 190, 70],
+    scale: 4.2,
+    contrast: 1.35,
+    veins: { color: [255, 230, 90], scale: 1.35, thresh: 0.48, seed: 99 },
+    speck: 0.12,
+    speckColor: [255, 245, 140],
   });
 }
 

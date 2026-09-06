@@ -17,6 +17,7 @@
           <div class="stat" id="stat-mana"><span class="label">Mana</span><span class="value" id="mana-value">0</span><div class="bar"><div id="mana-bar"></div></div></div>
           <div class="stat" id="stat-workers"><span class="label">Scrabblers</span><span class="value" id="workers-value">0</span></div>
           <div class="stat" id="stat-creatures"><span class="label">Minions</span><span class="value" id="creatures-value">0</span></div>
+          <button type="button" id="btn-new-game" class="hud-new-game" title="Clear save and start a new dungeon">New Game</button>
         </div>
 
         <!-- Compact primary bar (desktop + mobile) — rooms/spells in sheets -->
@@ -43,12 +44,12 @@
         <div id="build-sheet" class="sheet" hidden>
           <div class="sheet-head"><span>Build</span><button type="button" class="sheet-close" data-close="build" aria-label="Close">✕</button></div>
           <div class="sheet-grid">
-            <button class="tool room-tool" data-tool="treasury" title="Treasury">💰 Treasury</button>
-            <button class="tool room-tool" data-tool="lair" title="Lair">🛏 Lair</button>
-            <button class="tool room-tool" data-tool="hatchery" title="Hatchery">🍗 Hatchery</button>
-            <button class="tool room-tool" data-tool="training" title="Training">⚔ Training</button>
-            <button class="tool room-tool" data-tool="library" title="Library">📚 Library</button>
-            <button class="tool room-tool" data-tool="portal" title="Portal">🌀 Portal</button>
+            <button class="tool room-tool" data-tool="treasury" title="Treasury — 50 gold">💰 Treasury<span class="cost">50g</span></button>
+            <button class="tool room-tool" data-tool="lair" title="Lair — 100 gold">🛏 Lair<span class="cost">100g</span></button>
+            <button class="tool room-tool" data-tool="hatchery" title="Hatchery — 150 gold">🍗 Hatchery<span class="cost">150g</span></button>
+            <button class="tool room-tool" data-tool="training" title="Training Room — 200 gold (unlocked)">⚔ Training<span class="cost">200g</span></button>
+            <button class="tool room-tool" data-tool="library" title="Library — 250 gold">📚 Library<span class="cost">250g</span></button>
+            <button class="tool room-tool" data-tool="portal" title="Portal — 300 gold">🌀 Portal<span class="cost">300g</span></button>
           </div>
         </div>
 
@@ -72,7 +73,10 @@
         <div id="overlay-panel">
           <h1 id="overlay-title">Underkeep</h1>
           <p id="overlay-msg"></p>
-          <button id="overlay-btn">Continue</button>
+          <div id="overlay-actions">
+            <button id="overlay-btn">Continue</button>
+            <button id="overlay-btn-secondary" class="hidden" type="button">New Game</button>
+          </div>
         </div>
       </div>
     </div>

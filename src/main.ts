@@ -17,14 +17,17 @@ function frame(now: number): void {
 requestAnimationFrame(frame);
 
 const params = new URLSearchParams(location.search);
-if (params.get('shot') === '1') {
-  // Auto-arrange a readable Pass-3 evidence scene after first frames
+if (params.get('shot') === '1' || params.get('shot') === '4') {
+  // Auto-arrange Pass-4 evidence: rooms + rock/earth/gold + pickaxe
   setTimeout(() => {
     const g = game as unknown as {
       hud: { hideOverlay: () => void };
+      preparePass4Shot?: () => void;
       preparePass3Shot?: () => void;
     };
     g.hud.hideOverlay();
-    g.preparePass3Shot?.();
+    if (params.get('shot') === '4' || !g.preparePass3Shot) g.preparePass4Shot?.();
+    else if (params.get('pass') === '3') g.preparePass3Shot?.();
+    else g.preparePass4Shot?.();
   }, 400);
 }

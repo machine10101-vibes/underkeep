@@ -306,3 +306,44 @@ html, body, #app {
 }
 
 .desktop-spells { display: none !important; }
+
+.hud-new-game {
+  align-self: center;
+  margin-left: 8px;
+  background: linear-gradient(180deg, #3a2018, #1a0c08);
+  border: 1px solid #8a4030;
+  color: #e0a080;
+  padding: 6px 10px;
+  border-radius: 6px;
+  font-size: 11px;
+  cursor: pointer;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  pointer-events: auto;
+  touch-action: manipulation;
+}
+.hud-new-game:hover { border-color: #e06040; color: #ffd0b0; }
+.sheet-grid .tool .cost {
+  display: block;
+  font-size: 10px;
+  color: #c0a050;
+  margin-top: 2px;
+  font-weight: 600;
+}
+#overlay-actions { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; }
+#overlay-btn-secondary {
+  background: linear-gradient(180deg, #402018, #201008);
+  border: 1px solid #a05030;
+  color: #ffd0a0;
+  padding: 12px 28px;
+  font-size: 16px;
+  border-radius: 8px;
+  cursor: pointer;
+  min-height: 44px;
+  touch-action: manipulation;
+}
+#overlay-btn-secondary.hidden { display: none; }
+#overlay-btn-secondary:hover { box-shadow: 0 0 16px rgba(220,80,40,0.45); }
+@media (max-width: 900px), (pointer: coarse) {
+  .hud-new-game { padding: 4px 8px; font-size: 9px; margin-left: 4px; }
+}

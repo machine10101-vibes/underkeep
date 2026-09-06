@@ -93,14 +93,26 @@ export class Creature {
       this.mesh.rotation.z = 0;
     }
     if (this.pickaxe) {
-      if (digging && this.workTimer > 0) {
-        this.digAnim += 0.35;
-        this.pickaxe.rotation.x = -0.6 + Math.sin(this.digAnim * 10) * 0.85;
-        this.pickaxe.rotation.z = Math.sin(this.digAnim * 10) * 0.25;
+      const swinging = this.job === JobType.Dig || this.job === JobType.Mine;
+      if (swinging) {
+        // Large arm+tool arc — readable from overview camera
+        this.digAnim += 0.45;
+        const wave = Math.sin(this.digAnim * 11);
+        this.pickaxe.rotation.x = -0.9 + wave * 1.35;
+        this.pickaxe.rotation.z = 0.15 + wave * 0.55;
+        this.pickaxe.rotation.y = wave * 0.25;
+        this.pickaxe.visible = true;
+      } else if (digging) {
+        this.digAnim += 0.2;
+        const wave = Math.sin(this.digAnim * 8);
+        this.pickaxe.rotation.x = -0.55 + wave * 0.5;
+        this.pickaxe.rotation.z = 0.15 + wave * 0.2;
+        this.pickaxe.rotation.y = 0;
         this.pickaxe.visible = true;
       } else {
-        this.pickaxe.rotation.x = -0.35;
-        this.pickaxe.rotation.z = 0.15;
+        this.pickaxe.rotation.x = -0.45;
+        this.pickaxe.rotation.z = 0.2;
+        this.pickaxe.rotation.y = 0;
         this.pickaxe.visible = this.isWorker;
       }
     }

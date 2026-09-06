@@ -59,6 +59,11 @@ export class Creature {
   selectRing: THREE.Object3D | null = null;
   /** Assigned Lair bed tile key "x,y" or null. */
   bedKey: string | null = null;
+  /** Remaining seconds of heal/feast mesh tint pulse. */
+  tintPulse = 0;
+  /** 'heal' green / 'feast' warm / null. */
+  tintMode: 'heal' | 'feast' | null = null;
+  private tintBase = new Map<THREE.Material, { emissive: THREE.Color; intensity: number }>();
 
   constructor(kind: CreatureKind, tileX: number, tileY: number, grid: Grid) {
     this.id = nextId++;
@@ -154,6 +159,53 @@ export class Creature {
     if (this.selectRing) {
       this.selectRing.visible = digging || this.held;
       this.selectRing.rotation.z = time * 1.5;
+    }
+    if (this.tintPulse > 0) {
+      this.tintPulse = Math.max(0, this.tintPulse - 1 / 60);
+      if (this.tintPulse <= 0) this.tintMode = null;
+    }
+    this.applyTintVisual();
+  }
+
+
+  /** Brief screen-friendly mesh tint while healing (green) or eating (warm). */
+  pulseTint(mode: 'heal' | 'feast', seconds = 0.85): void {
+    this.tintMode = mode;
+    this.tintPulse = Math.max(this.tintPulse, seconds);
+  }
+
+  private applyTintVisual(): void {
+    const mats: THREE.MeshStandardMaterial[] = [];
+    this.mesh.traverse((o) => {
+      const m = (o as THREE.Mesh).material;
+      if (!m) return;
+      if (Array.isArray(m)) {
+        for (const mm of m) if (mm instanceof THREE.MeshStandardMaterial) mats.push(mm);
+      } else if (m instanceof THREE.MeshStandardMaterial) {
+        mats.push(m);
+      }
+    });
+    for (const mat of mats) {
+      if (!this.tintBase.has(mat)) {
+        this.tintBase.set(mat, {
+          emissive: mat.emissive.clone(),
+          intensity: mat.emissiveIntensity,
+        });
+      }
+      const base = this.tintBase.get(mat)!;
+      if (this.tintPulse > 0 && this.tintMode) {
+        const pulse = 0.55 + 0.45 * Math.sin(this.tintPulse * 14);
+        if (this.tintMode === 'heal') {
+          mat.emissive.setRGB(0.15 * pulse, 0.95 * pulse, 0.45 * pulse);
+          mat.emissiveIntensity = Math.max(base.intensity, 0.85 + pulse * 0.7);
+        } else {
+          mat.emissive.setRGB(1.0 * pulse, 0.55 * pulse, 0.12 * pulse);
+          mat.emissiveIntensity = Math.max(base.intensity, 0.9 + pulse * 0.75);
+        }
+      } else {
+        mat.emissive.copy(base.emissive);
+        mat.emissiveIntensity = base.intensity;
+      }
     }
   }
 

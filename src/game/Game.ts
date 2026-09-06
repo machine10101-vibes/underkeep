@@ -1257,6 +1257,8 @@ export class Game {
       w.restHealAcc = 1.7;
       w.setPath(null);
       w.syncMesh(this.time);
+      this.renderer.spawnCareSparks(w.wx, w.wz, 'heal', true);
+      w.pulseTint('heal', 2.2);
     }
     // Feaster at Hatchery
     if (workers[1]) {
@@ -1275,7 +1277,8 @@ export class Game {
       w.eatAnim = 2.5;
       w.setPath(null);
       w.syncMesh(this.time);
-      this.renderer.spawnFx(new THREE.Vector3(w.wx, 0.7, w.wz), 0xd0f060, 0.55);
+      this.renderer.spawnCareSparks(w.wx, w.wz, 'feast', true);
+      w.pulseTint('feast', 2.2);
     }
     // Third worker still diggable nearby so dig marks don't starve needs demo
     if (workers[2]) {
@@ -1304,6 +1307,38 @@ export class Game {
     this.camTarget.set(focus.x, 0, focus.z);
     this.renderer.camera.position.set(focus.x + 2, 22, focus.z + 12);
     this.renderer.camera.lookAt(this.camTarget);
+  }
+
+  /** QA/screenshot: Pass 5c louder heal + feast sparks (also usable as heal-only / feast-only). */
+  preparePass5cShot(focus: 'both' | 'heal' | 'feast' = 'both'): void {
+    this.preparePass5bShot();
+    const workers = this.creatures.filter((c) => c.isWorker && c.alive);
+    const sleeper = workers.find((c) => c.job === JobType.Sleep);
+    const eater = workers.find((c) => c.job === JobType.Eat);
+    if (sleeper && (focus === 'both' || focus === 'heal')) {
+      this.renderer.spawnCareSparks(sleeper.wx, sleeper.wz, 'heal', true);
+      sleeper.pulseTint('heal', 2.4);
+      // Extra burst so a single frame always catches sparks
+      for (let i = 0; i < 2; i++) this.renderer.spawnCareSparks(sleeper.wx, sleeper.wz, 'heal', true);
+    }
+    if (eater && (focus === 'both' || focus === 'feast')) {
+      this.renderer.spawnCareSparks(eater.wx, eater.wz, 'feast', true);
+      eater.pulseTint('feast', 2.4);
+      for (let i = 0; i < 2; i++) this.renderer.spawnCareSparks(eater.wx, eater.wz, 'feast', true);
+    }
+    if (focus === 'heal' && sleeper) {
+      const focusW = this.grid.tileToWorld(sleeper.x, sleeper.y);
+      this.camTarget.set(focusW.x, 0, focusW.z);
+      this.renderer.camera.position.set(focusW.x + 2, 16, focusW.z + 10);
+      this.renderer.camera.lookAt(this.camTarget);
+      this.hud.say(MENTOR_LINES.lairResting);
+    } else if (focus === 'feast' && eater) {
+      const focusW = this.grid.tileToWorld(eater.x, eater.y);
+      this.camTarget.set(focusW.x, 0, focusW.z);
+      this.renderer.camera.position.set(focusW.x + 2, 16, focusW.z + 10);
+      this.renderer.camera.lookAt(this.camTarget);
+      this.hud.say(MENTOR_LINES.feasting);
+    }
   }
 
   /** QA/screenshot: dig-in-progress + claimed stone + Treasury props in frame. */
@@ -2117,15 +2152,17 @@ export class Game {
       if (!c.eatAnnounced) {
         c.eatAnnounced = true;
         this.hud.say(MENTOR_LINES.feasting);
-        this.renderer.spawnFx(new THREE.Vector3(c.wx, 0.7, c.wz), 0xd0f060, 0.55);
+        this.renderer.spawnCareSparks(c.wx, c.wz, 'feast', true);
+        c.pulseTint('feast', 1.4);
       }
       // Consume hatchery food while eating
       if (this.hatcheryFood > 0) {
         this.hatcheryFood = Math.max(0, this.hatcheryFood - 1.8 * dt);
         c.hunger = Math.max(0, c.hunger - 70 * dt);
-        // Reliable food-spark VFX while pecking
-        if (Math.random() < dt * 6) {
-          this.renderer.spawnFx(new THREE.Vector3(c.wx, 0.55, c.wz), 0xc0e040, 0.35);
+        // Loud food-spark VFX while pecking (screenshot-readable)
+        if (Math.random() < dt * 5) {
+          this.renderer.spawnCareSparks(c.wx, c.wz, 'feast', false);
+          c.pulseTint('feast', 0.7);
         }
       } else {
         c.hunger = Math.max(0, c.hunger - 12 * dt); // meager scraps
@@ -2149,12 +2186,15 @@ export class Game {
       if (c.hp < c.maxHp) c.hp = Math.min(c.maxHp, c.hp + 12 * dt);
       if (c.hp > before) {
         c.restHealAcc += dt;
-        if (Math.random() < dt * 3) {
-          this.renderer.spawnFx(new THREE.Vector3(c.wx, 0.65, c.wz), 0xa0ffc8, 0.28);
+        if (Math.random() < dt * 4.5) {
+          this.renderer.spawnCareSparks(c.wx, c.wz, 'heal', false);
+          c.pulseTint('heal', 0.75);
         }
         if (c.restHealAcc >= 1.6) {
           c.restHealAcc = 0;
           this.hud.say(MENTOR_LINES.lairResting);
+          this.renderer.spawnCareSparks(c.wx, c.wz, 'heal', true);
+          c.pulseTint('heal', 1.5);
         }
       }
       if (c.sleepNeed < 5 && c.hp >= c.maxHp * 0.95) {

@@ -555,6 +555,76 @@ export class DungeonRenderer {
     obj._fxLife = life;
   }
 
+  /**
+   * Loud, screenshot-readable care sparks (Lair heal / Hatchery feast).
+   * More particles, brighter emissive colors, larger size, ~1.5–2.5s visible.
+   */
+  spawnCareSparks(wx: number, wz: number, mode: 'heal' | 'feast', burst = false): void {
+    const primary = mode === 'heal' ? 0x55ffaa : 0xffcc33;
+    const secondary = mode === 'heal' ? 0xc8ffe8 : 0xffeebb;
+    const tertiary = mode === 'heal' ? 0x2aff88 : 0xffaa22;
+    const count = burst ? 22 : 10;
+    for (let i = 0; i < count; i++) {
+      const size = 0.16 + Math.random() * 0.32;
+      const col = i % 3 === 0 ? secondary : i % 3 === 1 ? primary : tertiary;
+      const m = new THREE.Mesh(
+        new THREE.SphereGeometry(size, 10, 10),
+        new THREE.MeshBasicMaterial({
+          color: col,
+          transparent: true,
+          opacity: 1,
+          depthWrite: false,
+        })
+      );
+      m.position.set(
+        wx + (Math.random() - 0.5) * 0.85,
+        0.45 + Math.random() * 0.7,
+        wz + (Math.random() - 0.5) * 0.85
+      );
+      const obj = m as THREE.Mesh & {
+        _fxStart?: number;
+        _fxLife?: number;
+        _vx?: number;
+        _vy?: number;
+        _vz?: number;
+        _fxFloat?: boolean;
+      };
+      obj._fxStart = this.clock;
+      obj._fxLife = 1.55 + Math.random() * 0.95; // 1.55–2.5s
+      obj._vx = (Math.random() - 0.5) * 1.4;
+      obj._vy = 0.9 + Math.random() * 1.6;
+      obj._vz = (Math.random() - 0.5) * 1.4;
+      obj._fxFloat = true;
+      this.fxGroup.add(m);
+    }
+    const glowSize = burst ? 0.55 : 0.38;
+    const glow = new THREE.Mesh(
+      new THREE.SphereGeometry(glowSize, 12, 12),
+      new THREE.MeshBasicMaterial({
+        color: primary,
+        transparent: true,
+        opacity: 0.85,
+        depthWrite: false,
+      })
+    );
+    glow.position.set(wx, 0.7, wz);
+    const gObj = glow as THREE.Mesh & {
+      _fxStart?: number;
+      _fxLife?: number;
+      _vx?: number;
+      _vy?: number;
+      _vz?: number;
+      _fxFloat?: boolean;
+    };
+    gObj._fxStart = this.clock;
+    gObj._fxLife = burst ? 2.2 : 1.8;
+    gObj._vx = 0;
+    gObj._vy = 0.55;
+    gObj._vz = 0;
+    gObj._fxFloat = true;
+    this.fxGroup.add(glow);
+  }
+
   /** Dirt/rock chip burst while digging. */
   spawnDigDebris(wx: number, wz: number, color = 0xc08040): void {
     for (let i = 0; i < 7; i++) {
@@ -639,21 +709,32 @@ export class DungeonRenderer {
         _vx?: number;
         _vy?: number;
         _vz?: number;
+        _fxFloat?: boolean;
       };
       if (c._fxStart !== undefined && c._fxLife !== undefined) {
         const age = this.clock - c._fxStart;
-        if (age > c._fxLife) {
+        const life = c._fxLife;
+        if (age > life) {
           this.fxGroup.remove(c);
         } else if ((c as THREE.Mesh).material) {
           const mat = (c as THREE.Mesh).material as THREE.MeshBasicMaterial;
-          if (mat.opacity !== undefined) mat.opacity = 1 - age / c._fxLife;
+          const t = age / life;
+          if (mat.opacity !== undefined) mat.opacity = Math.max(0, 1 - t * t);
+          const floaty = !!(c as { _fxFloat?: boolean })._fxFloat;
           if (c._vx !== undefined) {
             c.position.x += (c._vx ?? 0) * dt;
             c.position.y += (c._vy ?? 0) * dt;
             c.position.z += (c._vz ?? 0) * dt;
-            c._vy = (c._vy ?? 0) - 6 * dt;
-            c.rotation.x += dt * 4;
-            c.rotation.z += dt * 3;
+            c._vy = (c._vy ?? 0) - (floaty ? 1.2 : 6) * dt;
+            if (floaty) {
+              // Soft expand then shrink for screenshot readability
+              const s = 1 + Math.sin(t * Math.PI) * 0.45;
+              c.scale.setScalar(s);
+              c.rotation.y += dt * 2;
+            } else {
+              c.rotation.x += dt * 4;
+              c.rotation.z += dt * 3;
+            }
           } else {
             c.position.y += dt * 1.5;
           }

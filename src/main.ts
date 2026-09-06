@@ -64,7 +64,15 @@ function frame(now: number): void {
 requestAnimationFrame(frame);
 
 const params = new URLSearchParams(location.search);
-if (game && (params.get('shot') === '1' || params.get('shot') === '4' || params.get('shot') === '5b')) {
+if (
+  game &&
+  (params.get('shot') === '1' ||
+    params.get('shot') === '4' ||
+    params.get('shot') === '5b' ||
+    params.get('shot') === '5c' ||
+    params.get('shot') === '5c-heal' ||
+    params.get('shot') === '5c-feast')
+) {
   // Auto-arrange evidence shots
   setTimeout(() => {
     const g = game as unknown as {
@@ -72,10 +80,17 @@ if (game && (params.get('shot') === '1' || params.get('shot') === '4' || params.
       preparePass4Shot?: () => void;
       preparePass3Shot?: () => void;
       preparePass5bShot?: () => void;
+      preparePass5cShot?: (focus?: 'both' | 'heal' | 'feast') => void;
     };
     g.hud.hideOverlay();
-    if (params.get('shot') === '5b') g.preparePass5bShot?.();
-    else if (params.get('shot') === '4' || !g.preparePass3Shot) g.preparePass4Shot?.();
+    const shot = params.get('shot');
+    if (shot === '5c-heal') g.preparePass5cShot?.('heal');
+    else if (shot === '5c-feast') g.preparePass5cShot?.('feast');
+    else if (shot === '5c' || shot === '5b') {
+      if (g.preparePass5cShot) g.preparePass5cShot('both');
+      else g.preparePass5bShot?.();
+    }
+    else if (shot === '4' || !g.preparePass3Shot) g.preparePass4Shot?.();
     else if (params.get('pass') === '3') g.preparePass3Shot?.();
     else g.preparePass4Shot?.();
   }, 400);

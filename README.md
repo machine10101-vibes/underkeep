@@ -4,9 +4,9 @@ Original-IP dungeon management game inspired by **Dungeon Keeper 2** (3D). Dark-
 
 ## Play online
 
-**https://machine10101-vibes.github.io/underkeep/?v=pass6.4b**
+**https://machine10101-vibes.github.io/underkeep/?v=pass6.5**
 
-Pass 6.4b: Hand / group-select / attack-move hardened against black-screen regressions.
+Pass 6.5: fog of war / unexplored + idle Scrabbler auto-fortify (keeps 6.4b Hand/group hardenings).
 
 Works on desktop and phones (touch controls).
 

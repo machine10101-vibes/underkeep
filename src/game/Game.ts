@@ -3155,19 +3155,21 @@ export class Game {
       if (!assigned) {
         let best: Vec2 | null = null;
         let bestD = 999;
-        for (const tile of this.grid.tiles) {
-          if (tile.kind !== TileKind.Earth || tile.fortified) continue;
-          if (tile.mark === MarkType.Dig) continue; // don't steal dig marks
-          if (!this.grid.hasAdjacentClaimed(tile.x, tile.y)) continue;
-          if (!this.grid.isReachableSolid(tile.x, tile.y)) continue;
-          // Prefer explored wall faces so FoW doesn't send workers into the dark
-          if (!tile.explored) continue;
-          const key = `${tile.x},${tile.y}`;
-          if (claimedTargets.has(key)) continue;
-          const d = Math.abs(tile.x - w.x) + Math.abs(tile.y - w.y);
-          if (d < bestD && d <= 16) {
-            bestD = d;
-            best = { x: tile.x, y: tile.y };
+        // Scan claimed/heart neighbors only — O(frontier) instead of full map
+        for (const claimed of this.grid.tiles) {
+          if (claimed.kind !== TileKind.Claimed && claimed.kind !== TileKind.Heart) continue;
+          for (const tile of this.grid.neighbors4(claimed.x, claimed.y)) {
+            if (tile.kind !== TileKind.Earth || tile.fortified) continue;
+            if (tile.mark === MarkType.Dig) continue; // don't steal dig marks
+            if (!tile.explored) continue; // FoW: don't send workers into the dark
+            if (!this.grid.isReachableSolid(tile.x, tile.y)) continue;
+            const key = `${tile.x},${tile.y}`;
+            if (claimedTargets.has(key)) continue;
+            const d = Math.abs(tile.x - w.x) + Math.abs(tile.y - w.y);
+            if (d < bestD && d <= 16) {
+              bestD = d;
+              best = { x: tile.x, y: tile.y };
+            }
           }
         }
         if (best) {

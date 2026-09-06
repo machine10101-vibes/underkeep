@@ -63,6 +63,8 @@ Playable Vite + TypeScript + Three.js slice at `/workspace/underkeep/game`.
 
 Implemented: grid dig/claim/fortify/mine, Dungeon Heart lose condition, Scrabblers + Create Worker, mana from claimed tiles, Speed + Lightning, hand pick/drop/slap (combat stun on drop), rooms (Treasury/Lair/Hatchery/Training/Library stub/Portal), Portal attraction (Skitterwing/Rattlekin/Emberling), sleep/eat/train/fight jobs, one hero wave, HUD + mentor lines, PBR + shadows + fog + bloom/color grade + emissive heart/torches.
 
+Pass 7: Gold-border claimed flagstones (DK2 ownership read), health flowers above units, 3D keeper hand, gold haul bags, walk cycles, isometric camera damping, auto-claim dirt adjacent to owned land, plant-at-face digging, melee lunge/knockback.
+
 Pass 5: WebGL context-loss recovery + incremental dig visuals (no full rebuild per chip), smoother creature facing/path follow, Dig/Mine plant-at-face + pickaxe cycle + gold haul to Treasury, Lair bed capacity/rest/heal, Hatchery food regen + hunger eat loop (workers + minions), mentor feedback.
 
 Gaps / later: possess, traps/doors, Combat Pit, research, workshop, Prison/Torture conversion, richer pathing through walls for heroes, audio, GLTF art upgrades.
@@ -76,3 +78,6 @@ Feel targets only — original IP art:
 - Creatures: readable silhouettes at overview zoom
 - Warm torch pools; heart glow secondary to terrain readability
 - Angled elevated camera; clear tile seams; FoW optional later
+- Gold/brass frame on every claimed tile (the signature ownership read)
+- Health flowers above creatures (red minions / pale heroes); petals drop with HP
+- Workers plant at the dig face and hop while claiming

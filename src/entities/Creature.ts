@@ -63,6 +63,13 @@ export class Creature {
   /** Optional pickaxe sub-mesh for dig swing (set by visual). */
   pickaxe: THREE.Object3D | null = null;
   selectRing: THREE.Object3D | null = null;
+  healthFlower: THREE.Object3D | null = null;
+  goldBag: THREE.Object3D | null = null;
+  /** Walk-cycle phase for limb swing. */
+  walkCycle = 0;
+  moving = false;
+  /** Brief melee lunge after a hit. */
+  attackPulse = 0;
   /** Assigned Lair bed tile key "x,y" or null. */
   bedKey: string | null = null;
   /** Remaining seconds of heal/feast mesh tint pulse. */
@@ -109,7 +116,7 @@ export class Creature {
     if (!Number.isFinite(this.y)) this.y = 0;
   }
 
-  syncMesh(time: number): void {
+  syncMesh(time: number, dt = 1 / 60): void {
     try {
       this.clampStats();
       if (!this.mesh) return;
@@ -127,30 +134,40 @@ export class Creature {
           this.selectRing.rotation.z = time * 3;
         }
         if (this.pickaxe) this.pickaxe.visible = false;
+        this.updateHealthFlower(time);
+        if (this.goldBag) this.goldBag.visible = this.goldCarried > 0;
         return;
       }
     const digging = this.job === JobType.Dig || this.job === JobType.Mine || this.job === JobType.Claim || this.job === JobType.Fortify;
     const sleeping = this.job === JobType.Sleep;
     const eating = this.job === JobType.Eat;
-    if (eating) this.eatAnim += 0.35;
+    const claiming = this.job === JobType.Claim;
+    const fighting = this.job === JobType.Fight;
+    if (eating) this.eatAnim += dt * 21;
+    if (this.moving) this.walkCycle += dt * 10;
+    if (this.attackPulse > 0) this.attackPulse = Math.max(0, this.attackPulse - dt * 4);
     const bob =
       this.kind === CreatureKind.Skitterwing
         ? Math.sin(time * 6 + this.bobPhase) * 0.25 + 0.4
-        : digging
+        : digging && !claiming
           ? Math.sin(time * 14 + this.bobPhase) * 0.06
-          : sleeping
-            ? Math.sin(time * 2 + this.bobPhase) * 0.02
-            : eating
-              ? Math.sin(this.eatAnim * 14 + this.bobPhase) * 0.1
-              : Math.sin(time * 8 + this.bobPhase) * 0.04;
-    const yOff = sleeping ? 0.12 : eating ? 0.05 + Math.abs(Math.sin(this.eatAnim * 14)) * 0.08 : 0;
+          : claiming
+            ? Math.abs(Math.sin(time * 11 + this.bobPhase)) * 0.38
+            : sleeping
+              ? Math.sin(time * 2 + this.bobPhase) * 0.02
+              : eating
+                ? Math.sin(this.eatAnim * 14 + this.bobPhase) * 0.1
+                : this.moving
+                  ? Math.abs(Math.sin(this.walkCycle)) * 0.06
+                  : Math.sin(time * 8 + this.bobPhase) * 0.04;
+    const yOff = sleeping ? 0.12 : eating ? 0.05 + Math.abs(Math.sin(this.eatAnim * 14)) * 0.08 : claiming ? 0.04 : 0;
     this.mesh.position.set(this.wx, bob + yOff, this.wz);
     // Smooth Y facing — avoid lookAt snap/jitter
     let face = this.facing;
     let d = this.facingTarget - face;
     while (d > Math.PI) d -= Math.PI * 2;
     while (d < -Math.PI) d += Math.PI * 2;
-    face += d * Math.min(1, 10 * (1 / 60)); // ~frame-rate independent-ish; dt applied in move
+    face += d * Math.min(1, 12 * dt);
     this.facing = face;
     this.mesh.rotation.y = this.facing;
     if (this.stunTimer > 0) {
@@ -162,6 +179,9 @@ export class Creature {
       // Brief peck/bob pose while feasting
       this.mesh.rotation.x = Math.sin(this.eatAnim * 14) * 0.35;
       this.mesh.rotation.z = Math.sin(this.eatAnim * 10) * 0.12;
+    } else if (fighting && this.attackPulse > 0) {
+      this.mesh.rotation.x = this.attackPulse * 0.45;
+      this.mesh.rotation.z = 0;
     } else {
       this.mesh.rotation.z = 0;
       this.mesh.rotation.x = 0;
@@ -170,14 +190,14 @@ export class Creature {
       const swinging = this.job === JobType.Dig || this.job === JobType.Mine;
       if (swinging) {
         // Large arm+tool arc — readable from overview camera
-        this.digAnim += 0.45;
+        this.digAnim += dt * 27;
         const wave = Math.sin(this.digAnim * 11);
         this.pickaxe.rotation.x = -0.9 + wave * 1.35;
         this.pickaxe.rotation.z = 0.15 + wave * 0.55;
         this.pickaxe.rotation.y = wave * 0.25;
         this.pickaxe.visible = true;
       } else if (digging) {
-        this.digAnim += 0.2;
+        this.digAnim += dt * 12;
         const wave = Math.sin(this.digAnim * 8);
         this.pickaxe.rotation.x = -0.55 + wave * 0.5;
         this.pickaxe.rotation.z = 0.15 + wave * 0.2;
@@ -190,18 +210,49 @@ export class Creature {
         this.pickaxe.visible = this.isWorker;
       }
     }
+    this.applyWalkLimbs(sleeping || eating || this.stunTimer > 0);
     if (this.selectRing) {
       this.selectRing.visible = digging || this.held || this.selected;
       this.selectRing.rotation.z = time * 1.5;
     }
+    if (this.goldBag) this.goldBag.visible = this.goldCarried > 8;
+    this.updateHealthFlower(time);
     if (this.tintPulse > 0) {
-      this.tintPulse = Math.max(0, this.tintPulse - 1 / 60);
+      this.tintPulse = Math.max(0, this.tintPulse - dt);
       if (this.tintPulse <= 0) this.tintMode = null;
     }
     this.applyTintVisual();
     } catch (err) {
       console.warn('[underkeep] syncMesh failed', err);
     }
+  }
+
+  private applyWalkLimbs(lock = false): void {
+    const amp = lock ? 0 : this.moving ? 0.55 : 0;
+    const w = this.walkCycle;
+    this.mesh.traverse((o) => {
+      const tag = o.userData?.walkLimb as string | undefined;
+      if (!tag) return;
+      const base = o.userData.baseRot as { x: number; y: number; z: number } | undefined;
+      const bx = base?.x ?? 0;
+      const by = base?.y ?? 0;
+      const bz = base?.z ?? 0;
+      if (tag === 'legL' || tag === 'armR') o.rotation.set(bx + Math.sin(w) * amp, by, bz);
+      else if (tag === 'legR' || tag === 'armL') o.rotation.set(bx + Math.sin(w + Math.PI) * amp, by, bz);
+    });
+  }
+
+  private updateHealthFlower(time: number): void {
+    if (!this.healthFlower) return;
+    const ratio = this.maxHp > 0 ? Math.max(0, Math.min(1, this.hp / this.maxHp)) : 1;
+    const petals = (this.healthFlower as THREE.Object3D & { petals?: THREE.Mesh[] }).petals;
+    if (petals) {
+      const shown = Math.max(0, Math.ceil(ratio * 5));
+      for (let i = 0; i < petals.length; i++) petals[i].visible = i < shown;
+    }
+    this.healthFlower.position.y = 1.85 / Math.max(0.35, this.mesh.scale.x || 1) + Math.sin(time * 2.4 + this.bobPhase) * 0.04;
+    this.healthFlower.rotation.y = time * 0.6;
+    this.healthFlower.visible = this.alive && !this.held;
   }
 
 
@@ -275,8 +326,14 @@ export class Creature {
   }
 
   moveAlongPath(dt: number, grid: Grid): boolean {
-    if (this.stunTimer > 0 || this.held) return false;
-    if (this.pathIndex >= this.path.length) return true;
+    if (this.stunTimer > 0 || this.held) {
+      this.moving = false;
+      return false;
+    }
+    if (this.pathIndex >= this.path.length) {
+      this.moving = false;
+      return true;
+    }
     const target = this.path[this.pathIndex];
     const w = grid.tileToWorld(target.x, target.y);
     const spd = this.speed * (this.speedBuff > 0 ? 1.8 : 1) * TILE_SIZE;
@@ -284,23 +341,25 @@ export class Creature {
     const dz = w.z - this.wz;
     const dist = Math.hypot(dx, dz);
     // Arrive threshold — slightly soft to reduce corner jitter
-    if (dist < 0.12) {
+    if (dist < 0.1) {
       this.wx = w.x;
       this.wz = w.z;
       this.x = target.x;
       this.y = target.y;
       this.pathIndex++;
+      this.moving = this.pathIndex < this.path.length;
       return this.pathIndex >= this.path.length;
     }
     const step = Math.min(dist, spd * dt);
     this.wx += (dx / dist) * step;
     this.wz += (dz / dist) * step;
+    this.moving = true;
     this.faceToward(w.x, w.z);
     // Smooth facing in sync with dt
     let d = this.facingTarget - this.facing;
     while (d > Math.PI) d -= Math.PI * 2;
     while (d < -Math.PI) d += Math.PI * 2;
-    this.facing += d * Math.min(1, 12 * dt);
+    this.facing += d * Math.min(1, 14 * dt);
     // update tile occupancy approx
     const tp = grid.worldToTile(this.wx, this.wz);
     if (grid.inBounds(tp.x, tp.y)) {

@@ -104,7 +104,9 @@ if (
     params.get('shot') === '6.5' ||
     params.get('shot') === '65' ||
     params.get('shot') === '6.5-fow' ||
-    params.get('shot') === '6.5-fortify')
+    params.get('shot') === '6.5-fortify' ||
+    params.get('shot') === '7' ||
+    params.get('shot') === '7.0')
 ) {
   // Auto-arrange evidence shots
   setTimeout(() => {
@@ -123,10 +125,12 @@ if (
       preparePass64Shot?: () => void;
       preparePass64bShot?: () => void;
       preparePass65Shot?: (focus?: 'fow' | 'fortify' | 'both') => void;
+      preparePass7Shot?: () => void;
     };
     g.hud.hideOverlay();
     const shot = params.get('shot');
-    if (shot === '6.5-fortify') g.preparePass65Shot?.('fortify');
+    if (shot === '7' || shot === '7.0') g.preparePass7Shot?.();
+    else if (shot === '6.5-fortify') g.preparePass65Shot?.('fortify');
     else if (shot === '6.5-fow') g.preparePass65Shot?.('fow');
     else if (shot === '6.5' || shot === '65') g.preparePass65Shot?.('both');
     else if (shot === '6.4b' || shot === '64b') g.preparePass64bShot?.();

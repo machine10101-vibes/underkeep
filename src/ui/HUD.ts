@@ -347,6 +347,7 @@ export const MENTOR_LINES = {
   attackHero: "Hunt them down! Fighters surge toward the heroes.",
   fog: "Beyond the torchlight — unexplored dark. Dig and claim to push the fog back.",
   autoFortify: "Idle Scrabblers reinforce soft earth walls on their own. Rock still laughs at them.",
+  autoClaim: "Scrabblers claim freshly dug earth on their own. Gold borders mean the land is yours.",
   heroesSoon: "Footsteps in the dark… heroes approach. Fortify doors, set traps, rally fighters.",
   heroesImminent: "Steel at the gate! Heroes arrive any moment.",
   heroEngage: "Heroes clash with your minions — doors and traps earn their keep.",

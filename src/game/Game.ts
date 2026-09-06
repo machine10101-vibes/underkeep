@@ -69,6 +69,10 @@ export class Game {
   private paint = false;
   private lastPaint: Vec2 | null = null;
   private camTarget = new THREE.Vector3(0, 0, 0);
+  private camVel = new THREE.Vector3();
+  private zoomPending = 0;
+  private canvas: HTMLCanvasElement;
+  private lastHand: { x: number; z: number } | null = null;
   private keys = new Set<string>();
   private mentored = new Set<string>();
   // touch / mobile
@@ -103,6 +107,7 @@ export class Game {
   private healUnlocked = false;
 
   constructor(canvas: HTMLCanvasElement) {
+    this.canvas = canvas;
     // HUD first so New Game / sheets stay wired even if boot later fails
     this.hud = new HUD();
     this.marqueeEl = document.getElementById('select-marquee');
@@ -111,6 +116,8 @@ export class Game {
       if (t !== 'select') {
         this.cancelBoxSelect();
       }
+      this.canvas.style.cursor = t === 'select' ? 'none' : 'crosshair';
+      if (t !== 'select') this.renderer.setKeeperHand(0, 0, false);
     };
     this.hud.onSpell = (s) => this.castSpell(s);
     this.hud.onOverlayContinue = () => {
@@ -139,6 +146,8 @@ export class Game {
     }
 
     this.bindInput(canvas);
+    this.canvas.style.cursor = this.tool === 'select' ? 'none' : 'crosshair';
+    canvas.addEventListener('mouseleave', () => this.renderer.setKeeperHand(0, 0, false));
     this.rebuild();
     this.syncAllEntityMeshes();
 
@@ -311,7 +320,7 @@ export class Game {
 
     const hw = this.grid.tileToWorld(this.grid.heartPos.x, this.grid.heartPos.y);
     this.camTarget.set(hw.x, 0, hw.z);
-    this.renderer.camera.position.set(hw.x + 4, 28, hw.z + 18);
+    this.renderer.camera.position.set(hw.x + 6, 34, hw.z + 22);
     this.renderer.camera.lookAt(this.camTarget);
 
     this.hud.say(MENTOR_LINES.start);
@@ -482,7 +491,7 @@ export class Game {
       this.renderer.camera.lookAt(this.camTarget);
     } else {
       this.camTarget.set(hw.x, 0, hw.z);
-      this.renderer.camera.position.set(hw.x + 4, 28, hw.z + 18);
+      this.renderer.camera.position.set(hw.x + 6, 34, hw.z + 22);
       this.renderer.camera.lookAt(this.camTarget);
     }
 
@@ -498,9 +507,16 @@ export class Game {
       stats.scale
     );
     c.setMesh(mesh);
-    const extras = mesh as THREE.Group & { pickaxe?: THREE.Object3D; selectRing?: THREE.Object3D };
+    const extras = mesh as THREE.Group & {
+      pickaxe?: THREE.Object3D;
+      selectRing?: THREE.Object3D;
+      healthFlower?: THREE.Object3D;
+      goldBag?: THREE.Object3D;
+    };
     c.pickaxe = extras.pickaxe ?? null;
     c.selectRing = extras.selectRing ?? null;
+    c.healthFlower = extras.healthFlower ?? null;
+    c.goldBag = extras.goldBag ?? null;
     this.renderer.addEntityMesh(mesh);
     this.creatures.push(c);
     return c;
@@ -699,8 +715,8 @@ export class Game {
         try {
           const hit = this.pointerToWorld(e, canvas);
           if (hit && Number.isFinite(hit.x) && Number.isFinite(hit.z)) {
-            this.held.wx = hit.x;
-            this.held.wz = hit.z;
+            this.held.wx += (hit.x - this.held.wx) * 0.42;
+            this.held.wz += (hit.z - this.held.wz) * 0.42;
           }
         } catch (err) {
           console.warn('[underkeep] held follow failed', err);
@@ -710,7 +726,7 @@ export class Game {
 
     canvas.addEventListener('wheel', (e) => {
       e.preventDefault();
-      this.zoomBy(-Math.sign(e.deltaY) * 1.5);
+      this.zoomPending += -Math.sign(e.deltaY) * 1.8;
     }, { passive: false });
 
     // --- Touch controls ---
@@ -786,7 +802,7 @@ export class Game {
             const ratio = dist / this.pinchStartDist;
             // pinch out = zoom in (lower cam Y toward ground along look dir)
             const cam = this.renderer.camera;
-            const targetY = THREE.MathUtils.clamp(this.pinchStartCamY / ratio, 12, 45);
+            const targetY = THREE.MathUtils.clamp(this.pinchStartCamY / ratio, 10, 48);
             const dy = targetY - cam.position.y;
             if (Math.abs(dy) > 0.01) {
               const dir = new THREE.Vector3();
@@ -850,8 +866,8 @@ export class Game {
         try {
           const hit = this.pointerToWorld(p, canvas);
           if (hit && Number.isFinite(hit.x) && Number.isFinite(hit.z)) {
-            this.held.wx = hit.x;
-            this.held.wz = hit.z;
+            this.held.wx += (hit.x - this.held.wx) * 0.42;
+            this.held.wz += (hit.z - this.held.wz) * 0.42;
           }
         } catch { /* ignore held follow */ }
         this.updatePointerHover(p, canvas);
@@ -1022,10 +1038,18 @@ export class Game {
     const tp = this.pointerToTile(e, canvas);
     if (!tp || !this.grid.inBounds(tp.x, tp.y)) {
       this.renderer.setHover(0, 0, false);
+      this.renderer.setKeeperHand(0, 0, false);
       return;
     }
     const w = this.grid.tileToWorld(tp.x, tp.y);
     this.renderer.setHover(w.x, w.z, true, this.toolColor());
+    const hit = this.pointerToWorld(e, canvas);
+    if (hit && this.tool === 'select') {
+      this.lastHand = { x: hit.x, z: hit.z };
+      this.renderer.setKeeperHand(hit.x, hit.z, true, !!this.held);
+    } else {
+      this.renderer.setKeeperHand(0, 0, false);
+    }
     const tile = this.grid.get(tp.x, tp.y);
     if (tile) {
       let room =
@@ -1076,11 +1100,15 @@ export class Game {
   }
 
   private zoomBy(amount: number): void {
+    this.zoomPending += amount;
+  }
+
+  private applyZoom(amount: number): void {
     const cam = this.renderer.camera;
     const dir = new THREE.Vector3();
     cam.getWorldDirection(dir);
     cam.position.addScaledVector(dir, amount);
-    cam.position.y = THREE.MathUtils.clamp(cam.position.y, 12, 45);
+    cam.position.y = THREE.MathUtils.clamp(cam.position.y, 10, 48);
     cam.lookAt(this.camTarget.x, 0, this.camTarget.z);
   }
 
@@ -2644,6 +2672,45 @@ export class Game {
     this.renderer.camera.lookAt(this.camTarget);
   }
 
+  /** QA/screenshot: Pass 7 gold-border claimed land, health flowers, gold haul, isometric camera. */
+  preparePass7Shot(): void {
+    this.hud.hideOverlay();
+    this.preparePass4Shot();
+    const hx = this.grid.heartPos.x;
+    const hy = this.grid.heartPos.y;
+    this.gold = 2200;
+    // Fresh dirt next to claimed — auto-claim / gold-border contrast
+    const dirt = this.grid.get(hx + 1, hy + 3);
+    if (dirt && dirt.kind !== TileKind.Heart) {
+      dirt.kind = TileKind.Dirt;
+      dirt.room = RoomType.None;
+      dirt.mark = MarkType.Claim;
+      dirt.fortified = false;
+    }
+    for (const c of this.creatures) {
+      if (!c.alive) continue;
+      c.clampStats();
+      if (c.isWorker) {
+        c.goldCarried = 90;
+        c.job = JobType.Mine;
+        c.hp = c.maxHp * 0.55;
+      } else if (!c.isHero) {
+        c.hp = c.maxHp * 0.7;
+      }
+      c.syncMesh(this.time, 0.016);
+    }
+    const extra = this.spawnCreature(CreatureKind.Rattlekin, hx - 1, hy + 1);
+    extra.hp = extra.maxHp * 0.4;
+    extra.syncMesh(this.time, 0.016);
+    this.rebuild();
+    const focus = this.grid.tileToWorld(hx + 1, hy + 1);
+    this.camTarget.set(focus.x, 0, focus.z);
+    this.renderer.camera.position.set(focus.x + 5, 28, focus.z + 18);
+    this.renderer.camera.lookAt(this.camTarget);
+    this.hud.setTooltip('Gold-border claimed tiles · health flowers · gold haul');
+    this.hud.sayNow('Claimed land wears gold. Flowers measure health. Scrabblers haul the glitter home.');
+  }
+
 
   /** QA/screenshot: Pass 6.4b Hand pick + shift multi-select + attack-move, no blackout. */
   preparePass64bShot(): void {
@@ -2887,7 +2954,7 @@ export class Game {
         try {
           if (c.alive) {
             c.clampStats();
-            c.syncMesh(this.time);
+            c.syncMesh(this.time, dt);
             // FoW: hide units on unexplored tiles (explored stays visible). Never throw.
             try {
               if (c.mesh) {
@@ -2911,6 +2978,8 @@ export class Game {
       }
 
       this.renderer.update(dt);
+      const hw = this.grid.tileToWorld(this.grid.heartPos.x, this.grid.heartPos.y);
+      this.renderer.setHeartGold(this.gold, hw.x, hw.z);
       this.hud.update(dt);
       if (this.selected || this.held) this.refreshInspector();
       this.hud.updateStats(
@@ -2963,23 +3032,36 @@ export class Game {
 
   private updateCamera(dt: number): void {
     const cam = this.renderer.camera;
-    const speed = 18;
+    const accel = 36;
     const forward = new THREE.Vector3();
     cam.getWorldDirection(forward);
     forward.y = 0;
     forward.normalize();
     const right = new THREE.Vector3().crossVectors(forward, new THREE.Vector3(0, 1, 0)).normalize();
-    const move = new THREE.Vector3();
-    if (this.keys.has('w') || this.keys.has('arrowup')) move.add(forward);
-    if (this.keys.has('s') || this.keys.has('arrowdown')) move.sub(forward);
-    if (this.keys.has('a') || this.keys.has('arrowleft')) move.sub(right);
-    if (this.keys.has('d') || this.keys.has('arrowright')) move.add(right);
-    if (move.lengthSq() > 0) {
-      move.normalize().multiplyScalar(speed * dt);
-      cam.position.add(move);
-      this.camTarget.add(move);
-      cam.lookAt(this.camTarget.x, 0, this.camTarget.z);
+    const wish = new THREE.Vector3();
+    if (this.keys.has('w') || this.keys.has('arrowup')) wish.add(forward);
+    if (this.keys.has('s') || this.keys.has('arrowdown')) wish.sub(forward);
+    if (this.keys.has('a') || this.keys.has('arrowleft')) wish.sub(right);
+    if (this.keys.has('d') || this.keys.has('arrowright')) wish.add(right);
+    if (wish.lengthSq() > 0) {
+      wish.normalize().multiplyScalar(accel);
+      this.camVel.lerp(wish, 1 - Math.exp(-10 * dt));
+    } else {
+      this.camVel.multiplyScalar(Math.exp(-8 * dt));
     }
+    if (this.camVel.lengthSq() > 1e-6) {
+      const step = this.camVel.clone().multiplyScalar(dt);
+      cam.position.add(step);
+      this.camTarget.add(step);
+    }
+    if (Math.abs(this.zoomPending) > 0.002) {
+      const z = this.zoomPending * (1 - Math.exp(-14 * dt));
+      this.zoomPending -= z;
+      this.applyZoom(z);
+    } else {
+      this.zoomPending = 0;
+    }
+    cam.lookAt(this.camTarget.x, 0, this.camTarget.z);
   }
 
   private regenMana(dt: number): void {
@@ -3134,6 +3216,42 @@ export class Game {
         claimedTargets.add(key);
         assigned = true;
         break;
+      }
+      if (assigned) continue;
+
+      // Auto-claim unmarked dirt next to owned land (DK2 imps claim without a tag)
+      if (!assigned) {
+        let best: Vec2 | null = null;
+        let bestD = 999;
+        for (const tile of this.grid.tiles) {
+          if (tile.kind !== TileKind.Dirt) continue;
+          if (!tile.explored) continue;
+          if (!this.grid.hasAdjacentClaimed(tile.x, tile.y)) continue;
+          const key = `${tile.x},${tile.y}`;
+          if (claimedTargets.has(key)) continue;
+          const d = Math.abs(tile.x - w.x) + Math.abs(tile.y - w.y);
+          if (d < bestD && d <= 18) {
+            bestD = d;
+            best = { x: tile.x, y: tile.y };
+          }
+        }
+        if (best) {
+          const path = this.grid.findPath(w.x, w.y, best.x, best.y);
+          if (path) {
+            const ct = this.grid.get(best.x, best.y)!;
+            if (ct.mark !== MarkType.Claim) {
+              ct.mark = MarkType.Claim;
+              this.marksDirty = true;
+            }
+            w.job = JobType.Claim;
+            w.jobTarget = best;
+            w.setPath(path);
+            w.workTimer = 0;
+            claimedTargets.add(`${best.x},${best.y}`);
+            assigned = true;
+            this.mentioneOnce('autoClaim', MENTOR_LINES.autoClaim);
+          }
+        }
       }
       if (assigned) continue;
 
@@ -3720,9 +3838,16 @@ export class Game {
       // Face the block — pickaxe swing synced via digAnim in Creature.syncMesh
       const tw = this.grid.tileToWorld(t.x, t.y);
       c.faceToward(tw.x, tw.z);
+      const stand = this.grid.tileToWorld(c.x, c.y);
+      const hug = 0.36;
+      const txw = stand.x + (tw.x - stand.x) * hug;
+      const tzw = stand.z + (tw.z - stand.z) * hug;
+      c.wx += (txw - c.wx) * Math.min(1, 10 * dt);
+      c.wz += (tzw - c.wz) * Math.min(1, 10 * dt);
+      c.moving = false;
       c.workTimer += dt;
-      // Chip cadence ~0.38s at full efficiency; low mood digs visibly slower
-      const digCadence = 0.38 / Math.max(0.5, Math.min(1.25, c.workEfficiency()));
+      // Chip cadence ~0.32s at full efficiency; low mood digs visibly slower
+      const digCadence = 0.32 / Math.max(0.5, Math.min(1.25, c.workEfficiency()));
       if (c.workTimer >= digCadence) {
         c.workTimer = 0;
         const wpos = this.grid.tileToWorld(t.x, t.y);
@@ -3798,8 +3923,8 @@ export class Game {
         return;
       }
       c.workTimer += dt;
-      // Fast claim — stone floor appears almost instantly
-      if (c.workTimer >= 0.35) {
+      // Fast claim — stone floor appears almost instantly (imps hop on the tile)
+      if (c.workTimer >= 0.28) {
         t.kind = TileKind.Claimed;
         t.claimedProgress = 1;
         t.mark = MarkType.None;
@@ -3816,7 +3941,7 @@ export class Game {
     } else if (c.job === JobType.Fortify) {
       if (Math.hypot(c.x - t.x, c.y - t.y) > 1.6) return;
       c.workTimer += dt;
-      if (c.workTimer >= 1.5) {
+      if (c.workTimer >= 1.15) {
         t.fortified = true;
         t.mark = MarkType.None;
         // keep kind as earth visually via fortified flag
@@ -4022,6 +4147,13 @@ export class Game {
     const beforeAlive = target.alive;
     const dmg = c.damage * (0.95 + Math.random() * 0.25) * levelBonus;
     target.takeDamage(dmg);
+    c.attackPulse = 1;
+    c.faceToward(target.wx, target.wz);
+    const kdx = target.wx - c.wx;
+    const kdz = target.wz - c.wz;
+    const klen = Math.hypot(kdx, kdz) || 1;
+    target.wx += (kdx / klen) * 0.12;
+    target.wz += (kdz / klen) * 0.12;
     this.renderer.spawnFx(new THREE.Vector3(target.wx, 0.85, target.wz), c.isHero ? 0x88aaff : 0xff4040, 0.32);
     this.renderer.spawnFx(new THREE.Vector3(target.wx, 1.15, target.wz), 0xffddaa, 0.18);
     if (beforeAlive && !target.alive && target.isHero) {

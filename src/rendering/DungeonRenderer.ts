@@ -32,13 +32,17 @@ import {
   tileMaterial,
 } from './meshes';
 
+/** Cavern void — keep background / fog / clear in lockstep so the scene never flashes. */
+const CAVERN_VOID = 0x0c090c;
+const CAVERN_FOG = 0x0a0709;
+
 const ColorGradeShader = {
   uniforms: {
     tDiffuse: { value: null as THREE.Texture | null },
-    uContrast: { value: 1.05 },
-    uSaturation: { value: 1.08 },
-    uVignette: { value: 0.22 },
-    uTint: { value: new THREE.Color(1.02, 0.98, 0.92) },
+    uContrast: { value: 1.14 },
+    uSaturation: { value: 0.94 },
+    uVignette: { value: 0.38 },
+    uTint: { value: new THREE.Color(1.08, 0.86, 0.68) },
   },
   vertexShader: /* glsl */ `
     varying vec2 vUv;
@@ -129,8 +133,8 @@ export class DungeonRenderer {
 
   constructor(canvas: HTMLCanvasElement) {
     this.scene = new THREE.Scene();
-    this.scene.background = new THREE.Color(0x2a2228);
-    this.scene.fog = new THREE.FogExp2(0x241c22, 0.0038);
+    this.scene.background = new THREE.Color(CAVERN_VOID);
+    this.scene.fog = new THREE.FogExp2(CAVERN_FOG, 0.0072);
 
     this.camera = new THREE.PerspectiveCamera(46, 1, 0.1, 240);
     this.camera.position.set(0, 34, 22);
@@ -149,21 +153,21 @@ export class DungeonRenderer {
     this.basePixelRatio = Math.min(window.devicePixelRatio || 1, coarse ? 1.15 : 1.5);
     this.renderer.setPixelRatio(this.basePixelRatio);
     // Never clear to white if something fails mid-frame
-    this.renderer.setClearColor(0x2a2228, 1);
+    this.renderer.setClearColor(CAVERN_VOID, 1);
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = coarse ? THREE.BasicShadowMap : THREE.PCFSoftShadowMap;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    this.renderer.toneMappingExposure = 1.28;
+    this.renderer.toneMappingExposure = 0.92;
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
 
-    // Warm dungeon lighting — still bright enough that PBR tiles read on mobile
-    const amb = new THREE.AmbientLight(0xe0d4c0, 0.8);
+    // Dim global fill so Heart / torch / gold lights own the scene
+    const amb = new THREE.AmbientLight(0x6a5040, 0.18);
     this.scene.add(amb);
-    const hemi = new THREE.HemisphereLight(0xffe8cc, 0x3a2838, 0.72);
+    const hemi = new THREE.HemisphereLight(0xffb070, 0x100810, 0.16);
     hemi.position.set(0, 40, 0);
     this.scene.add(hemi);
 
-    const dir = new THREE.DirectionalLight(0xfff0d8, 1.45);
+    const dir = new THREE.DirectionalLight(0xffc888, 0.38);
     dir.position.set(22, 48, 14);
     dir.castShadow = true;
     dir.shadow.mapSize.set(512, 512);
@@ -175,10 +179,10 @@ export class DungeonRenderer {
     dir.shadow.camera.top = 55;
     dir.shadow.camera.bottom = -55;
     dir.shadow.bias = -0.0006;
-    dir.shadow.intensity = 0.62;
+    dir.shadow.intensity = 0.82;
     this.scene.add(dir);
 
-    const fill = new THREE.DirectionalLight(0x8098c8, 0.38);
+    const fill = new THREE.DirectionalLight(0x203040, 0.06);
     fill.position.set(-18, 28, -14);
     this.scene.add(fill);
 
@@ -194,10 +198,10 @@ export class DungeonRenderer {
     this.dust = new THREE.Points(
       dustGeo,
       new THREE.PointsMaterial({
-        color: 0xd49a55,
-        size: 0.07,
+        color: 0x8a4a22,
+        size: 0.06,
         transparent: true,
-        opacity: 0.38,
+        opacity: 0.22,
         depthWrite: false,
         sizeAttenuation: true,
       })
@@ -208,7 +212,7 @@ export class DungeonRenderer {
     const ground = new THREE.Mesh(
       new THREE.PlaneGeometry(200, 200),
       new THREE.MeshStandardMaterial({
-        color: 0x1a1418,
+        color: 0x080608,
         metalness: 0.05,
         roughness: 1,
       })
@@ -282,9 +286,9 @@ export class DungeonRenderer {
     const isCoarse = typeof window !== 'undefined' && window.matchMedia?.('(pointer: coarse)').matches;
     this.bloomPass = new UnrealBloomPass(
       new THREE.Vector2(1, 1),
-      isCoarse ? 0.08 : 0.12,
-      0.35,
-      0.96
+      isCoarse ? 0.1 : 0.16,
+      0.42,
+      0.88
     );
     this.composer.addPass(this.bloomPass);
     this.composer.addPass(new ShaderPass(ColorGradeShader));
@@ -319,15 +323,15 @@ export class DungeonRenderer {
   reinitPipeline(): void {
     const size = new THREE.Vector2();
     this.renderer.getSize(size);
-    this.renderer.setClearColor(0x2a2228, 1);
+    this.renderer.setClearColor(CAVERN_VOID, 1);
     this.composer = new EffectComposer(this.renderer);
     this.composer.addPass(new RenderPass(this.scene, this.camera));
     const isCoarse = typeof window !== 'undefined' && window.matchMedia?.('(pointer: coarse)').matches;
     this.bloomPass = new UnrealBloomPass(
       new THREE.Vector2(size.x || 1, size.y || 1),
-      isCoarse ? 0.08 : 0.12,
-      0.35,
-      0.96
+      isCoarse ? 0.1 : 0.16,
+      0.42,
+      0.88
     );
     this.composer.addPass(this.bloomPass);
     this.composer.addPass(new ShaderPass(ColorGradeShader));
@@ -863,25 +867,18 @@ export class DungeonRenderer {
     }
   }
 
-  /** Shed bloom/shadows/DPR while many tiles are being dug — STABILITY > flash. */
+  /**
+   * Trim particle FX (and maybe DPR) while many tiles are being dug.
+   * Never flip bloom, exposure, or shadows — those snap the whole cavern's look.
+   */
   setDigLoad(active: boolean): void {
     if (this.digLoad === active) return;
     this.digLoad = active;
     if (active) {
-      this.useComposer = false;
-      this.bloomPass.enabled = false;
-      this.renderer.toneMappingExposure = 1.08;
       this.renderer.setPixelRatio(Math.min(this.basePixelRatio, 1.0));
-      this.renderer.shadowMap.enabled = false;
-      if (this.dirLight) this.dirLight.castShadow = false;
       this.trimFx();
     } else {
-      this.bloomPass.enabled = true;
-      this.useComposer = !this.contextLost;
-      this.renderer.toneMappingExposure = 1.28;
       this.renderer.setPixelRatio(this.basePixelRatio);
-      this.renderer.shadowMap.enabled = true;
-      if (this.dirLight) this.dirLight.castShadow = true;
       this.onResize();
     }
   }
@@ -1053,7 +1050,7 @@ export class DungeonRenderer {
       const s = 1 + Math.sin(this.clock * 3) * 0.05;
       this.heartGroup.heartCore.scale.setScalar(s);
       if (this.heartGroup.heartLight) {
-        this.heartGroup.heartLight.intensity = 1.1 + Math.sin(this.clock * 3) * 0.25;
+        this.heartGroup.heartLight.intensity = 2.85 + Math.sin(this.clock * 2.4) * 0.18;
       }
       this.heartGroup.rotation.y += dt * 0.3;
       if (this.heartGroup.heartCrown) {
@@ -1075,11 +1072,13 @@ export class DungeonRenderer {
       }
     }
     for (const t of this.torches) {
+      const phase = this.clock * 6.4 + t.position.x * 1.7 + t.position.z * 0.9;
+      const flicker = 1 + Math.sin(phase) * 0.1 + Math.sin(phase * 1.73 + 0.4) * 0.05;
       if (t.torchLight) {
-        t.torchLight.intensity = 2.8 + Math.random() * 0.8 + Math.sin(this.clock * 8 + t.position.x) * 0.35;
+        t.torchLight.intensity = 3.6 * flicker;
       }
       if (t.flame) {
-        t.flame.scale.setScalar(0.9 + Math.random() * 0.25);
+        t.flame.scale.setScalar(0.94 + Math.sin(phase * 1.15) * 0.07);
       }
     }
     // Sparkle gold seams without allocating new meshes

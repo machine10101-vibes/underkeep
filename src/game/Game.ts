@@ -1804,12 +1804,8 @@ export class Game {
         this.hud.say(MENTOR_LINES.rallyPlanted);
         // Snap fighters to Guard on the flag
         for (const c of this.creatures) {
-          if (!c.alive || c.isHero || c.isWorker || c.held) continue;
-          if (
-            c.kind === CreatureKind.Rattlekin ||
-            c.kind === CreatureKind.Emberling ||
-            c.kind === CreatureKind.Skitterwing
-          ) {
+          if (!c.alive || c.isHero || c.isWorker || c.held || c === this.possessed) continue;
+          if (this.isMusterFighter(c)) {
             c.job = JobType.Guard;
             c.jobTarget = { x, y };
             const path = this.grid.findPath(c.x, c.y, x, y);
@@ -2242,14 +2238,24 @@ export class Game {
     this.hud.sayNow(MENTOR_LINES.sightCast);
   }
 
+  private isMusterFighter(c: Creature): boolean {
+    return (
+      c.kind === CreatureKind.Rattlekin ||
+      c.kind === CreatureKind.Emberling ||
+      c.kind === CreatureKind.Skitterwing ||
+      c.kind === CreatureKind.Thornwitch ||
+      c.kind === CreatureKind.Bonewretch
+    );
+  }
+
   private musterAt(x: number, y: number): void {
     if (this.mana < CALL_TO_ARMS_COST) {
       this.hud.sayNow('Not enough mana to Call to Arms.');
       return;
     }
     const tile = this.grid.get(x, y);
-    const walk = this.grid.isWalkable(x, y) || tile?.kind === TileKind.Heart;
-    if (!walk) {
+    const claimed = tile && (tile.kind === TileKind.Claimed || tile.kind === TileKind.Heart);
+    if (!claimed) {
       this.hud.sayNow('Call to Arms needs claimed land.');
       this.callArmed = true;
       return;
@@ -2259,14 +2265,8 @@ export class Game {
     if (tile && tile.kind === TileKind.Claimed) tile.rally = true;
     this.requestStructuralRebuild();
     for (const c of this.creatures) {
-      if (!c.alive || c.isHero || c.isWorker || c.held || c.knockedOut) continue;
-      if (
-        c.kind === CreatureKind.Rattlekin ||
-        c.kind === CreatureKind.Emberling ||
-        c.kind === CreatureKind.Skitterwing ||
-        c.kind === CreatureKind.Thornwitch ||
-        c.kind === CreatureKind.Bonewretch
-      ) {
+      if (!c.alive || c.isHero || c.isWorker || c.held || c.knockedOut || c === this.possessed) continue;
+      if (this.isMusterFighter(c)) {
         c.job = JobType.Guard;
         c.jobTarget = { x, y };
         const path = this.grid.findPath(c.x, c.y, x, y);
@@ -4717,6 +4717,7 @@ export class Game {
         try { this.checkHeart(); } catch (e) { console.warn('[underkeep] heart', e); }
         try { this.payWages(dt); } catch (e) { console.warn('[underkeep] wages', e); }
         try { this.updateHazards(dt); } catch (e) { console.warn('[underkeep] hazards', e); }
+        try { this.updatePrisonEconomy(dt); } catch (e) { console.warn('[underkeep] prison', e); }
         try { this.checkMissionWin(); } catch (e) { console.warn('[underkeep] mission', e); }
         this.saveAcc += dt;
         if (this.saveAcc >= 4) {
@@ -4725,7 +4726,7 @@ export class Game {
         }
       }
 
-      // Dig load shedding: pause bloom/shadows when many diggers or dig marks active
+      // Dig load shedding: trim FX / DPR only — never the cavern's lighting look
       const digMarks = this.grid.tiles.reduce((n, t) => n + (t.mark === MarkType.Dig ? 1 : 0), 0);
       const activeDiggers = this.creatures.filter(
         (c) => c.alive && (c.job === JobType.Dig || c.job === JobType.Mine)
@@ -5119,7 +5120,9 @@ export class Game {
   }
 
   private assignJobs(dt: number): void {
-    const workers = this.creatures.filter((c) => c.alive && c.isWorker && !c.held && c.stunTimer <= 0);
+    const workers = this.creatures.filter(
+      (c) => c.alive && c.isWorker && !c.held && c.stunTimer <= 0 && c !== this.possessed
+    );
     // heroes force flee — except workers near the Heart, who defend it
     const hx = this.grid.heartPos.x;
     const hy = this.grid.heartPos.y;
@@ -5483,7 +5486,7 @@ export class Game {
 
     // non-worker jobs: eat / sleep / train / fight / pray
     for (const c of this.creatures) {
-      if (!c.alive || c.isWorker || c.isHero || c.held || c.stunTimer > 0 || c.knockedOut) continue;
+      if (!c.alive || c.isWorker || c.isHero || c.held || c.stunTimer > 0 || c.knockedOut || c === this.possessed) continue;
 
       // Sticky attack-move orders (Pass 6.4) — engage heroes en route, keep destination
       if (c.job === JobType.AttackMove && c.jobTarget) {
@@ -5978,6 +5981,7 @@ export class Game {
         this.triggerTrapsForHero(c);
       }
 
+      if (c === this.possessed) continue;
       if (c.isWorker) {
         this.updateWorkerJob(c, dt, arrived);
       } else if (!c.isHero) {
@@ -6200,8 +6204,8 @@ export class Game {
       c.setPath(null);
       return;
     }
-    // Workers can eat/sleep too
-    if (c.job === JobType.Eat || c.job === JobType.Sleep) {
+    // Workers can eat/sleep too; Craft shares the workshop loop with minions
+    if (c.job === JobType.Eat || c.job === JobType.Sleep || c.job === JobType.Craft) {
       this.updateMinionJob(c, dt, arrived);
       return;
     }
@@ -6332,7 +6336,16 @@ export class Game {
         this.saveNow();
       }
     } else if (c.job === JobType.Fortify) {
-      if (Math.hypot(c.x - t.x, c.y - t.y) > 1.6) return;
+      if (!arrived && c.pathIndex < c.path.length) return;
+      if (Math.hypot(c.x - t.x, c.y - t.y) > 1.6) {
+        const path = this.grid.findPathAdjacent(c.x, c.y, t.x, t.y) ?? this.grid.findPath(c.x, c.y, t.x, t.y);
+        if (path) c.setPath(path);
+        else {
+          c.job = JobType.Idle;
+          c.jobTarget = null;
+        }
+        return;
+      }
       c.workTimer += dt;
       if (c.workTimer >= 1.15) {
         t.fortified = true;
@@ -7099,9 +7112,9 @@ export class Game {
       for (let x = cx - 1; x <= cx + 1; x++) {
         const tile = this.grid.get(x, y);
         if (!tile || tile.kind === TileKind.Heart || tile.kind === TileKind.Rock) continue;
-        if (tile.kind === TileKind.Earth || tile.kind === TileKind.Gold || tile.kind === TileKind.Wall) {
+        if (tile.fortified || tile.kind === TileKind.Gold) continue;
+        if (tile.kind === TileKind.Earth || tile.kind === TileKind.Wall) {
           tile.kind = TileKind.Dirt;
-          tile.fortified = false;
           tile.digProgress = 0;
           this.gridDirty = true;
         }
@@ -7134,6 +7147,8 @@ export class Game {
       const k3 = this.spawnCreature(CreatureKind.HeroKnight, sx, sy + 1);
       k3.job = JobType.Fight;
       k3.jobTarget = { ...this.grid.heartPos };
+      k3.hp = Math.floor(k3.maxHp * waveScale);
+      k3.maxHp = k3.hp;
       this.renderer.spawnFx(
         new THREE.Vector3(k3.wx, 1.2, k3.wz),
         0xa0c0ff,

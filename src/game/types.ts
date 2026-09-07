@@ -27,6 +27,8 @@ export enum RoomType {
   Prison = 9,
   Torture = 10,
   Graveyard = 11,
+  Temple = 12,
+  CombatPit = 13,
 }
 
 /** Wooden door on a claimed corridor tile. */
@@ -79,6 +81,8 @@ export enum JobType {
   AttackMove = 'attack',
   Craft = 'craft',
   DragPrisoner = 'drag',
+  Pray = 'pray',
+  DragWounded = 'dragwounded',
 }
 
 export interface Tile {
@@ -119,6 +123,8 @@ export const ROOM_COST: Record<RoomType, number> = {
   [RoomType.Prison]: 225,
   [RoomType.Torture]: 275,
   [RoomType.Graveyard]: 250,
+  [RoomType.Temple]: 300,
+  [RoomType.CombatPit]: 350,
 };
 
 export const DOOR_COST = 75;
@@ -150,6 +156,8 @@ export const ROOM_NAMES: Record<RoomType, string> = {
   [RoomType.Prison]: 'Prison',
   [RoomType.Torture]: 'Torture Chamber',
   [RoomType.Graveyard]: 'Graveyard',
+  [RoomType.Temple]: 'Temple',
+  [RoomType.CombatPit]: 'Combat Pit',
 };
 
 export const CREATURE_STATS: Record<
@@ -187,7 +195,9 @@ export type ToolMode =
   | 'workshop'
   | 'prison'
   | 'torture'
-  | 'graveyard';
+  | 'graveyard'
+  | 'temple'
+  | 'combatPit';
 
 export type SpellId = 'createWorker' | 'speed' | 'lightning' | 'heal' | 'possess';
 

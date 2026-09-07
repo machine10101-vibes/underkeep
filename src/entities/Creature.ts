@@ -50,6 +50,10 @@ export class Creature {
   /** 0–100 conversion progress while imprisoned. */
   convertProgress = 0;
   fleeTimer = 0;
+  /** Temple prayer buff timer (seconds) — mood floor / soft combat edge. */
+  prayerBuff = 0;
+  /** Lightweight Temple talisman unlock (once). */
+  hasTalisman = false;
   attackCooldown = 0;
   goldCarried = 0;
   alive = true;
@@ -227,8 +231,10 @@ export class Creature {
   /** Dig/work multiplier from mood (≈0.5–1.2). */
   workEfficiency(): number {
     const mood = Number.isFinite(this.mood) ? Math.max(0, Math.min(100, this.mood)) : 50;
-    const eff = 0.5 + (mood / 100) * 0.7;
-    return Number.isFinite(eff) ? Math.max(0.5, Math.min(1.2, eff)) : 0.85;
+    let eff = 0.5 + (mood / 100) * 0.7;
+    if (this.prayerBuff > 0) eff += 0.05;
+    if (this.hasTalisman) eff += 0.03;
+    return Number.isFinite(eff) ? Math.max(0.5, Math.min(1.25, eff)) : 0.85;
   }
 
   pulseTint(mode: 'heal' | 'feast', seconds = 0.85): void {

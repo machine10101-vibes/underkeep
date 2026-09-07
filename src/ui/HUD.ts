@@ -1,6 +1,6 @@
 import { SpellId, ToolMode } from '../game/types';
 
-const ROOM_TOOLS: ToolMode[] = ['treasury', 'lair', 'hatchery', 'training', 'library', 'portal', 'guard', 'workshop', 'prison', 'torture', 'graveyard', 'door', 'sentry', 'rally', 'bridgeWood', 'bridgeStone'];
+const ROOM_TOOLS: ToolMode[] = ['treasury', 'lair', 'hatchery', 'training', 'library', 'portal', 'guard', 'workshop', 'prison', 'torture', 'graveyard', 'temple', 'combatPit', 'door', 'sentry', 'rally', 'bridgeWood', 'bridgeStone'];
 
 export class HUD {
   private goldEl: HTMLElement;
@@ -35,12 +35,16 @@ export class HUD {
   private objectiveEl: HTMLElement | null;
   private kitsValueEl: HTMLElement | null;
   private createWorkerBtn: HTMLElement | null;
+  private rosterSheet: HTMLElement | null;
+  private rosterList: HTMLElement | null;
+  private btnRoster: HTMLElement | null;
 
   onToolChange: ((tool: ToolMode) => void) | null = null;
   onSpell: ((spell: SpellId) => void) | null = null;
   onOverlayContinue: (() => void) | null = null;
   onNewGame: (() => void) | null = null;
   onInspectorClose: (() => void) | null = null;
+  onRosterSelect: ((creatureId: number) => void) | null = null;
 
   constructor() {
     this.goldEl = document.getElementById('gold-value')!;
@@ -74,6 +78,9 @@ export class HUD {
     this.kitsValueEl = document.getElementById('kits-value');
     this.createWorkerBtn = document.getElementById('btn-create-worker')
       ?? (document.querySelector('.spell[data-spell="createWorker"]') as HTMLElement | null);
+    this.rosterSheet = document.getElementById('roster-sheet');
+    this.rosterList = document.getElementById('roster-list');
+    this.btnRoster = document.getElementById('btn-roster');
     document.getElementById('insp-close')?.addEventListener('click', () => {
       this.hideInspector();
       this.onInspectorClose?.();
@@ -108,35 +115,48 @@ export class HUD {
 
     this.btnBuild?.addEventListener('click', () => this.toggleSheet('build'));
     this.btnSpells?.addEventListener('click', () => this.toggleSheet('spells'));
+    this.btnRoster?.addEventListener('click', () => this.toggleSheet('roster'));
     // Desktop sheet toggles share the same sheets
     document.getElementById('btn-build-desktop')?.addEventListener('click', () => this.toggleSheet('build'));
     document.getElementById('btn-spells-desktop')?.addEventListener('click', () => this.toggleSheet('spells'));
+    document.getElementById('btn-roster-desktop')?.addEventListener('click', () => this.toggleSheet('roster'));
 
     document.querySelectorAll('.sheet-close').forEach((btn) => {
       btn.addEventListener('click', () => {
         const which = (btn as HTMLElement).dataset.close;
-        if (which === 'build' || which === 'spells') this.closeSheet(which);
+        if (which === 'build' || which === 'spells' || which === 'roster') this.closeSheet(which as 'build' | 'spells' | 'roster');
       });
     });
     document.getElementById('mentor-dismiss')?.addEventListener('click', () => this.dismissMentor());
   }
 
-  private sheetButtons(which: 'build' | 'spells'): HTMLElement[] {
+  private sheetButtons(which: 'build' | 'spells' | 'roster'): HTMLElement[] {
     const ids =
       which === 'build'
         ? ['btn-build', 'btn-build-desktop']
-        : ['btn-spells', 'btn-spells-desktop'];
+        : which === 'spells'
+          ? ['btn-spells', 'btn-spells-desktop']
+          : ['btn-roster', 'btn-roster-desktop'];
     return ids.map((id) => document.getElementById(id)).filter((el): el is HTMLElement => !!el);
   }
 
-  private toggleSheet(which: 'build' | 'spells'): void {
-    const sheet = which === 'build' ? this.buildSheet : this.spellsSheet;
-    const other = which === 'build' ? this.spellsSheet : this.buildSheet;
+  private sheetEl(which: 'build' | 'spells' | 'roster'): HTMLElement | null {
+    if (which === 'build') return this.buildSheet;
+    if (which === 'spells') return this.spellsSheet;
+    return this.rosterSheet;
+  }
+
+  private toggleSheet(which: 'build' | 'spells' | 'roster'): void {
+    const sheet = this.sheetEl(which);
+    if (!sheet) return;
     const open = sheet.hasAttribute('hidden');
-    other.setAttribute('hidden', '');
-    for (const b of [...this.sheetButtons('build'), ...this.sheetButtons('spells')]) {
-      b.classList.remove('active');
-      b.setAttribute('aria-expanded', 'false');
+    for (const w of ['build', 'spells', 'roster'] as const) {
+      if (w === which) continue;
+      this.sheetEl(w)?.setAttribute('hidden', '');
+      for (const b of this.sheetButtons(w)) {
+        b.classList.remove('active');
+        b.setAttribute('aria-expanded', 'false');
+      }
     }
     if (open) {
       sheet.removeAttribute('hidden');
@@ -146,12 +166,16 @@ export class HUD {
       }
     } else {
       sheet.setAttribute('hidden', '');
+      for (const b of this.sheetButtons(which)) {
+        b.classList.remove('active');
+        b.setAttribute('aria-expanded', 'false');
+      }
     }
   }
 
-  private closeSheet(which: 'build' | 'spells'): void {
-    const sheet = which === 'build' ? this.buildSheet : this.spellsSheet;
-    sheet.setAttribute('hidden', '');
+  private closeSheet(which: 'build' | 'spells' | 'roster'): void {
+    const sheet = this.sheetEl(which);
+    sheet?.setAttribute('hidden', '');
     for (const b of this.sheetButtons(which)) {
       b.classList.remove('active');
       b.setAttribute('aria-expanded', 'false');
@@ -161,6 +185,56 @@ export class HUD {
   private closeSheets(): void {
     this.closeSheet('build');
     this.closeSheet('spells');
+    this.closeSheet('roster');
+  }
+
+  openRoster(): void {
+    this.toggleSheet('roster');
+  }
+
+  isRosterOpen(): boolean {
+    return !!this.rosterSheet && !this.rosterSheet.hasAttribute('hidden');
+  }
+
+  updateRoster(
+    rows: Array<{
+      id: number;
+      name: string;
+      job: string;
+      hp: number;
+      maxHp: number;
+      mood: number;
+      knockedOut?: boolean;
+    }>
+  ): void {
+    if (!this.rosterList) return;
+    this.rosterList.innerHTML = '';
+    if (!rows.length) {
+      const empty = document.createElement('div');
+      empty.className = 'roster-hint';
+      empty.textContent = 'No minions yet — dig, claim, and open a Portal.';
+      this.rosterList.appendChild(empty);
+      return;
+    }
+    for (const r of rows) {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'roster-row';
+      btn.setAttribute('role', 'listitem');
+      btn.dataset.id = String(r.id);
+      if (r.knockedOut) btn.classList.add('ko');
+      if (r.hp < r.maxHp * 0.4) btn.classList.add('hurt');
+      btn.innerHTML =
+        `<span class="r-name">${r.name}</span>` +
+        `<span class="r-job">${r.job}</span>` +
+        `<span class="r-hp">${Math.floor(r.hp)}/${Math.floor(r.maxHp)}</span>` +
+        `<span class="r-mood">${Math.floor(r.mood)}</span>`;
+      btn.addEventListener('click', () => {
+        this.onRosterSelect?.(r.id);
+        this.closeSheet('roster');
+      });
+      this.rosterList.appendChild(btn);
+    }
   }
 
   setActiveTool(tool: ToolMode): void {
@@ -349,6 +423,8 @@ export class HUD {
         if (kind === 4 && room === 9) color = '#506070'; // Prison
         if (kind === 4 && room === 10) color = '#a04050'; // Torture
         if (kind === 4 && room === 11) color = '#406850'; // Graveyard
+        if (kind === 4 && room === 12) color = '#c0a040'; // Temple
+        if (kind === 4 && room === 13) color = '#a04030'; // Combat Pit
         ctx.fillStyle = color;
         ctx.fillRect(ox + x * cell, oy + y * cell, Math.max(1, cell), Math.max(1, cell));
       }
@@ -470,4 +546,13 @@ export const MENTOR_LINES = {
   boneRaised: "A Bonewretch claws up from the Graveyard. Fearless bones.",
   starvedBones: "The prisoner starved — bones claim them for the dark.",
   roomSizeBonus: "Room size %n · +%p% efficiency",
+  templeBuilt: "Temple raised. Prayer soothes moods — and may gift a talisman.",
+  combatPitBuilt: "Combat Pit ready. Veterans past training level 4 fight for glory here.",
+  praying: "A minion kneels in the Temple. Mood climbs with the incense.",
+  prayerBuff: "Prayer buff granted — claws steadier, spirits higher.",
+  talismanGift: "A talisman forms in the Temple haze. Keep them close.",
+  combatLevelUp: "%n rises to Combat Pit level %l!",
+  fleeLair: "Wounded minions flee toward the Lair!",
+  dragWounded: "Scrabblers drag the wounded home to their beds.",
+  allyKnocked: "A minion collapses! Scrabblers can haul them to a Lair bed.",
 };

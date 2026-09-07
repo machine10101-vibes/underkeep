@@ -4,9 +4,9 @@ Original-IP dungeon management game inspired by **Dungeon Keeper 2** (3D). Dark-
 
 ## Play online
 
-**https://machine10101-vibes.github.io/underkeep/?v=pass7.3**
+**https://machine10101-vibes.github.io/underkeep/?v=pass7.4**
 
-Pass 7.3: Prison capture, Torture→Thornwitch conversion, Graveyard Bonewretches, Lair/Hatchery/Library room-size efficiency (keeps FoW/Hand/lava/bridges/Possess/payday/minimap/mission/Workshop).
+Pass 7.4: Temple prayer/mood/talisman, Combat Pit veteran leveling, creature roster sheet, flee & drag wounded to Lair (keeps Prison/Torture/Graveyard/efficiency + prior systems).
 
 Works on desktop and phones (touch controls).
 
@@ -51,6 +51,8 @@ npm run preview
 | **B** / **N** | Wooden / Stone bridge over lava or water |
 | **U** | Workshop room |
 | **J** / **K** / **H** | Prison / Torture Chamber / Graveyard |
+| **M** / **C** | Temple / Combat Pit |
+| **L** | Creature roster sheet |
 
 ## Mobile / touch controls
 

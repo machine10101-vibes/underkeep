@@ -503,3 +503,55 @@ html, body, #app {
   }
   #stat-objective { display: none; }
 }
+
+
+/* Pass 7.4 — creature roster sheet */
+.roster-sheet {
+  max-width: min(420px, calc(100vw - 24px));
+  max-height: min(52vh, 420px);
+  display: flex;
+  flex-direction: column;
+}
+.roster-sheet[hidden] { display: none !important; }
+.roster-list {
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 4px 2px 8px;
+  max-height: 340px;
+}
+.roster-row {
+  display: grid;
+  grid-template-columns: 1.2fr 0.9fr 0.7fr 0.7fr;
+  gap: 6px;
+  align-items: center;
+  padding: 7px 10px;
+  border: 1px solid #5a3a1a;
+  border-radius: 6px;
+  background: linear-gradient(180deg, #2a1a10, #1a1008);
+  color: #e8d0a8;
+  font-size: 12px;
+  cursor: pointer;
+  text-align: left;
+}
+.roster-row:hover, .roster-row:focus {
+  border-color: #e09030;
+  background: linear-gradient(180deg, #3a2818, #221408);
+  outline: none;
+}
+.roster-row .r-name { font-weight: 700; color: #ffe0a0; }
+.roster-row .r-job { color: #c8a870; text-transform: capitalize; }
+.roster-row .r-hp { font-variant-numeric: tabular-nums; color: #f08060; }
+.roster-row .r-mood { font-variant-numeric: tabular-nums; color: #80d090; }
+.roster-row.hurt .r-hp { color: #ff6040; font-weight: 700; }
+.roster-row.ko { opacity: 0.75; border-style: dashed; }
+.roster-hint {
+  font-size: 10px;
+  color: #806050;
+  padding: 2px 4px 4px;
+}
+@media (max-width: 700px) {
+  .roster-sheet { max-height: 45vh; }
+  .roster-row { font-size: 11px; grid-template-columns: 1.1fr 0.8fr 0.65fr 0.65fr; padding: 6px 8px; }
+}

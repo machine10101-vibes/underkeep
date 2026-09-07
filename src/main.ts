@@ -134,7 +134,17 @@ if (
     params.get('shot') === '7.3-graveyard' ||
     params.get('shot') === '73-graveyard' ||
     params.get('shot') === '7.3-efficiency' ||
-    params.get('shot') === '73-efficiency')
+    params.get('shot') === '73-efficiency' ||
+    params.get('shot') === '7.4' ||
+    params.get('shot') === '74' ||
+    params.get('shot') === '7.4-temple' ||
+    params.get('shot') === '74-temple' ||
+    params.get('shot') === '7.4-combat' ||
+    params.get('shot') === '74-combat' ||
+    params.get('shot') === '7.4-roster' ||
+    params.get('shot') === '74-roster' ||
+    params.get('shot') === '7.4-flee' ||
+    params.get('shot') === '74-flee')
 ) {
   // Auto-arrange evidence shots
   setTimeout(() => {
@@ -156,10 +166,16 @@ if (
       preparePass71Shot?: (focus?: 'lava' | 'bridge' | 'possess' | 'payday' | 'both') => void;
       preparePass72Shot?: (focus?: 'minimap' | 'mission' | 'workshop' | 'worker' | 'both') => void;
       preparePass73Shot?: (focus?: 'prison' | 'torture' | 'graveyard' | 'efficiency' | 'both') => void;
+      preparePass74Shot?: (focus?: 'temple' | 'combatPit' | 'roster' | 'flee' | 'both') => void;
     };
     g.hud.hideOverlay();
     const shot = params.get('shot');
-    if (shot === '7.3-prison' || shot === '73-prison') g.preparePass73Shot?.('prison');
+    if (shot === '7.4-temple' || shot === '74-temple') g.preparePass74Shot?.('temple');
+    else if (shot === '7.4-combat' || shot === '74-combat') g.preparePass74Shot?.('combatPit');
+    else if (shot === '7.4-roster' || shot === '74-roster') g.preparePass74Shot?.('roster');
+    else if (shot === '7.4-flee' || shot === '74-flee') g.preparePass74Shot?.('flee');
+    else if (shot === '7.4' || shot === '74') g.preparePass74Shot?.('both');
+    else if (shot === '7.3-prison' || shot === '73-prison') g.preparePass73Shot?.('prison');
     else if (shot === '7.3-torture' || shot === '73-torture') g.preparePass73Shot?.('torture');
     else if (shot === '7.3-graveyard' || shot === '73-graveyard') g.preparePass73Shot?.('graveyard');
     else if (shot === '7.3-efficiency' || shot === '73-efficiency') g.preparePass73Shot?.('efficiency');

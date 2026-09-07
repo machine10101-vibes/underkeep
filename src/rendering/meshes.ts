@@ -72,6 +72,8 @@ export function makeClaimedFloorMesh(room: RoomType): THREE.Group {
     [RoomType.Prison]: 0x606870,
     [RoomType.Torture]: 0xa04050,
     [RoomType.Graveyard]: 0x507060,
+    [RoomType.Temple]: 0xc0a050,
+    [RoomType.CombatPit]: 0xa05040,
   };
   const slabColor = roomTint[room] ?? 0xb8a888;
   const slabEmissive =
@@ -97,7 +99,11 @@ export function makeClaimedFloorMesh(room: RoomType): THREE.Group {
                         ? 0x401018
                         : room === RoomType.Graveyard
                           ? 0x183028
-                          : 0x301048;
+                          : room === RoomType.Temple
+                            ? 0x403010
+                            : room === RoomType.CombatPit
+                              ? 0x401810
+                              : 0x301048;
 
   const mortar = new THREE.MeshStandardMaterial({
     color: 0x2a2218,
@@ -1105,6 +1111,24 @@ export function floorMaterial(kind: TileKind, room: RoomType): THREE.MeshStandar
         bump: 0.12,
         color: 0xb88850,
       });
+    case RoomType.Temple:
+      return texturedMat('floor-library', libraryFloorTex(), {
+        metalness: 0.35,
+        roughness: 0.5,
+        emissive: 0x403018,
+        emissiveIntensity: 0.28,
+        bump: 0.06,
+        color: 0xd0b060,
+      });
+    case RoomType.CombatPit:
+      return texturedMat('floor-training', trainingFloorTex(), {
+        metalness: 0.22,
+        roughness: 0.72,
+        emissive: 0x401010,
+        emissiveIntensity: 0.2,
+        bump: 0.12,
+        color: 0xb05040,
+      });
     default:
       return texturedMat('floor-claimed-v2', claimedStoneTex(), {
         color: 0xb8a890,
@@ -1135,6 +1159,8 @@ export function makeRoomDecal(room: RoomType): THREE.Mesh | null {
     [RoomType.Prison]: { kind: 'worn', color: [90, 100, 110], emissive: 0x304050, ei: 0.2, size: 1.4 },
     [RoomType.Torture]: { kind: 'worn', color: [160, 50, 60], emissive: 0x801020, ei: 0.35, size: 1.4 },
     [RoomType.Graveyard]: { kind: 'runes', color: [70, 110, 90], emissive: 0x206040, ei: 0.3, size: 1.45 },
+    [RoomType.Temple]: { kind: 'runes', color: [200, 170, 80], emissive: 0xc09030, ei: 0.45, size: 1.5 },
+    [RoomType.CombatPit]: { kind: 'worn', color: [180, 70, 50], emissive: 0xa03020, ei: 0.3, size: 1.45 },
   };
   const s = specs[room];
   if (!s) return null;
@@ -1525,6 +1551,88 @@ export function makeRoomProps(room: RoomType): THREE.Group | null {
     bone.rotation.z = 0.8;
     bone.position.set(0.2, 0.35, 0.25);
     g.add(bone);
+  } else if (room === RoomType.Temple) {
+    const gold = new THREE.MeshStandardMaterial({
+      color: 0xd4b050,
+      metalness: 0.7,
+      roughness: 0.35,
+      emissive: 0x806020,
+      emissiveIntensity: 0.45,
+    });
+    const dark = new THREE.MeshStandardMaterial({ color: 0x3a2818, roughness: 0.75 });
+    const plinth = new THREE.Mesh(new THREE.CylinderGeometry(0.35, 0.42, 0.35, 8), dark);
+    plinth.position.set(0, 0.28, 0);
+    plinth.castShadow = true;
+    g.add(plinth);
+    const idol = new THREE.Mesh(new THREE.ConeGeometry(0.22, 0.55, 6), gold);
+    idol.position.set(0, 0.72, 0);
+    idol.castShadow = true;
+    g.add(idol);
+    const orb = new THREE.Mesh(
+      new THREE.SphereGeometry(0.1, 8, 8),
+      new THREE.MeshStandardMaterial({
+        color: 0xffe080,
+        emissive: 0xffc040,
+        emissiveIntensity: 1.1,
+        metalness: 0.4,
+        roughness: 0.3,
+      })
+    );
+    orb.position.set(0, 1.05, 0);
+    g.add(orb);
+    for (const sx of [-0.55, 0.55]) {
+      const candle = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.05, 0.35, 5), dark);
+      candle.position.set(sx, 0.35, -0.4);
+      g.add(candle);
+      const flame = new THREE.Mesh(
+        new THREE.SphereGeometry(0.06, 6, 6),
+        new THREE.MeshStandardMaterial({
+          color: 0xffaa40,
+          emissive: 0xff8020,
+          emissiveIntensity: 1.2,
+        })
+      );
+      flame.position.set(sx, 0.58, -0.4);
+      g.add(flame);
+    }
+  } else if (room === RoomType.CombatPit) {
+    const sand = new THREE.MeshStandardMaterial({
+      color: 0xa07040,
+      roughness: 0.9,
+      metalness: 0.05,
+      emissive: 0x301808,
+      emissiveIntensity: 0.12,
+    });
+    const iron = new THREE.MeshStandardMaterial({
+      color: 0x707880,
+      metalness: 0.8,
+      roughness: 0.35,
+      emissive: 0x401010,
+      emissiveIntensity: 0.2,
+    });
+    const pit = new THREE.Mesh(new THREE.CylinderGeometry(0.7, 0.78, 0.18, 12), sand);
+    pit.position.set(0, 0.2, 0);
+    pit.receiveShadow = true;
+    g.add(pit);
+    // Arena ring
+    const ring = new THREE.Mesh(new THREE.TorusGeometry(0.72, 0.05, 6, 16), iron);
+    ring.rotation.x = Math.PI / 2;
+    ring.position.set(0, 0.28, 0);
+    g.add(ring);
+    // Dummy posts
+    for (const [px, pz] of [[-0.45, 0.35], [0.4, -0.3]]) {
+      const post = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.08, 0.95, 6), iron);
+      post.position.set(px, 0.55, pz);
+      post.castShadow = true;
+      g.add(post);
+    }
+    const blade = new THREE.Mesh(
+      new THREE.BoxGeometry(0.08, 0.55, 0.04),
+      new THREE.MeshStandardMaterial({ color: 0xc0c8d0, metalness: 0.85, roughness: 0.25 })
+    );
+    blade.position.set(0.35, 0.55, 0.35);
+    blade.rotation.z = 0.35;
+    g.add(blade);
   } else {
     return null;
   }

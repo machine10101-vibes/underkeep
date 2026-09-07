@@ -79,6 +79,10 @@ export class Game {
   private nextKitIsDoor = true;
   /** Pass 7.3 — corpses awaiting Graveyard raise. */
   private corpses: Array<{ x: number; y: number; timer: number; fromHero: boolean }> = [];
+  /** Pass 7.4 — roster UI refresh accumulator. */
+  private rosterAcc = 0;
+  /** Temple prayer contributes to mana (active praying count). */
+  private templePrayCount = 0;
   private boxSelecting = false;
   private boxStartClient: { x: number; y: number } | null = null;
   private boxMoved = false;
@@ -152,6 +156,7 @@ export class Game {
     };
     this.hud.onNewGame = () => this.confirmNewGame();
     this.hud.onInspectorClose = () => this.clearSelection();
+    this.hud.onRosterSelect = (id) => this.focusCreatureById(id);
 
     this.grid = new Grid(40, 40);
     this.renderer = new DungeonRenderer(canvas);
@@ -656,6 +661,8 @@ export class Game {
         j: 'prison',
         k: 'torture',
         h: 'graveyard',
+        m: 'temple',
+        c: 'combatPit',
         d: 'door',
         f: 'sentry',
         y: 'rally',
@@ -689,6 +696,10 @@ export class Game {
         this.cancelBoxSelect();
         this.clearSelection();
         this.possessArmed = false;
+      }
+      if (e.key.toLowerCase() === 'l' && !e.metaKey && !e.ctrlKey) {
+        this.refreshRosterUi(true);
+        this.hud.openRoster();
       }
     });
     window.addEventListener('keyup', (e) => this.keys.delete(e.key.toLowerCase()));
@@ -1135,7 +1146,7 @@ export class Game {
     if (tile) {
       let room =
         tile.room !== RoomType.None
-          ? ` · ${['', 'Treasury', 'Lair', 'Hatchery', 'Training', 'Library', 'Portal', 'Guard', 'Workshop', 'Prison', 'Torture Chamber', 'Graveyard'][tile.room]}`
+          ? ` · ${['', 'Treasury', 'Lair', 'Hatchery', 'Training', 'Library', 'Portal', 'Guard', 'Workshop', 'Prison', 'Torture Chamber', 'Graveyard', 'Temple', 'Combat Pit'][tile.room]}`
           : '';
       if (tile.room === RoomType.Hatchery) room += ` · food ${Math.floor(this.hatcheryFood)}`;
       if (tile.room === RoomType.Workshop) room += ` · kits D${this.doorKits}/S${this.sentryKits}`;
@@ -1157,6 +1168,15 @@ export class Game {
       }
       if (tile.room === RoomType.Graveyard) {
         room += ` · corpses ${this.corpses.length}`;
+      }
+      if (tile.room === RoomType.Temple) {
+        room += ` · praying ${this.templePrayCount}`;
+      }
+      if (tile.room === RoomType.CombatPit) {
+        const pitters = this.creatures.filter(
+          (c) => c.alive && !c.isHero && c.job === JobType.Train && this.grid.get(c.x, c.y)?.room === RoomType.CombatPit
+        ).length;
+        room += ` · sparring ${pitters}`;
       }
       if (tile.door === DoorState.Closed) room += ' · Door (closed)';
       if (tile.door === DoorState.Open) room += ' · Door (open)';
@@ -1506,7 +1526,13 @@ export class Game {
             ? 'Knocked out'
             : jobRaw === JobType.AttackMove
               ? 'Attack'
-              : jobRaw.charAt(0).toUpperCase() + jobRaw.slice(1);
+              : jobRaw === JobType.Pray
+                ? 'Praying'
+                : jobRaw === JobType.DragWounded
+                  ? 'Dragging wounded'
+                  : jobRaw === JobType.Flee
+                    ? 'Fleeing'
+                    : jobRaw.charAt(0).toUpperCase() + jobRaw.slice(1);
       const groupN = this.selectedGroup.filter((x) => x.alive).length;
       const kindLabel = kindNames[c.kind] ?? String(c.kind);
       this.hud.showInspector({
@@ -1623,6 +1649,8 @@ export class Game {
         prison: RoomType.Prison,
         torture: RoomType.Torture,
         graveyard: RoomType.Graveyard,
+        temple: RoomType.Temple,
+        combatPit: RoomType.CombatPit,
       };
       const room = roomMap[this.tool];
       if (room && tile.kind === TileKind.Claimed && tile.room === RoomType.None) {
@@ -1657,6 +1685,12 @@ export class Game {
           }
           if (room === RoomType.Graveyard) {
             this.mentioneOnce('graveyardBuilt', MENTOR_LINES.graveyardBuilt);
+          }
+          if (room === RoomType.Temple) {
+            this.mentioneOnce('templeBuilt', MENTOR_LINES.templeBuilt);
+          }
+          if (room === RoomType.CombatPit) {
+            this.mentioneOnce('combatPitBuilt', MENTOR_LINES.combatPitBuilt);
           }
           this.saveNow();
         }
@@ -1749,8 +1783,23 @@ export class Game {
       this.refreshInspector();
       return;
     }
-    // stun if dropped into fight (near enemy) — skip for captives
+    // Dropping KO ally onto Lair bed → recover toward sleep
+    if (!c.isHero && c.knockedOut && dropTile?.room === RoomType.Lair) {
+      c.knockedOut = false;
+      c.hp = Math.max(c.hp, Math.floor(c.maxHp * 0.25));
+      c.job = JobType.Sleep;
+      c.jobTarget = { x, y };
+      c.bedKey = `${x},${y}`;
+      this.bedOwners.set(c.bedKey, c.id);
+      c.setPath(null);
+      this.hud.sayNow(MENTOR_LINES.lairResting);
+      this.held = null;
+      this.refreshInspector();
+      return;
+    }
+    // stun if dropped into fight (near enemy) — Combat Pit training exception (DK2-style)
     if (!c.isHero) {
+      const onPit = dropTile?.room === RoomType.CombatPit;
       const nearEnemy = this.creatures.some(
         (o) =>
           o.alive &&
@@ -1760,7 +1809,7 @@ export class Game {
           !o.isPrisoner &&
           Math.hypot(o.x - x, o.y - y) < 2.5
       );
-      if (nearEnemy) {
+      if (nearEnemy && !onPit) {
         c.stunTimer = 1.5;
       }
       this.safeMood(c, (Number.isFinite(c.mood) ? c.mood : 72) + 4);
@@ -3110,6 +3159,273 @@ export class Game {
   }
 
 
+
+  private focusCreatureById(id: number): void {
+    try {
+      const c = this.creatures.find((x) => x.id === id && x.alive && !x.isHero);
+      if (!c) return;
+      this.selectCreature(c);
+      const w = this.grid.tileToWorld(c.x, c.y);
+      this.camTarget.set(w.x, 0, w.z);
+      this.renderer.camera.position.set(w.x + 4, 26, w.z + 16);
+      this.renderer.camera.lookAt(this.camTarget);
+      this.refreshInspector();
+    } catch (err) {
+      console.warn('[underkeep] focusCreatureById failed', err);
+    }
+  }
+
+  private refreshRosterUi(force = false): void {
+    try {
+      if (!force && !this.hud.isRosterOpen()) return;
+      const kindNames: Record<string, string> = {
+        scrabbler: 'Scrabbler',
+        skitterwing: 'Skitterwing',
+        rattlekin: 'Rattlekin',
+        emberling: 'Emberling',
+        gravemage: 'Gravemage',
+        thornwitch: 'Thornwitch',
+        bonewretch: 'Bonewretch',
+      };
+      const rows = this.creatures
+        .filter((c) => c.alive && !c.isHero)
+        .map((c) => {
+          const jobRaw = typeof c.job === 'string' ? c.job : 'idle';
+          let job =
+            c.held
+              ? 'Held'
+              : c.knockedOut
+                ? 'Knocked out'
+                : jobRaw === JobType.AttackMove
+                  ? 'Attack'
+                  : jobRaw === JobType.Pray
+                    ? 'Praying'
+                    : jobRaw === JobType.DragWounded
+                      ? 'Hauling'
+                      : jobRaw.charAt(0).toUpperCase() + jobRaw.slice(1);
+          if (c.hasTalisman) job += ' ✦';
+          return {
+            id: c.id,
+            name: `${kindNames[c.kind] ?? c.kind} Lv${c.level}`,
+            job,
+            hp: c.hp,
+            maxHp: c.maxHp,
+            mood: c.mood,
+            knockedOut: c.knockedOut,
+          };
+        });
+      this.hud.updateRoster(rows);
+    } catch (err) {
+      console.warn('[underkeep] roster ui failed', err);
+    }
+  }
+
+  /** QA/screenshot: Pass 7.4 Temple / Combat Pit / roster / flee-drag wounded. */
+  preparePass74Shot(
+    focus: 'temple' | 'combatPit' | 'roster' | 'flee' | 'both' = 'both'
+  ): void {
+    this.hud.hideOverlay();
+    const hx = this.grid.heartPos.x;
+    const hy = this.grid.heartPos.y;
+    const claim = (x: number, y: number, room = RoomType.None) => {
+      const t = this.grid.get(x, y);
+      if (!t || t.kind === TileKind.Heart) return;
+      t.kind = TileKind.Claimed;
+      t.claimedProgress = 1;
+      t.room = room;
+      t.mark = MarkType.None;
+      t.digProgress = 0;
+      t.door = DoorState.None;
+      t.trap = TrapType.None;
+      t.rally = false;
+      t.fortified = false;
+      t.explored = true;
+    };
+
+    for (let y = hy - 3; y <= hy + 5; y++) {
+      for (let x = hx - 3; x <= hx + 6; x++) claim(x, y);
+    }
+    // Keep Pass 7.3 rooms for non-regression
+    claim(hx - 2, hy + 3, RoomType.Prison);
+    claim(hx - 1, hy + 3, RoomType.Prison);
+    claim(hx, hy + 3, RoomType.Torture);
+    claim(hx - 2, hy + 5, RoomType.Graveyard);
+    claim(hx - 1, hy + 5, RoomType.Graveyard);
+
+    claim(hx + 2, hy, RoomType.Treasury);
+    claim(hx + 3, hy, RoomType.Treasury);
+    for (let x = hx + 2; x <= hx + 5; x++) {
+      for (let y = hy + 1; y <= hy + 2; y++) claim(x, y, RoomType.Lair);
+    }
+    for (let x = hx - 2; x <= hx; x++) claim(x, hy + 1, RoomType.Hatchery);
+    claim(hx + 4, hy, RoomType.Library);
+    claim(hx + 5, hy, RoomType.Library);
+    claim(hx + 5, hy + 3, RoomType.Portal);
+    claim(hx + 2, hy + 3, RoomType.Workshop);
+    claim(hx + 3, hy + 1, RoomType.Training);
+    claim(hx + 4, hy + 1, RoomType.Training);
+
+    // Temple cluster
+    claim(hx + 2, hy + 4, RoomType.Temple);
+    claim(hx + 3, hy + 4, RoomType.Temple);
+    claim(hx + 4, hy + 4, RoomType.Temple);
+    // Combat Pit
+    claim(hx + 5, hy + 4, RoomType.CombatPit);
+    claim(hx + 5, hy + 5, RoomType.CombatPit);
+    claim(hx + 4, hy + 5, RoomType.CombatPit);
+
+    this.gold = 1400;
+    this.goldEver = this.gold;
+    this.mana = 80;
+    this.hatcheryFood = 8;
+    this.doorKits = 1;
+    this.sentryKits = 1;
+    this.wavesCleared = 1;
+    this.heroWaveSpawned = true;
+    this.heroWaveTimer = 0;
+
+    const workers = this.creatures.filter((c) => c.isWorker && c.alive);
+    while (workers.length < 3) {
+      workers.push(this.spawnCreature(CreatureKind.Scrabbler, hx - 1, hy));
+    }
+
+    // Ensure roster variety
+    if (!this.creatures.some((c) => c.kind === CreatureKind.Rattlekin && c.alive)) {
+      this.spawnCreature(CreatureKind.Rattlekin, hx + 1, hy);
+    }
+    if (!this.creatures.some((c) => c.kind === CreatureKind.Emberling && c.alive)) {
+      this.spawnCreature(CreatureKind.Emberling, hx + 2, hy);
+    }
+    if (!this.creatures.some((c) => c.kind === CreatureKind.Gravemage && c.alive)) {
+      this.spawnCreature(CreatureKind.Gravemage, hx + 3, hy);
+    }
+    if (!this.creatures.some((c) => c.kind === CreatureKind.Thornwitch && c.alive)) {
+      this.spawnCreature(CreatureKind.Thornwitch, hx + 1, hy + 2);
+    }
+    if (!this.creatures.some((c) => c.kind === CreatureKind.Bonewretch && c.alive)) {
+      this.spawnCreature(CreatureKind.Bonewretch, hx - 1, hy + 5);
+    }
+
+    // Prayer demo
+    const pray = this.creatures.find((c) => c.kind === CreatureKind.Gravemage && c.alive);
+    if (pray) {
+      pray.x = hx + 3;
+      pray.y = hy + 4;
+      const pw = this.grid.tileToWorld(pray.x, pray.y);
+      pray.wx = pw.x;
+      pray.wz = pw.z;
+      pray.mood = 42;
+      pray.job = JobType.Pray;
+      pray.jobTarget = { x: hx + 3, y: hy + 4 };
+      pray.workTimer = 2.8;
+      pray.prayerBuff = 12;
+      pray.setPath(null);
+    }
+
+    // Combat Pit veteran leveling
+    const pit = this.creatures.find((c) => c.kind === CreatureKind.Emberling && c.alive);
+    if (pit) {
+      pit.x = hx + 5;
+      pit.y = hy + 4;
+      const ww = this.grid.tileToWorld(pit.x, pit.y);
+      pit.wx = ww.x;
+      pit.wz = ww.z;
+      pit.level = 4;
+      pit.trainNeed = 80;
+      pit.job = JobType.Train;
+      pit.jobTarget = { x: hx + 5, y: hy + 4 };
+      pit.workTimer = 11.2;
+      pit.setPath(null);
+    }
+
+    // Flee / drag wounded demo
+    const wounded = this.creatures.find((c) => c.kind === CreatureKind.Rattlekin && c.alive);
+    if (wounded) {
+      wounded.x = hx + 1;
+      wounded.y = hy + 4;
+      const ww = this.grid.tileToWorld(wounded.x, wounded.y);
+      wounded.wx = ww.x;
+      wounded.wz = ww.z;
+      wounded.hp = 1;
+      wounded.knockedOut = true;
+      wounded.job = JobType.Idle;
+      wounded.setPath(null);
+    }
+    const hauler = workers[0];
+    if (hauler && wounded) {
+      hauler.x = hx + 1;
+      hauler.y = hy + 3;
+      const hw = this.grid.tileToWorld(hauler.x, hauler.y);
+      hauler.wx = hw.x;
+      hauler.wz = hw.z;
+      hauler.job = JobType.DragWounded;
+      hauler.jobTarget = { x: wounded.x, y: wounded.y };
+      hauler.workTimer = 0;
+      const path = this.grid.findPath(hauler.x, hauler.y, wounded.x, wounded.y);
+      if (path) hauler.setPath(path);
+    }
+
+    // Fleeing minion toward Lair
+    const fleer = this.creatures.find((c) => c.kind === CreatureKind.Thornwitch && c.alive);
+    if (fleer) {
+      fleer.x = hx;
+      fleer.y = hy + 4;
+      const fw = this.grid.tileToWorld(fleer.x, fleer.y);
+      fleer.wx = fw.x;
+      fleer.wz = fw.z;
+      fleer.hp = fleer.maxHp * 0.28;
+      fleer.job = JobType.Flee;
+      fleer.fleeTimer = 3;
+      fleer.jobTarget = { x: hx + 3, y: hy + 1 };
+      const path = this.grid.findPath(fleer.x, fleer.y, hx + 3, hy + 1);
+      if (path) fleer.setPath(path);
+    }
+
+    this.requestStructuralRebuild();
+    this.rebuild();
+
+    const focusW = this.grid.tileToWorld(hx + 3, hy + 4);
+    this.camTarget.set(focusW.x, 0, focusW.z);
+    this.renderer.camera.position.set(focusW.x + 3, 24, focusW.z + 14);
+    this.renderer.camera.lookAt(this.camTarget);
+
+    if (focus === 'temple') {
+      const tw = this.grid.tileToWorld(hx + 3, hy + 4);
+      this.camTarget.set(tw.x, 0, tw.z);
+      this.renderer.camera.position.set(tw.x + 2, 20, tw.z + 12);
+      this.renderer.camera.lookAt(this.camTarget);
+      if (pray) this.selectCreature(pray);
+      this.hud.setTooltip('Temple — prayer mood buff · talisman hook');
+      this.hud.sayNow(MENTOR_LINES.praying);
+    } else if (focus === 'combatPit') {
+      const tw = this.grid.tileToWorld(hx + 5, hy + 4);
+      this.camTarget.set(tw.x, 0, tw.z);
+      this.renderer.camera.position.set(tw.x + 2, 20, tw.z + 12);
+      this.renderer.camera.lookAt(this.camTarget);
+      if (pit) this.selectCreature(pit);
+      this.hud.setTooltip('Combat Pit — veteran leveling past 4');
+      this.hud.sayNow(
+        MENTOR_LINES.combatLevelUp.replace('%n', 'Emberling').replace('%l', '5')
+      );
+    } else if (focus === 'roster') {
+      this.refreshRosterUi(true);
+      this.hud.openRoster();
+      this.hud.sayNow('Creature roster — HP · job · mood. Click to focus.');
+    } else if (focus === 'flee') {
+      const tw = this.grid.tileToWorld(hx + 1, hy + 3);
+      this.camTarget.set(tw.x, 0, tw.z);
+      this.renderer.camera.position.set(tw.x + 2, 20, tw.z + 12);
+      this.renderer.camera.lookAt(this.camTarget);
+      this.hud.setTooltip('Flee / drag wounded → Lair beds');
+      this.hud.sayNow(MENTOR_LINES.dragWounded);
+    } else {
+      this.refreshRosterUi(true);
+      this.hud.openRoster();
+      this.hud.sayNow('Pass 7.4 — Temple · Combat Pit · Roster · Flee/drag wounded.');
+      this.hud.setTooltip('Pass 7.4 — Temple · Combat Pit · Roster · Flee/drag');
+    }
+  }
+
   /** QA/screenshot: Pass 7.3 Prison/Torture/Graveyard + room-size efficiency. */
   preparePass73Shot(focus: 'prison' | 'torture' | 'graveyard' | 'efficiency' | 'both' = 'both'): void {
     this.hud.hideOverlay();
@@ -3770,6 +4086,18 @@ export class Game {
 
       this.renderer.update(dt);
       this.hud.update(dt);
+      // Pass 7.4 — prayer buff decay + temple pray count
+      this.templePrayCount = 0;
+      for (const c of this.creatures) {
+        if (!c.alive) continue;
+        if (c.prayerBuff > 0) c.prayerBuff = Math.max(0, c.prayerBuff - dt);
+        if (c.job === JobType.Pray && !c.isHero) this.templePrayCount++;
+      }
+      this.rosterAcc += dt;
+      if (this.rosterAcc >= 0.45) {
+        this.rosterAcc = 0;
+        this.refreshRosterUi(false);
+      }
       if (this.selected || this.held) this.refreshInspector();
       this.hud.updateStats(
         this.gold,
@@ -4054,7 +4382,9 @@ export class Game {
 
   private regenMana(dt: number): void {
     const claimed = this.grid.countClaimed();
-    const rate = 2 + claimed * 0.08;
+    const templeTiles = this.grid.countRoom(RoomType.Temple);
+    const prayBonus = this.templePrayCount * 0.55 + templeTiles * 0.12;
+    const rate = 2 + claimed * 0.08 + prayBonus;
     const m = Number.isFinite(this.mana) ? this.mana : 0;
     this.mana = Math.max(0, Math.min(this.maxMana(), m + rate * dt));
   }
@@ -4082,6 +4412,7 @@ export class Game {
     const workers = this.creatures.filter((c) => c.alive && c.isWorker && !c.held && c.stunTimer <= 0);
     // heroes force flee
     for (const w of workers) {
+      if (w.job === JobType.DragPrisoner || w.job === JobType.DragWounded) continue;
       const threat = this.creatures.find(
         (h) => h.alive && h.isHero && !h.knockedOut && !h.isPrisoner && Math.hypot(h.x - w.x, h.y - w.y) < 5
       );
@@ -4134,7 +4465,9 @@ export class Game {
       }
     }
 
-    const idle = workers.filter((w) => w.job === JobType.Idle || (w.job === JobType.Flee && w.fleeTimer <= 0));
+    const idle = workers.filter(
+      (w) => w.job === JobType.Idle || (w.job === JobType.Flee && w.fleeTimer <= 0)
+    );
     for (const w of idle) {
       w.job = JobType.Idle;
       w.jobTarget = null;
@@ -4196,6 +4529,38 @@ export class Game {
             w.setPath(path);
             w.workTimer = 0;
             assigned = true;
+          }
+        }
+      }
+      if (assigned) continue;
+
+      // Drag knocked-out friendly minions to Lair beds
+      if (this.grid.countRoom(RoomType.Lair) > 0) {
+        const wounded = this.creatures.find(
+          (h) =>
+            h.alive &&
+            !h.isHero &&
+            !h.isWorker &&
+            h.knockedOut &&
+            !h.held &&
+            !this.creatures.some(
+              (o) =>
+                o.alive &&
+                o.isWorker &&
+                o.job === JobType.DragWounded &&
+                (Math.floor(o.workTimer) === h.id ||
+                  (o.jobTarget && o.jobTarget.x === h.x && o.jobTarget.y === h.y))
+            )
+        );
+        if (wounded) {
+          const path = this.grid.findPath(w.x, w.y, wounded.x, wounded.y);
+          if (path) {
+            w.job = JobType.DragWounded;
+            w.jobTarget = { x: wounded.x, y: wounded.y };
+            w.setPath(path);
+            w.workTimer = 0;
+            assigned = true;
+            this.mentioneOnce('dragWounded', MENTOR_LINES.dragWounded);
           }
         }
       }
@@ -4355,9 +4720,9 @@ export class Game {
       }
     }
 
-    // non-worker jobs: eat / sleep / train / fight
+    // non-worker jobs: eat / sleep / train / fight / pray
     for (const c of this.creatures) {
-      if (!c.alive || c.isWorker || c.isHero || c.held || c.stunTimer > 0) continue;
+      if (!c.alive || c.isWorker || c.isHero || c.held || c.stunTimer > 0 || c.knockedOut) continue;
 
       // Sticky attack-move orders (Pass 6.4) — engage heroes en route, keep destination
       if (c.job === JobType.AttackMove && c.jobTarget) {
@@ -4413,7 +4778,9 @@ export class Game {
         c.job === JobType.Eat ||
         c.job === JobType.Sleep ||
         c.job === JobType.Train ||
-        c.job === JobType.Research
+        c.job === JobType.Research ||
+        c.job === JobType.Pray ||
+        c.job === JobType.Flee
       ) {
         if (c.job === JobType.Sleep && c.jobTarget) {
           const key = `${c.jobTarget.x},${c.jobTarget.y}`;
@@ -4436,8 +4803,20 @@ export class Game {
       }
       // Never idle-wipe AttackMove here — handled as sticky above
 
-      // Hurt creatures seek Lair to rest/heal (interrupts class jobs)
+      // Critical wound → Flee to Lair (Pass 7.4)
+      const critical = c.hp < c.maxHp * 0.35;
       const hurt = c.hp < c.maxHp * 0.65;
+      if (critical && hasLair) {
+        const bed = this.findFreeOrOwnedBed(c);
+        if (bed) {
+          c.job = JobType.Flee;
+          c.fleeTimer = 4;
+          c.jobTarget = bed;
+          c.setPath(this.grid.findPath(c.x, c.y, bed.x, bed.y));
+          this.mentioneOnce('fleeLair', MENTOR_LINES.fleeLair);
+          continue;
+        }
+      }
       if (c.hunger > (hasHatch ? 24 : 40) && hasHatch) {
         if (this.assignEat(c)) continue;
       }
@@ -4452,6 +4831,17 @@ export class Game {
         c.kind === CreatureKind.Thornwitch ||
         c.kind === CreatureKind.Bonewretch;
 
+      // Low mood → Temple prayer (Pass 7.4)
+      if (c.mood < 58 && this.grid.countRoom(RoomType.Temple) > 0) {
+        const t = this.findRoomTile(RoomType.Temple);
+        if (t) {
+          c.job = JobType.Pray;
+          c.jobTarget = t;
+          c.setPath(this.grid.findPath(c.x, c.y, t.x, t.y));
+          continue;
+        }
+      }
+
       // Researchers → Library (spell research over time)
       if (isResearcher && this.grid.countRoom(RoomType.Library) > 0) {
         const t = this.findRoomTile(RoomType.Library);
@@ -4463,7 +4853,24 @@ export class Game {
         }
       }
 
-      // Fighters → Training Room levels (timer + level-up)
+      // Fighters → Combat Pit for levels 4+ (Pass 7.4)
+      if (
+        isFighter &&
+        c.trainNeed > 22 &&
+        c.level >= 4 &&
+        c.level < 10 &&
+        this.grid.countRoom(RoomType.CombatPit) > 0
+      ) {
+        const t = this.findRoomTile(RoomType.CombatPit);
+        if (t) {
+          c.job = JobType.Train;
+          c.jobTarget = t;
+          c.setPath(this.grid.findPath(c.x, c.y, t.x, t.y));
+          continue;
+        }
+      }
+
+      // Fighters → Training Room levels (timer + level-up) up to 4
       if (
         isFighter &&
         c.trainNeed > 28 &&
@@ -4515,10 +4922,25 @@ export class Game {
       if (
         !isResearcher &&
         c.trainNeed > 45 &&
-        this.grid.countRoom(RoomType.Training) > 0 &&
-        c.level < 4
+        c.level < 4 &&
+        this.grid.countRoom(RoomType.Training) > 0
       ) {
         const t = this.findRoomTile(RoomType.Training);
+        if (t) {
+          c.job = JobType.Train;
+          c.jobTarget = t;
+          c.setPath(this.grid.findPath(c.x, c.y, t.x, t.y));
+          continue;
+        }
+      }
+      if (
+        !isResearcher &&
+        c.trainNeed > 40 &&
+        c.level >= 4 &&
+        c.level < 10 &&
+        this.grid.countRoom(RoomType.CombatPit) > 0
+      ) {
+        const t = this.findRoomTile(RoomType.CombatPit);
         if (t) {
           c.job = JobType.Train;
           c.jobTarget = t;
@@ -4719,6 +5141,10 @@ export class Game {
           if (!hasLair) delta -= 3.5 * dt;
           if (overcrowded) delta -= 4.5 * dt;
           if (c.job === JobType.Sleep || c.job === JobType.Eat) delta += 12 * dt;
+          if (c.job === JobType.Pray) delta += 16 * dt;
+          if (c.prayerBuff > 0) delta += 4 * dt;
+          if (c.hasTalisman) delta += 1.5 * dt;
+          if (this.grid.countRoom(RoomType.Temple) > 0 && c.mood < 50) delta += 1.2 * dt;
           if (c.hp < c.maxHp * 0.4) delta -= 3 * dt;
           if (!Number.isFinite(delta)) delta = 0;
           this.safeMood(c, (Number.isFinite(c.mood) ? c.mood : 72) + delta);
@@ -4904,6 +5330,94 @@ export class Game {
       const dest = c.jobTarget;
       if (dest && this.grid.get(dest.x, dest.y)?.room === RoomType.Prison) {
         this.imprisonCreature(ko, dest.x, dest.y);
+      }
+      c.workTimer = 0;
+      c.job = JobType.Idle;
+      c.jobTarget = null;
+      c.setPath(null);
+      return;
+    }
+    if (c.job === JobType.DragWounded) {
+      if (!c.jobTarget) {
+        c.job = JobType.Idle;
+        c.workTimer = 0;
+        return;
+      }
+      // workTimer == 0 → seek KO ally; workTimer == id → haul to Lair bed
+      if (c.workTimer <= 0) {
+        const ko = this.creatures.find(
+          (h) =>
+            h.alive &&
+            !h.isHero &&
+            !h.isWorker &&
+            h.knockedOut &&
+            !h.held &&
+            Math.hypot(h.x - c.jobTarget!.x, h.y - c.jobTarget!.y) < 2.4
+        );
+        if (!arrived && c.pathIndex < c.path.length) return;
+        if (!ko) {
+          c.job = JobType.Idle;
+          c.jobTarget = null;
+          return;
+        }
+        if (Math.hypot(c.x - ko.x, c.y - ko.y) > 1.6) {
+          const path = this.grid.findPath(c.x, c.y, ko.x, ko.y);
+          if (path) {
+            c.setPath(path);
+            c.jobTarget = { x: ko.x, y: ko.y };
+          } else {
+            c.job = JobType.Idle;
+            c.jobTarget = null;
+          }
+          return;
+        }
+        const bed = this.findFreeOrOwnedBed(ko) ?? this.findRoomTile(RoomType.Lair);
+        if (!bed) {
+          c.job = JobType.Idle;
+          c.jobTarget = null;
+          return;
+        }
+        c.workTimer = ko.id;
+        c.jobTarget = bed;
+        const path = this.grid.findPath(c.x, c.y, bed.x, bed.y);
+        if (path) c.setPath(path);
+        else {
+          c.job = JobType.Idle;
+          c.workTimer = 0;
+          c.jobTarget = null;
+        }
+        return;
+      }
+      const ko = this.creatures.find((h) => h.id === Math.floor(c.workTimer) && h.alive);
+      if (ko) {
+        ko.wx = c.wx;
+        ko.wz = c.wz;
+        ko.x = c.x;
+        ko.y = c.y;
+        ko.knockedOut = true;
+      } else {
+        c.job = JobType.Idle;
+        c.workTimer = 0;
+        c.jobTarget = null;
+        return;
+      }
+      if (!arrived && c.pathIndex < c.path.length) return;
+      const dest = c.jobTarget;
+      if (dest && this.grid.get(dest.x, dest.y)?.room === RoomType.Lair) {
+        ko.knockedOut = false;
+        ko.hp = Math.max(ko.hp, Math.floor(ko.maxHp * 0.3));
+        ko.x = dest.x;
+        ko.y = dest.y;
+        const ww = this.grid.tileToWorld(dest.x, dest.y);
+        ko.wx = ww.x;
+        ko.wz = ww.z;
+        ko.job = JobType.Sleep;
+        ko.jobTarget = { x: dest.x, y: dest.y };
+        ko.bedKey = `${dest.x},${dest.y}`;
+        this.bedOwners.set(ko.bedKey, ko.id);
+        ko.setPath(null);
+        this.hud.sayNow(MENTOR_LINES.lairResting);
+        this.renderer.spawnFx(new THREE.Vector3(ko.wx, 0.9, ko.wz), 0x60e090, 0.55);
       }
       c.workTimer = 0;
       c.job = JobType.Idle;
@@ -5200,27 +5714,101 @@ export class Game {
     } else if (c.job === JobType.Train && arrived) {
       c.trainNeed = Math.max(0, c.trainNeed - 30 * dt);
       c.workTimer += dt;
-      // Training timer — ~8s per level at the Training Room
-      if (c.workTimer > 8 && c.level < 4) {
+      const tileRoom = this.grid.get(c.x, c.y)?.room;
+      const onPit = tileRoom === RoomType.CombatPit;
+      const names: Record<string, string> = {
+        rattlekin: 'Rattlekin',
+        emberling: 'Emberling',
+        skitterwing: 'Skitterwing',
+        gravemage: 'Gravemage',
+        thornwitch: 'Thornwitch',
+        bonewretch: 'Bonewretch',
+      };
+      const name = names[c.kind] ?? 'Minion';
+      // Training Room — ~8s per level up to 4
+      if (!onPit && c.workTimer > 8 && c.level < 4) {
         c.level++;
         c.maxHp += 15;
         c.hp = c.maxHp;
         c.damage += 3;
         c.workTimer = 0;
         this.renderer.spawnFx(new THREE.Vector3(c.wx, 1, c.wz), 0xffaa44, 0.6);
-        const names: Record<string, string> = {
-          rattlekin: 'Rattlekin',
-          emberling: 'Emberling',
-          skitterwing: 'Skitterwing',
-          gravemage: 'Gravemage',
-          thornwitch: 'Thornwitch',
-          bonewretch: 'Bonewretch',
-        };
+        this.hud.sayNow(`${name} reaches training level ${c.level}!`);
+      }
+      // Combat Pit — ~12s per level from 4 → 10 (DK2-style extension)
+      if (onPit && c.workTimer > 12 && c.level >= 4 && c.level < 10) {
+        c.level++;
+        c.maxHp += 18;
+        c.hp = c.maxHp;
+        c.damage += 4;
+        c.workTimer = 0;
+        this.renderer.spawnFx(new THREE.Vector3(c.wx, 1.15, c.wz), 0xff6040, 0.75);
+        this.renderer.spawnFx(new THREE.Vector3(c.wx, 0.7, c.wz), 0xffaa66, 0.45);
         this.hud.sayNow(
-          `${names[c.kind] ?? 'Minion'} reaches training level ${c.level}!`
+          MENTOR_LINES.combatLevelUp.replace('%n', name).replace('%l', String(c.level))
         );
       }
-      if (c.trainNeed < 5) c.job = JobType.Idle;
+      // If they outgrew Training Room, leave so assignJobs can send them to Pit
+      if (!onPit && c.level >= 4 && this.grid.countRoom(RoomType.CombatPit) > 0) {
+        c.job = JobType.Idle;
+        c.jobTarget = null;
+      } else if (c.trainNeed < 5 || (onPit && c.level >= 10)) {
+        c.job = JobType.Idle;
+        c.jobTarget = null;
+      }
+    } else if (c.job === JobType.Pray) {
+      if (!c.jobTarget) {
+        c.job = JobType.Idle;
+        return;
+      }
+      if (!arrived && c.path.length > 0) return;
+      if (c.x !== c.jobTarget.x || c.y !== c.jobTarget.y) {
+        const path = this.grid.findPath(c.x, c.y, c.jobTarget.x, c.jobTarget.y);
+        if (path) c.setPath(path);
+        return;
+      }
+      const tile = this.grid.get(c.x, c.y);
+      if (!tile || tile.room !== RoomType.Temple) {
+        c.job = JobType.Idle;
+        c.jobTarget = null;
+        return;
+      }
+      c.setPath(null);
+      c.workTimer += dt;
+      this.safeMood(c, (Number.isFinite(c.mood) ? c.mood : 72) + 18 * dt);
+      if (Math.random() < dt * 0.4) {
+        this.renderer.spawnFx(new THREE.Vector3(c.wx, 1.0, c.wz), 0xffe080, 0.35);
+      }
+      // After ~3.5s praying → prayer buff
+      if (c.workTimer >= 3.5) {
+        c.prayerBuff = Math.max(c.prayerBuff, 28);
+        c.workTimer = 0;
+        this.mentioneOnce('prayerBuff', MENTOR_LINES.prayerBuff);
+        this.renderer.spawnFx(new THREE.Vector3(c.wx, 1.3, c.wz), 0xffd060, 0.7);
+        // Lightweight talisman hook — first long prayer
+        if (!c.hasTalisman && c.mood > 70 && Math.random() < 0.35) {
+          c.hasTalisman = true;
+          this.safeMood(c, Math.min(100, c.mood + 8));
+          this.hud.sayNow(MENTOR_LINES.talismanGift);
+          this.renderer.spawnFx(new THREE.Vector3(c.wx, 1.5, c.wz), 0xfff0a0, 0.9);
+        } else {
+          this.mentioneOnce('praying', MENTOR_LINES.praying);
+        }
+      }
+      if (c.mood >= 88 && c.prayerBuff > 10) {
+        c.job = JobType.Idle;
+        c.jobTarget = null;
+      }
+    } else if (c.job === JobType.Flee) {
+      if (arrived || c.fleeTimer <= 0) {
+        // Convert flee into sleep at Lair if possible
+        if (c.jobTarget && this.grid.get(c.jobTarget.x, c.jobTarget.y)?.room === RoomType.Lair) {
+          this.assignSleep(c);
+        } else {
+          c.job = JobType.Idle;
+          c.setPath(null);
+        }
+      }
     } else if (c.job === JobType.AttackMove) {
       this.doCombat(c, dt);
       if (arrived && c.jobTarget && c.x === c.jobTarget.x && c.y === c.jobTarget.y) {
@@ -5295,10 +5883,12 @@ export class Game {
     if (c.attackCooldown > 0) return;
     // Level scales minion damage slightly; heroes hit a bit harder for readable pressure
     const levelBonus = c.isHero ? 1 : 1 + (c.level - 1) * 0.12;
+    const prayerMul = !c.isHero && c.prayerBuff > 0 ? 1.08 : 1;
+    const taliMul = !c.isHero && c.hasTalisman ? 1.05 : 1;
     c.attackCooldown = c.isHero ? 0.85 : 0.78;
     const target = targets[0];
     const beforeAlive = target.alive;
-    const dmg = c.damage * (0.95 + Math.random() * 0.25) * levelBonus;
+    const dmg = c.damage * (0.95 + Math.random() * 0.25) * levelBonus * prayerMul * taliMul;
     target.takeDamage(dmg);
     this.renderer.spawnFx(new THREE.Vector3(target.wx, 0.85, target.wz), c.isHero ? 0x88aaff : 0xff4040, 0.32);
     this.renderer.spawnFx(new THREE.Vector3(target.wx, 1.15, target.wz), 0xffddaa, 0.18);
@@ -5316,6 +5906,21 @@ export class Game {
         target.attackCooldown = 0;
         this.hud.sayNow(MENTOR_LINES.heroKnocked);
         this.renderer.spawnFx(new THREE.Vector3(target.wx, 1.2, target.wz), 0xa0c0ff, 0.7);
+      } else if (
+        !target.isHero &&
+        !target.isWorker &&
+        this.grid.countRoom(RoomType.Lair) > 0
+      ) {
+        // Friendly KO — Scrabblers can drag to Lair beds (Pass 7.4)
+        target.alive = true;
+        target.hp = 1;
+        target.knockedOut = true;
+        target.job = JobType.Idle;
+        target.jobTarget = null;
+        target.setPath(null);
+        target.attackCooldown = 0;
+        this.hud.sayNow(MENTOR_LINES.allyKnocked);
+        this.renderer.spawnFx(new THREE.Vector3(target.wx, 1.1, target.wz), 0xff8860, 0.65);
       } else {
         this.spawnCorpse(target.x, target.y, target.isHero);
         if (target.isHero) {

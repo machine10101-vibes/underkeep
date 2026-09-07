@@ -898,7 +898,7 @@ export function makeCreatureMesh(color: number, scale: number, kind: string): TH
   const flower = makeHealthFlower(kind === 'hero_knight' || kind === 'hero_archer' || kind === 'hero');
   // Counter-scale so flowers stay readable at overview regardless of body scale
   flower.scale.setScalar(1 / Math.max(0.35, scale));
-  flower.position.y = 1.85 / Math.max(0.35, scale);
+  flower.position.y = 2.05 / Math.max(0.35, scale);
   g.add(flower);
   (g as THREE.Group & { healthFlower?: THREE.Object3D }).healthFlower = flower;
 
@@ -1509,18 +1509,18 @@ export function makeHealthFlower(hero = false): THREE.Group {
     opacity: 0.95,
   });
   const petals: THREE.Mesh[] = [];
-  const petalGeo = cachedGeo('flower-petal-v7', () => new THREE.CircleGeometry(0.12, 8));
+  const petalGeo = cachedGeo('flower-petal-v7', () => new THREE.CircleGeometry(0.18, 8));
   for (let i = 0; i < 5; i++) {
     const petal = new THREE.Mesh(petalGeo, petalMat);
     const ang = (i / 5) * Math.PI * 2 - Math.PI / 2;
-    petal.position.set(Math.cos(ang) * 0.13, 0.01, Math.sin(ang) * 0.13);
+    petal.position.set(Math.cos(ang) * 0.18, 0.01, Math.sin(ang) * 0.18);
     petal.rotation.x = -Math.PI / 2;
     petal.rotation.z = ang;
     g.add(petal);
     petals.push(petal);
   }
   const center = new THREE.Mesh(
-    cachedGeo('flower-center-v7', () => new THREE.CircleGeometry(0.055, 8)),
+    cachedGeo('flower-center-v7', () => new THREE.CircleGeometry(0.08, 8)),
     new THREE.MeshBasicMaterial({
       color: hero ? 0xffe080 : 0x4a1808,
       side: THREE.DoubleSide,

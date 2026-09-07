@@ -104,8 +104,10 @@ export class DungeonRenderer {
   private fogOverlay = new THREE.Group();
   private fogBoxGeo = new THREE.BoxGeometry(TILE_SIZE * 1.05, 4.4, TILE_SIZE * 1.05);
   private fogMat = new THREE.MeshBasicMaterial({
-    color: 0x08060a,
-    depthWrite: true,
+    color: 0x0a080c,
+    transparent: true,
+    opacity: 0.38,
+    depthWrite: false,
   });
   private fogMeshes = new Map<string, THREE.Mesh>();
   private fogPool: THREE.Mesh[] = [];
@@ -115,8 +117,8 @@ export class DungeonRenderer {
 
   constructor(canvas: HTMLCanvasElement) {
     this.scene = new THREE.Scene();
-    this.scene.background = new THREE.Color(0x1c1618);
-    this.scene.fog = new THREE.FogExp2(0x1a1418, 0.0048);
+    this.scene.background = new THREE.Color(0x2a2228);
+    this.scene.fog = new THREE.FogExp2(0x241c22, 0.0038);
 
     this.camera = new THREE.PerspectiveCamera(46, 1, 0.1, 240);
     this.camera.position.set(0, 34, 22);
@@ -135,7 +137,7 @@ export class DungeonRenderer {
     this.basePixelRatio = Math.min(window.devicePixelRatio || 1, coarse ? 1.15 : 1.5);
     this.renderer.setPixelRatio(this.basePixelRatio);
     // Never clear to white if something fails mid-frame
-    this.renderer.setClearColor(0x1c1618, 1);
+    this.renderer.setClearColor(0x2a2228, 1);
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = THREE.BasicShadowMap;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
@@ -143,7 +145,7 @@ export class DungeonRenderer {
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
 
     // Warm dungeon lighting — still bright enough that PBR tiles read on mobile
-    const amb = new THREE.AmbientLight(0xd8c8b0, 0.82);
+    const amb = new THREE.AmbientLight(0xe0d4c0, 0.95);
     this.scene.add(amb);
     const hemi = new THREE.HemisphereLight(0xffe8cc, 0x3a2838, 0.72);
     hemi.position.set(0, 40, 0);
@@ -283,7 +285,7 @@ export class DungeonRenderer {
   reinitPipeline(): void {
     const size = new THREE.Vector2();
     this.renderer.getSize(size);
-    this.renderer.setClearColor(0x1c1618, 1);
+    this.renderer.setClearColor(0x2a2228, 1);
     this.composer = new EffectComposer(this.renderer);
     this.composer.addPass(new RenderPass(this.scene, this.camera));
     const isCoarse = typeof window !== 'undefined' && window.matchMedia?.('(pointer: coarse)').matches;
@@ -565,6 +567,15 @@ export class DungeonRenderer {
     const keep = new Set<string>();
     for (const tile of grid.tiles) {
       if (tile.explored) continue;
+      // DK2 overview shows the earth mass; don't black-box solid cubes
+      if (
+        tile.kind === TileKind.Earth ||
+        tile.kind === TileKind.Gold ||
+        tile.kind === TileKind.Rock ||
+        tile.fortified
+      ) {
+        continue;
+      }
       const key = `${tile.x},${tile.y}`;
       keep.add(key);
       let mesh = this.fogMeshes.get(key);
@@ -576,11 +587,12 @@ export class DungeonRenderer {
         this.fogOverlay.add(mesh);
       }
       const w = grid.tileToWorld(tile.x, tile.y);
-      mesh.position.set(w.x, 1.9, w.z);
+      mesh.position.set(w.x, 2.15, w.z);
       mesh.visible = true;
-      // Soft hide underlying tile mesh to cut overdraw while fogged
+      mesh.scale.set(1, 0.55, 1);
+      // Keep terrain visible — DK2 overview shows earth/gold even before claim
       const under = this.tileMeshes.get(key);
-      if (under) under.visible = false;
+      if (under) under.visible = true;
     }
     // Recycle fog meshes for explored tiles; restore underlying visibility
     for (const [key, mesh] of [...this.fogMeshes.entries()]) {

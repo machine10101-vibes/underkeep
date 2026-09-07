@@ -250,7 +250,7 @@ export class Creature {
       const shown = Math.max(0, Math.ceil(ratio * 5));
       for (let i = 0; i < petals.length; i++) petals[i].visible = i < shown;
     }
-    this.healthFlower.position.y = 1.85 / Math.max(0.35, this.mesh.scale.x || 1) + Math.sin(time * 2.4 + this.bobPhase) * 0.04;
+    this.healthFlower.position.y = 2.05 / Math.max(0.35, this.mesh.scale.x || 1) + Math.sin(time * 2.4 + this.bobPhase) * 0.04;
     this.healthFlower.rotation.y = time * 0.6;
     this.healthFlower.visible = this.alive && !this.held;
   }

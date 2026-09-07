@@ -1364,9 +1364,9 @@ export function makeRoomProps(room: RoomType, variant = 0): THREE.Group | null {
       opacity: 0.9,
     });
     const energy = new THREE.MeshStandardMaterial({
-      color: 0xffb347,
-      emissive: 0xff6a18,
-      emissiveIntensity: 1.7,
+      color: 0xff6a24,
+      emissive: 0xff3208,
+      emissiveIntensity: 1.35,
       transparent: true,
       opacity: 0.82,
       side: THREE.DoubleSide,
@@ -1391,25 +1391,32 @@ export function makeRoomProps(room: RoomType, variant = 0): THREE.Group | null {
     base.castShadow = true;
     g.add(base);
     for (const sx of [-1, 1]) {
-      const pillar = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.2, 1.7, 7), portalStone);
-      pillar.position.set(sx * 0.52, 1.05, 0);
+      const pillar = new THREE.Mesh(new THREE.CylinderGeometry(0.13, 0.22, 2.25, 7), portalStone);
+      pillar.position.set(sx * 0.62, 1.32, 0);
       pillar.rotation.z = sx * -0.14;
       pillar.castShadow = true;
       g.add(pillar);
       const shard = new THREE.Mesh(new THREE.OctahedronGeometry(0.24, 0), crystal);
-      shard.scale.set(0.72, 2.45, 0.72);
-      shard.position.set(sx * 0.56, 1.8, 0);
+      shard.scale.set(0.78, 3.35, 0.78);
+      shard.position.set(sx * 0.7, 2.35, 0);
       shard.rotation.z = sx * -0.14;
       g.add(shard);
     }
-    const ring = new THREE.Mesh(new THREE.TorusGeometry(0.54, 0.075, 8, 28), crystal);
-    ring.position.y = 1.35;
+    const arch = new THREE.Mesh(new THREE.TorusGeometry(0.72, 0.1, 8, 28, Math.PI), portalStone);
+    arch.position.y = 2.26;
+    arch.rotation.z = Math.PI;
+    arch.castShadow = true;
+    g.add(arch);
+    const ring = new THREE.Mesh(new THREE.TorusGeometry(0.55, 0.07, 8, 28), crystal);
+    ring.position.y = 1.62;
+    ring.scale.y = 1.42;
     g.add(ring);
-    const core = new THREE.Mesh(new THREE.CircleGeometry(0.48, 24), energy);
-    core.position.set(0, 1.35, 0.015);
+    const core = new THREE.Mesh(new THREE.CircleGeometry(0.52, 28), energy);
+    core.scale.y = 1.5;
+    core.position.set(0, 1.58, 0.015);
     g.add(core);
     const light = new THREE.PointLight(0x55c8ff, 1.8, 7, 2);
-    light.position.y = 1.5;
+    light.position.y = 1.85;
     g.add(light);
     g.userData.portalAnimated = true;
     g.userData.portalRing = ring;

@@ -263,6 +263,91 @@ export function makeGoldVeinGeo(): THREE.BufferGeometry {
   });
 }
 
+/**
+ * Low-relief dressing for the exposed side of a solid tile.
+ * Shared geometry/materials keep the richer wall silhouette cheap.
+ */
+export function makeWallFaceDetail(kind: TileKind, fortified = false): THREE.Group {
+  const g = new THREE.Group();
+  const isGold = kind === TileKind.Gold;
+  const isRock = kind === TileKind.Rock;
+  const faceMat = cachedMat(
+    fortified ? 'wall-face-fort-v8' : isGold ? 'wall-face-gold-v8' : isRock ? 'wall-face-rock-v8' : 'wall-face-earth-v8',
+    () =>
+      new THREE.MeshStandardMaterial({
+        color: fortified ? 0x777068 : isGold ? 0x8a5518 : isRock ? 0x585c66 : 0x77441f,
+        metalness: fortified ? 0.32 : isGold ? 0.35 : 0.06,
+        roughness: fortified ? 0.58 : 0.88,
+        emissive: isGold ? 0x6a3908 : 0x080604,
+        emissiveIntensity: isGold ? 0.3 : 0.04,
+      })
+  );
+  const stoneGeo = cachedGeo('wall-face-stone-v8', () => new THREE.DodecahedronGeometry(0.24, 0));
+  const ledgeGeo = cachedGeo('wall-face-ledge-v8', () => new THREE.BoxGeometry(1.58, 0.13, 0.18));
+
+  // Horizontal strata immediately makes a cube read as a carved cavern face.
+  for (let i = 0; i < 3; i++) {
+    const ledge = new THREE.Mesh(ledgeGeo, faceMat);
+    ledge.position.set((i % 2 ? -1 : 1) * 0.06, 0.48 + i * 0.58, 0.87);
+    ledge.scale.x = 0.78 + i * 0.08;
+    ledge.rotation.z = (i - 1) * 0.025;
+    ledge.castShadow = true;
+    g.add(ledge);
+  }
+
+  for (let i = 0; i < 5; i++) {
+    const stone = new THREE.Mesh(stoneGeo, faceMat);
+    stone.position.set(-0.66 + i * 0.33, 0.25 + (i % 2) * 0.25, 0.91);
+    const s = 0.72 + (i % 3) * 0.13;
+    stone.scale.set(s, s * 0.58, 0.42);
+    stone.rotation.set(i * 0.17, i * 0.31, i * 0.11);
+    stone.castShadow = true;
+    g.add(stone);
+  }
+
+  // Broken crown stones catch the key light and break the repeated cube skyline.
+  const topY = isRock ? 3.52 : 2.28;
+  for (let i = 0; i < 3; i++) {
+    const crownStone = new THREE.Mesh(stoneGeo, faceMat);
+    crownStone.position.set(-0.58 + i * 0.58, topY + (i % 2) * 0.08, 0.58 + (i % 2) * 0.16);
+    crownStone.scale.set(1.2, 0.55 + i * 0.08, 1.0);
+    crownStone.rotation.set(i * 0.2, i * 0.55, i * 0.16);
+    crownStone.castShadow = true;
+    g.add(crownStone);
+  }
+
+  if (isGold) {
+    const crystalMat = cachedMat('wall-face-crystal-v8', () =>
+      new THREE.MeshStandardMaterial({
+        color: 0xffd54a,
+        emissive: 0xffa510,
+        emissiveIntensity: 1.1,
+        metalness: 0.82,
+        roughness: 0.18,
+      })
+    );
+    const crystalGeo = cachedGeo('wall-face-crystal-v8', () => new THREE.OctahedronGeometry(0.14, 0));
+    for (let i = 0; i < 4; i++) {
+      const crystal = new THREE.Mesh(crystalGeo, crystalMat);
+      crystal.position.set(-0.48 + i * 0.31, 0.72 + (i % 2) * 0.48, 1.0);
+      crystal.scale.set(0.75, 1.8 + i * 0.15, 0.55);
+      crystal.rotation.z = (i - 1.5) * 0.2;
+      g.add(crystal);
+    }
+  }
+
+  if (fortified) {
+    const gold = claimedGoldMat();
+    const braceGeo = cachedGeo('wall-face-brace-v8', () => new THREE.BoxGeometry(0.1, 2.05, 0.12));
+    for (const x of [-0.72, 0.72]) {
+      const brace = new THREE.Mesh(braceGeo, gold);
+      brace.position.set(x, 1.08, 0.98);
+      g.add(brace);
+    }
+  }
+  return g;
+}
+
 /** Thin top-edge outline so diggable blocks read on mobile */
 export function makeBlockEdgeGeo(height: number): THREE.BufferGeometry {
   // Quantize height so dig shrinks don't explode the geo cache (OOM → white screen)
@@ -283,35 +368,29 @@ export function makeBlockEdgeGeo(height: number): THREE.BufferGeometry {
 
 export function makeHeartGeo(): THREE.Group {
   const group = new THREE.Group();
-  const core = new THREE.Mesh(
-    new THREE.IcosahedronGeometry(0.75, 2),
-    new THREE.MeshStandardMaterial({
-      color: 0x6a1820,
-      emissive: 0xff3048,
-      emissiveIntensity: 0.55,
-      metalness: 0.35,
-      roughness: 0.4,
-    })
-  );
-  core.position.y = 1.05;
-  group.add(core);
+  const darkMetal = new THREE.MeshStandardMaterial({
+    color: 0x30262a,
+    metalness: 0.72,
+    roughness: 0.35,
+    emissive: 0x24080c,
+    emissiveIntensity: 0.25,
+  });
+  const redCrystal = new THREE.MeshStandardMaterial({
+    color: 0x8a1828,
+    emissive: 0xff2038,
+    emissiveIntensity: 1.15,
+    metalness: 0.38,
+    roughness: 0.26,
+  });
 
-  const ring = new THREE.Mesh(
-    new THREE.TorusGeometry(1.05, 0.1, 10, 32),
-    new THREE.MeshStandardMaterial({
-      color: 0x3a1820,
-      emissive: 0xaa2030,
-      emissiveIntensity: 0.45,
-      metalness: 0.55,
-      roughness: 0.35,
-    })
-  );
-  ring.rotation.x = Math.PI / 2;
-  ring.position.y = 1.05;
-  group.add(ring);
-
-  const pedestal = new THREE.Mesh(
-    new THREE.CylinderGeometry(1.05, 1.25, 0.45, 12),
+  // Layered ritual dais gives the Heart a dominant architectural footprint.
+  const lowerDais = new THREE.Mesh(new THREE.CylinderGeometry(1.6, 1.82, 0.26, 12), darkMetal);
+  lowerDais.position.y = 0.18;
+  lowerDais.castShadow = true;
+  lowerDais.receiveShadow = true;
+  group.add(lowerDais);
+  const upperDais = new THREE.Mesh(
+    new THREE.CylinderGeometry(1.15, 1.42, 0.42, 12),
     new THREE.MeshStandardMaterial({
       color: 0x5a4538,
       metalness: 0.35,
@@ -319,16 +398,47 @@ export function makeHeartGeo(): THREE.Group {
       map: claimedStoneTex(),
     })
   );
-  pedestal.position.y = 0.25;
-  group.add(pedestal);
+  upperDais.position.y = 0.48;
+  upperDais.castShadow = true;
+  group.add(upperDais);
 
-  // Subtle lava pool / embers around the heart
+  const core = new THREE.Mesh(
+    new THREE.IcosahedronGeometry(0.82, 2),
+    redCrystal
+  );
+  core.scale.set(0.92, 1.2, 0.92);
+  core.position.y = 1.48;
+  core.castShadow = true;
+  group.add(core);
+
+  const ring = new THREE.Mesh(new THREE.TorusGeometry(1.18, 0.075, 8, 36), redCrystal);
+  ring.rotation.x = Math.PI / 2;
+  ring.position.y = 1.48;
+  group.add(ring);
+
+  const crown = new THREE.Group();
+  for (let i = 0; i < 4; i++) {
+    const angle = i * Math.PI * 0.5 + Math.PI * 0.25;
+    const claw = new THREE.Mesh(new THREE.ConeGeometry(0.18, 1.25, 5), darkMetal);
+    claw.position.set(Math.cos(angle) * 1.12, 1.22, Math.sin(angle) * 1.12);
+    claw.rotation.z = Math.cos(angle) * -0.5;
+    claw.rotation.x = Math.sin(angle) * 0.5;
+    claw.castShadow = true;
+    crown.add(claw);
+    const gem = new THREE.Mesh(new THREE.OctahedronGeometry(0.12, 0), redCrystal);
+    gem.position.set(Math.cos(angle) * 1.24, 0.78, Math.sin(angle) * 1.24);
+    crown.add(gem);
+  }
+  group.add(crown);
+  (group as THREE.Group & { heartCrown?: THREE.Group }).heartCrown = crown;
+
+  // Molten ritual pool and segmented rune ring.
   const lava = new THREE.Mesh(
-    new THREE.CircleGeometry(1.55, 24),
+    new THREE.RingGeometry(1.38, 1.72, 32),
     new THREE.MeshStandardMaterial({
       color: 0x4a1010,
       emissive: 0xff3018,
-      emissiveIntensity: 0.55,
+      emissiveIntensity: 0.9,
       metalness: 0.2,
       roughness: 0.7,
       transparent: true,
@@ -339,23 +449,19 @@ export function makeHeartGeo(): THREE.Group {
   lava.position.y = 0.13;
   group.add(lava);
 
-  for (let i = 0; i < 6; i++) {
-    const ang = (i / 6) * Math.PI * 2;
+  for (let i = 0; i < 10; i++) {
+    const ang = (i / 10) * Math.PI * 2;
     const ember = new THREE.Mesh(
-      new THREE.SphereGeometry(0.06 + (i % 3) * 0.02, 6, 6),
-      new THREE.MeshStandardMaterial({
-        color: 0xff6020,
-        emissive: 0xff4010,
-        emissiveIntensity: 1.2,
-        roughness: 1,
-      })
+      new THREE.BoxGeometry(0.2, 0.045, 0.06),
+      redCrystal
     );
-    ember.position.set(Math.cos(ang) * 1.15, 0.22, Math.sin(ang) * 1.15);
+    ember.position.set(Math.cos(ang) * 1.53, 0.34, Math.sin(ang) * 1.53);
+    ember.rotation.y = -ang;
     group.add(ember);
   }
 
-  const light = new THREE.PointLight(0xff4058, 1.15, 8, 2);
-  light.position.y = 1.35;
+  const light = new THREE.PointLight(0xff4058, 2.2, 12, 2);
+  light.position.y = 1.8;
   light.castShadow = false;
   group.add(light);
 
@@ -1122,7 +1228,7 @@ export function tileMaterial(kind: TileKind, fortified: boolean, _room: RoomType
 
 
 /** 1–2 readable 3D props per room tile (Treasury chests/gold, Lair bedrolls, etc.). */
-export function makeRoomProps(room: RoomType): THREE.Group | null {
+export function makeRoomProps(room: RoomType, variant = 0): THREE.Group | null {
   if (room === RoomType.None) return null;
   const g = new THREE.Group();
 
@@ -1241,29 +1347,73 @@ export function makeRoomProps(room: RoomType): THREE.Group | null {
     candle.position.set(-0.22, 0.68, 0.08);
     g.add(candle);
   } else if (room === RoomType.Portal) {
-    const swirlMat = new THREE.MeshStandardMaterial({
-      color: 0x8030c0,
-      emissive: 0xa040ff,
-      emissiveIntensity: 0.7,
-      metalness: 0.4,
-      roughness: 0.35,
-      transparent: true,
-      opacity: 0.85,
+    const portalStone = new THREE.MeshStandardMaterial({
+      color: 0x343843,
+      emissive: 0x10182c,
+      emissiveIntensity: 0.3,
+      metalness: 0.35,
+      roughness: 0.48,
     });
-    const pillar = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.28, 1.4, 10), swirlMat);
-    pillar.position.y = 0.75;
-    pillar.castShadow = true;
-    g.add(pillar);
-    const ring = new THREE.Mesh(new THREE.TorusGeometry(0.42, 0.06, 8, 20), swirlMat);
-    ring.position.y = 1.15;
-    ring.rotation.x = Math.PI / 2;
+    const crystal = new THREE.MeshStandardMaterial({
+      color: 0x79e6ff,
+      emissive: 0x20aaff,
+      emissiveIntensity: 1.35,
+      metalness: 0.25,
+      roughness: 0.18,
+      transparent: true,
+      opacity: 0.9,
+    });
+    const energy = new THREE.MeshStandardMaterial({
+      color: 0xffb347,
+      emissive: 0xff6a18,
+      emissiveIntensity: 1.7,
+      transparent: true,
+      opacity: 0.82,
+      side: THREE.DoubleSide,
+      depthWrite: false,
+    });
+    // Only one in four Portal tiles carries the full gateway; neighboring tiles
+    // become a crystal field instead of duplicating the same large prop.
+    if (variant % 4 !== 0) {
+      const shardGeo = new THREE.OctahedronGeometry(0.13, 0);
+      const count = 2 + (variant % 2);
+      for (let i = 0; i < count; i++) {
+        const shard = new THREE.Mesh(shardGeo, crystal);
+        shard.scale.set(0.7, 1.8 + i * 0.35, 0.7);
+        shard.position.set(-0.35 + i * 0.34, 0.26 + i * 0.08, (i % 2 ? -1 : 1) * 0.25);
+        shard.rotation.z = (i - 1) * 0.25;
+        g.add(shard);
+      }
+      return g;
+    }
+    const base = new THREE.Mesh(new THREE.CylinderGeometry(0.67, 0.82, 0.28, 10), portalStone);
+    base.position.y = 0.2;
+    base.castShadow = true;
+    g.add(base);
+    for (const sx of [-1, 1]) {
+      const pillar = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.2, 1.7, 7), portalStone);
+      pillar.position.set(sx * 0.52, 1.05, 0);
+      pillar.rotation.z = sx * -0.14;
+      pillar.castShadow = true;
+      g.add(pillar);
+      const shard = new THREE.Mesh(new THREE.OctahedronGeometry(0.24, 0), crystal);
+      shard.scale.set(0.72, 2.45, 0.72);
+      shard.position.set(sx * 0.56, 1.8, 0);
+      shard.rotation.z = sx * -0.14;
+      g.add(shard);
+    }
+    const ring = new THREE.Mesh(new THREE.TorusGeometry(0.54, 0.075, 8, 28), crystal);
+    ring.position.y = 1.35;
     g.add(ring);
-    const core = new THREE.Mesh(
-      new THREE.SphereGeometry(0.18, 10, 8),
-      new THREE.MeshStandardMaterial({ color: 0xe0a0ff, emissive: 0xc060ff, emissiveIntensity: 1.1, roughness: 0.3 })
-    );
-    core.position.y = 1.15;
+    const core = new THREE.Mesh(new THREE.CircleGeometry(0.48, 24), energy);
+    core.position.set(0, 1.35, 0.015);
     g.add(core);
+    const light = new THREE.PointLight(0x55c8ff, 1.8, 7, 2);
+    light.position.y = 1.5;
+    g.add(light);
+    g.userData.portalAnimated = true;
+    g.userData.portalRing = ring;
+    g.userData.portalCore = core;
   } else if (room === RoomType.Guard) {
     const wood = new THREE.MeshStandardMaterial({ color: 0x5a4030, roughness: 0.8 });
     const steel = new THREE.MeshStandardMaterial({

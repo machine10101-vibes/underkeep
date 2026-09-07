@@ -67,17 +67,35 @@ html, body, #app {
   position: absolute;
   top: max(12px, env(safe-area-inset-top, 0px));
   left: 50%; transform: translateX(-50%);
-  display: flex; gap: 18px; padding: 10px 20px;
-  background: linear-gradient(180deg, rgba(20,12,8,0.92), rgba(12,8,6,0.85));
-  border: 1px solid #5a3a1a; border-radius: 8px;
-  box-shadow: 0 0 24px rgba(180,80,20,0.25), inset 0 0 20px rgba(0,0,0,0.4);
+  display: flex; gap: 18px; padding: 11px 24px;
+  background:
+    linear-gradient(90deg, transparent, rgba(154,91,34,.16) 18%, transparent 50%, rgba(154,91,34,.14) 82%, transparent),
+    linear-gradient(180deg, rgba(42,32,28,.97), rgba(13,10,9,.94));
+  border: 1px solid #8a6032; border-radius: 4px;
+  outline: 1px solid rgba(22,12,7,.9);
+  box-shadow:
+    0 3px 0 #0b0807,
+    0 0 28px rgba(180,80,20,0.22),
+    inset 0 1px rgba(255,218,150,.16),
+    inset 0 -9px 18px rgba(0,0,0,.52);
   pointer-events: auto;
   max-width: calc(100vw - 16px);
   z-index: 5;
 }
+#hud-top::before, #hud-top::after {
+  content: "◆";
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  color: #d09542;
+  font-size: 11px;
+  text-shadow: 0 0 8px #e06b20;
+}
+#hud-top::before { left: 7px; }
+#hud-top::after { right: 7px; }
 .stat { display: flex; flex-direction: column; align-items: center; min-width: 70px; }
 .stat .label { font-size: 10px; text-transform: uppercase; letter-spacing: 0.12em; color: #a08050; }
-.stat .value { font-size: 20px; font-weight: 700; color: #f0c060; text-shadow: 0 0 8px rgba(240,160,40,0.5); }
+.stat .value { font-size: 20px; font-weight: 800; color: #f4cf72; text-shadow: 0 1px #3a1605, 0 0 9px rgba(240,160,40,0.48); }
 .stat .bar { width: 80px; height: 4px; background: #2a1810; border-radius: 2px; margin-top: 4px; overflow: hidden; }
 #mana-bar { height: 100%; width: 50%; background: linear-gradient(90deg, #2060c0, #60c0ff); box-shadow: 0 0 6px #4080ff; transition: width 0.2s; }
 
@@ -89,20 +107,36 @@ html, body, #app {
   pointer-events: auto;
   z-index: 5;
 }
+#toolbar {
+  padding: 7px 9px;
+  background: linear-gradient(180deg, rgba(40,31,27,.94), rgba(12,9,8,.96));
+  border: 1px solid #72502e;
+  outline: 1px solid #120c08;
+  border-radius: 5px;
+  box-shadow: 0 5px 18px rgba(0,0,0,.58), inset 0 1px rgba(255,220,160,.12);
+}
 #spells { bottom: calc(12px + env(safe-area-inset-bottom, 0px)); }
 
 .tool, .spell, .sheet-toggle {
-  background: linear-gradient(180deg, #3a2818, #1a1008);
-  border: 1px solid #6a4828; color: #d8c090;
+  background:
+    radial-gradient(circle at 50% 12%, rgba(148,94,48,.3), transparent 58%),
+    linear-gradient(180deg, #392c25, #17100c);
+  border: 1px solid #765232; color: #d8c39b;
   padding: 8px 12px;
   min-height: 36px;
-  border-radius: 6px; cursor: pointer; font-size: 13px;
+  border-radius: 3px; cursor: pointer; font-size: 13px;
+  box-shadow: inset 0 1px rgba(255,220,165,.1), inset 0 -5px 9px rgba(0,0,0,.35);
   transition: all 0.15s; pointer-events: auto;
   touch-action: manipulation;
   -webkit-tap-highlight-color: transparent;
 }
 .tool:hover, .spell:hover, .sheet-toggle:hover { border-color: #c08040; color: #ffe0a0; box-shadow: 0 0 10px rgba(200,100,30,0.3); }
-.tool.active, .sheet-toggle.active { border-color: #e09030; background: linear-gradient(180deg, #5a3820, #2a1808); color: #ffe8b0; box-shadow: 0 0 14px rgba(220,120,40,0.45); }
+.tool.active, .sheet-toggle.active {
+  border-color: #f0a13a;
+  background: radial-gradient(circle at 50% 0, #75421f, #25150c 72%);
+  color: #ffe8b0;
+  box-shadow: 0 0 15px rgba(220,100,25,.55), inset 0 0 9px rgba(255,161,50,.2);
+}
 .spell:disabled { opacity: 0.4; cursor: not-allowed; }
 
 #pan-zone {

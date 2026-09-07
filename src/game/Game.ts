@@ -2711,6 +2711,52 @@ export class Game {
     this.hud.sayNow('Claimed land wears gold. Flowers measure health. Scrabblers haul the glitter home.');
   }
 
+  /** QA/screenshot: Pass 8 layered wall faces, monumental Heart/Portal, cavern atmosphere. */
+  preparePass8Shot(): void {
+    this.preparePass7Shot();
+    const hx = this.grid.heartPos.x;
+    const hy = this.grid.heartPos.y;
+    const claim = (x: number, y: number, room = RoomType.None) => {
+      const tile = this.grid.get(x, y);
+      if (!tile || tile.kind === TileKind.Heart) return;
+      tile.kind = TileKind.Claimed;
+      tile.room = room;
+      tile.mark = MarkType.None;
+      tile.digProgress = 0;
+      tile.claimedProgress = 1;
+      tile.fortified = false;
+      tile.explored = true;
+    };
+
+    // A compact crystal gateway chamber in the south-east of the plaza.
+    for (let y = hy + 3; y <= hy + 4; y++) {
+      for (let x = hx + 4; x <= hx + 5; x++) claim(x, y, RoomType.Portal);
+    }
+    // Exposed wall showcase: dressed fortification beside earth and gold strata.
+    const fort = this.grid.get(hx - 2, hy + 2);
+    if (fort) {
+      fort.kind = TileKind.Earth;
+      fort.fortified = true;
+      fort.room = RoomType.None;
+      fort.explored = true;
+    }
+    const goldFace = this.grid.get(hx - 1, hy + 3);
+    if (goldFace) {
+      goldFace.kind = TileKind.Gold;
+      goldFace.goldAmount = 900;
+      goldFace.fortified = false;
+      goldFace.explored = true;
+    }
+
+    this.rebuild();
+    const focus = this.grid.tileToWorld(hx + 1, hy + 1);
+    this.camTarget.set(focus.x, 0, focus.z);
+    this.renderer.camera.position.set(focus.x + 4.5, 25, focus.z + 15.5);
+    this.renderer.camera.lookAt(this.camTarget);
+    this.hud.setTooltip('Layered cavern walls · ritual Heart · crystal Portal · airborne ash');
+    this.hud.sayNow('The Underkeep gains depth: carved strata, ritual iron, crystal fire.');
+  }
+
 
   /** QA/screenshot: Pass 6.4b Hand pick + shift multi-select + attack-move, no blackout. */
   preparePass64bShot(): void {

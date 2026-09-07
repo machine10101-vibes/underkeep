@@ -65,6 +65,8 @@ Implemented: grid dig/claim/fortify/mine, Dungeon Heart lose condition, Scrabble
 
 Pass 7: Gold-border claimed flagstones (DK2 ownership read), health flowers above units, 3D keeper hand, gold haul bags, walk cycles, isometric camera damping, auto-claim dirt adjacent to owned land, plant-at-face digging, melee lunge/knockback.
 
+Pass 8: DK2-reference visual depth pass — exposed cavern walls gain strata ledges, rubble crowns, gold crystals, and fortified braces; Heart becomes a layered ritual monument; Portal becomes an animated cyan-crystal/orange-energy gateway; low-cost airborne dust, softer desktop shadows, varied portal dressing, and more gothic HUD framing.
+
 Pass 5: WebGL context-loss recovery + incremental dig visuals (no full rebuild per chip), smoother creature facing/path follow, Dig/Mine plant-at-face + pickaxe cycle + gold haul to Treasury, Lair bed capacity/rest/heal, Hatchery food regen + hunger eat loop (workers + minions), mentor feedback.
 
 Gaps / later: possess, traps/doors, Combat Pit, research, workshop, Prison/Torture conversion, richer pathing through walls for heroes, audio, GLTF art upgrades.

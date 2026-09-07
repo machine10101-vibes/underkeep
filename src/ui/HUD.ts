@@ -1,6 +1,6 @@
 import { SpellId, ToolMode } from '../game/types';
 
-const ROOM_TOOLS: ToolMode[] = ['treasury', 'lair', 'hatchery', 'training', 'library', 'portal', 'guard', 'workshop', 'prison', 'torture', 'graveyard', 'temple', 'combatPit', 'casino', 'door', 'sentry', 'rally', 'bridgeWood', 'bridgeStone', 'sell'];
+const ROOM_TOOLS: ToolMode[] = ['treasury', 'lair', 'hatchery', 'training', 'library', 'guard', 'workshop', 'prison', 'torture', 'graveyard', 'temple', 'combatPit', 'casino', 'door', 'sentry', 'rally', 'bridgeWood', 'bridgeStone', 'sell'];
 
 export class HUD {
   private goldEl: HTMLElement;
@@ -224,7 +224,7 @@ export class HUD {
     if (!rows.length) {
       const empty = document.createElement('div');
       empty.className = 'roster-hint';
-      empty.textContent = 'No minions yet — dig, claim, and open a Portal.';
+      empty.textContent = 'No minions yet — dig to the Portal and claim it.';
       this.rosterList.appendChild(empty);
       return;
     }
@@ -517,7 +517,13 @@ export class HUD {
 }
 
 export const MENTOR_LINES = {
-  start: "The earth awaits your cruelty, Keeper. Dig. Claim. Thrive.",
+  start: "A Portal sleeps in the rock. Dig to it. Claim it. Then the hungry things will come.",
+  portalCannotBuild: "Portals cannot be built. Dig to the gateway buried in the earth and claim it.",
+  portalCannotSell: "The Portal cannot be sold or destroyed. It is a wound in the world, not a floor tile.",
+  portalClaimed: "The Portal is yours. Beds and chickens decide who crosses. No Lair, and the veil stays shut.",
+  portalSack: "Back through the veil. Wasteful — but the Portal does not argue.",
+  needLair: "They will not come without a bed. Raise a Lair.",
+  biggerLair: "Your creatures need a bigger Lair. The Portal waits.",
   resume: "Welcome back, Keeper. Your dungeon endures — dig on.",
   newGame: "A fresh Underkeep. The old one is dust.",
   firstGold: "Ah, glittering greed. Stockpile it — Scrabblers don't dig for free forever.",

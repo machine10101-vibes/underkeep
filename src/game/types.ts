@@ -142,9 +142,12 @@ export const CALL_TO_ARMS_COST = 28;
 /** Heart vault + each Treasury tile (gold that will not fit stays on the worker). */
 export const HEART_GOLD_CAP = 1000;
 export const TREASURY_TILE_CAP = 200;
-/** First Portal tile holds this many attracted minions; each extra tile adds more. */
-export const PORTAL_BASE_CAP = 8;
-export const PORTAL_PER_TILE = 3;
+/** DK2: first claimed Portal holds 15; each extra Portal chamber adds 5. */
+export const PORTAL_FIRST_CAP = 15;
+export const PORTAL_EXTRA_CAP = 5;
+/** @deprecated use PORTAL_FIRST_CAP — kept so old comments still grep */
+export const PORTAL_BASE_CAP = PORTAL_FIRST_CAP;
+export const PORTAL_PER_TILE = PORTAL_EXTRA_CAP;
 /** Gold drained per second while a minion trains. */
 export const TRAINING_GOLD_PER_SEC = 4;
 /** Payday interval (seconds). */
@@ -241,9 +244,10 @@ export function goldCapacity(treasuryTiles: number): number {
   return HEART_GOLD_CAP + Math.max(0, treasuryTiles) * TREASURY_TILE_CAP;
 }
 
-export function portalCapacity(portalTiles: number): number {
-  if (portalTiles <= 0) return 0;
-  return PORTAL_BASE_CAP + Math.max(0, portalTiles - 1) * PORTAL_PER_TILE;
+export function portalCapacity(claimedPortalTiles: number): number {
+  if (claimedPortalTiles <= 0) return 0;
+  const chambers = Math.max(1, Math.ceil(claimedPortalTiles / 9));
+  return PORTAL_FIRST_CAP + (chambers - 1) * PORTAL_EXTRA_CAP;
 }
 
 /** Emberling shrugs lava; Skitterwing flies over hazards. */

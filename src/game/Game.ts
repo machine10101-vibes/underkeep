@@ -409,7 +409,7 @@ export class Game {
     if (showIntro) {
       this.hud.showOverlay(
         'Mission Briefing',
-        `You are the Keeper of the Underkeep. Dig, claim, raise rooms, and crush heroes — the Heart must not fall. Objective: Survive ${WIN_WAVES} hero waves — OR gather ${GOLD_WIN_THRESHOLD} gold in the Treasury. Workshop kits arm doors & traps.`,
+        `You are the Keeper of the Underkeep. Dig to the Portal buried in the earth — creatures will not come until you claim it. Then raise Lair and Hatchery, and crush heroes. The Heart must not fall. Survive ${WIN_WAVES} waves — OR gather ${GOLD_WIN_THRESHOLD} gold.`,
         'Begin'
       );
       this.hud.say(MENTOR_LINES.missionBrief.replace('%w', String(WIN_WAVES)).replace('%g', String(GOLD_WIN_THRESHOLD)));
@@ -511,6 +511,8 @@ export class Game {
     }
     unpackTiles(this.grid.tiles, data.tiles);
     this.grid.heartPos = { x: data.heartPos.x, y: data.heartPos.y };
+    const savedPortal = this.grid.tiles.find((t) => t.room === RoomType.Portal);
+    if (savedPortal) this.grid.portalPos = { x: savedPortal.x, y: savedPortal.y };
     // Pre-6.5 saves lack explored flags — seed from claimed territory once
     if (!this.grid.tiles.some((tile) => tile.explored)) {
       this.grid.seedExploration();
@@ -716,6 +718,12 @@ export class Game {
           return;
         }
       }
+      if (key === '0') {
+        e.preventDefault();
+        this.hud.sayNow(MENTOR_LINES.portalCannotBuild);
+        this.focusKeepPoint('portal');
+        return;
+      }
       const map: Record<string, ToolMode> = {
         '1': 'select',
         '2': 'dig',
@@ -726,7 +734,6 @@ export class Game {
         '7': 'hatchery',
         '8': 'training',
         '9': 'library',
-        '0': 'portal',
         g: 'guard',
         u: 'workshop',
         j: 'prison',
@@ -1824,7 +1831,6 @@ export class Game {
         hatchery: RoomType.Hatchery,
         training: RoomType.Training,
         library: RoomType.Library,
-        portal: RoomType.Portal,
         guard: RoomType.Guard,
         workshop: RoomType.Workshop,
         prison: RoomType.Prison,
@@ -1834,6 +1840,10 @@ export class Game {
         combatPit: RoomType.CombatPit,
         casino: RoomType.Casino,
       };
+      if (this.tool === 'portal') {
+        if (!this.lastPaint) this.hud.sayNow(MENTOR_LINES.portalCannotBuild);
+        return;
+      }
       const room = roomMap[this.tool];
       if (room) {
         if (tile.kind !== TileKind.Claimed || tile.room !== RoomType.None) {
@@ -1850,7 +1860,6 @@ export class Game {
           tile.room = room;
           this.requestStructuralRebuild();
           this.mentioneOnce('firstRoom', MENTOR_LINES.firstRoom);
-          if (room === RoomType.Portal) this.mentioneOnce('portal', MENTOR_LINES.portal);
           if (room === RoomType.Lair) {
             this.mentioneOnce('lairBuilt', MENTOR_LINES.lairBuilt);
           }
@@ -1955,6 +1964,24 @@ export class Game {
     const w = this.grid.tileToWorld(x, y);
     c.wx = w.x;
     c.wz = w.z;
+
+    // Sack a minion through a claimed Portal (DK2: throw them away)
+    const dropTileEarly = this.grid.get(x, y);
+    if (
+      dropTileEarly?.room === RoomType.Portal &&
+      dropTileEarly.kind === TileKind.Claimed &&
+      !c.isWorker &&
+      !c.isHero
+    ) {
+      c.alive = false;
+      c.held = false;
+      try { this.renderer.removeEntityMesh(c.mesh); } catch { /* ignore */ }
+      this.held = null;
+      this.hud.sayNow(MENTOR_LINES.portalSack);
+      this.renderer.spawnFx(new THREE.Vector3(w.x, 1.2, w.z), 0xaa66ff, 0.75);
+      this.refreshInspector();
+      return;
+    }
 
     // Drop worker on Heart — reclaim half the Create Worker gold
     const dropKind = this.grid.get(x, y)?.kind;
@@ -2181,7 +2208,7 @@ export class Game {
   }
 
   private portalCap(): number {
-    return portalCapacity(this.grid.countRoom(RoomType.Portal));
+    return portalCapacity(this.grid.countClaimedRoom(RoomType.Portal));
   }
 
   private sellAt(x: number, y: number): void {
@@ -2189,6 +2216,10 @@ export class Game {
     if (!tile) return;
     if (tile.kind === TileKind.Heart) {
       if (!this.lastPaint) this.hud.sayNow(MENTOR_LINES.cannotSell);
+      return;
+    }
+    if (tile.room === RoomType.Portal) {
+      if (!this.lastPaint) this.hud.sayNow(MENTOR_LINES.portalCannotSell);
       return;
     }
     if (tile.door !== DoorState.None) {
@@ -2284,12 +2315,16 @@ export class Game {
     let x = this.grid.heartPos.x;
     let y = this.grid.heartPos.y;
     if (kind === 'portal') {
-      const p = this.grid.tiles.find((t) => t.room === RoomType.Portal);
-      if (p) {
-        x = p.x;
-        y = p.y;
+      const claimed = this.grid.tiles.find((t) => t.room === RoomType.Portal && t.kind === TileKind.Claimed);
+      const any = claimed ?? this.grid.tiles.find((t) => t.room === RoomType.Portal);
+      if (any) {
+        x = any.x;
+        y = any.y;
+      } else if (this.grid.portalPos.x) {
+        x = this.grid.portalPos.x;
+        y = this.grid.portalPos.y;
       } else {
-        this.hud.sayNow('No Portal to focus.');
+        this.hud.sayNow('No Portal on this map.');
         return;
       }
     } else if (kind === 'fight') {
@@ -6293,6 +6328,10 @@ export class Game {
         t.kind = TileKind.Claimed;
         t.claimedProgress = 1;
         t.mark = MarkType.None;
+        if (t.room === RoomType.Portal) {
+          this.mentioneOnce('portalClaimed', MENTOR_LINES.portalClaimed);
+          this.mentioneOnce('portal', MENTOR_LINES.portal);
+        }
         this.noteFogChange(this.grid.revealFromTerritory());
         this.requestStructuralRebuild();
         c.job = JobType.Idle;
@@ -6786,7 +6825,7 @@ export class Game {
   private updatePortal(dt: number): void {
     this.portalCooldown -= dt;
     if (this.portalCooldown > 0) return;
-    const portals = this.grid.countRoom(RoomType.Portal);
+    const portals = this.grid.countClaimedRoom(RoomType.Portal);
     if (portals <= 0) return;
     if (this.attractedCount() >= this.portalCap()) {
       this.mentioneOnce('portalFull', MENTOR_LINES.portalFull);
@@ -6802,7 +6841,20 @@ export class Game {
     const treasury = this.grid.countRoom(RoomType.Treasury);
     const claimed = this.grid.countClaimed();
 
-    const portalTile = this.grid.tiles.find((t) => t.room === RoomType.Portal);
+    // DK2: no Lair space → portal stops (one scout may sneak through with no beds)
+    const minions = this.creatures.filter((c) => c.alive && !c.isWorker && !c.isHero && !c.isPrisoner).length;
+    if (lair === 0 && minions >= 1) {
+      this.mentioneOnce('needLair', MENTOR_LINES.needLair);
+      this.portalCooldown = 8;
+      return;
+    }
+    if (lair > 0 && minions >= lair) {
+      this.mentioneOnce('biggerLair', MENTOR_LINES.biggerLair);
+      this.portalCooldown = 8;
+      return;
+    }
+
+    const portalTile = this.grid.tiles.find((t) => t.room === RoomType.Portal && t.kind === TileKind.Claimed);
     if (!portalTile) return;
     let sx = portalTile.x;
     let sy = portalTile.y;
@@ -7022,7 +7074,7 @@ export class Game {
     if (this.time >= FIRST_WAVE_FALLBACK) return true;
     if (this.time < FIRST_WAVE_MIN_TIME) return false;
     const claimed = this.grid.countClaimed();
-    const portal = this.grid.countRoom(RoomType.Portal) > 0;
+    const portal = this.grid.hasClaimedPortal();
     const lair = this.grid.countRoom(RoomType.Lair) >= 2;
     return claimed >= 16 && portal && lair;
   }

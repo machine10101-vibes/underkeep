@@ -4,9 +4,9 @@ Original-IP dungeon management game inspired by **Dungeon Keeper 2** (3D). Dark-
 
 ## Play online
 
-**https://machine10101-vibes.github.io/underkeep/?v=pass10.6**
+**https://machine10101-vibes.github.io/underkeep/?v=pass10.8**
 
-Pass 10 play: the keeper loop follows the classic dungeon-keeper playthrough — dig, claim, fortify, rooms, Portal, payday, Heart defense — with Underkeep names and unique gold-cost workers. Pass 10.1: Scrabblers keep digging when the vault is full, and Dig paint marks only the tiles you sweep. Pass 10.2: **Studio (V)** inspects every creature, item, enemy, and room mesh. Pass 10.6: torch-lit cavern (no dig-load brightness snaps), Prison/Workshop loops actually tick, HUD stays on-screen. Pass 10.7: Fortify is a Keeper mark only; the first hero party waits until the keep is built.
+Pass 10 play: the keeper loop follows the classic dungeon-keeper playthrough — dig, claim, fortify, rooms, Portal, payday, Heart defense — with Underkeep names and unique gold-cost workers. Pass 10.1: Scrabblers keep digging when the vault is full, and Dig paint marks only the tiles you sweep. Pass 10.2: **Studio (V)** inspects every creature, item, enemy, and room mesh. Pass 10.6: torch-lit cavern (no dig-load brightness snaps), Prison/Workshop loops actually tick, HUD stays on-screen. Pass 10.7: Fortify is a Keeper mark only; the first hero party waits until the keep is built. Pass 10.8: the Portal is a 3×3 gateway buried on the map — dig to it and claim it; it cannot be built.
 
 Works on desktop and phones (touch controls).
 
@@ -50,7 +50,8 @@ Pushes to `main` also deploy via `.github/workflows/deploy-pages.yml`.
 | **2** | Dig mark |
 | **3** | Claim mark |
 | **4** | Fortify mark |
-| **5–0** | Rooms: Treasury, Lair, Hatchery, Training, Library, Portal |
+| **5–9** | Rooms: Treasury, Lair, Hatchery, Training, Library |
+| **0** | Focus the map Portal (cannot be built) |
 | **X** | Sell room / door / trap (half gold back) |
 | **Q** | Create Scrabbler (gold; cost scales) |
 | **E** | Speed Burst (mana) — haste all minions |
@@ -90,7 +91,7 @@ Dropping a creature into a fight **stuns** them briefly (DK2-style).
 2. Mark dirt to **claim**; claimed tiles regenerate **mana**.
 3. Fortify adjacent earth walls (never gold or gems).
 4. Build rooms on claimed tiles (costs gold). **Sell** a room to recover half.
-5. Place a **Portal**; attract **Skitterwing**, **Rattlekin**, **Emberling**, **Gravemage** (Portal has a population cap).
+5. Dig to the **Portal** buried in the earth and **claim** it — it cannot be built or sold. Then attract **Skitterwing**, **Rattlekin**, **Emberling**, **Gravemage** (first Portal holds 15; each extra chamber +5). No Lair space, and the veil stays shut.
 6. Minions sleep (Lair), eat (Hatchery), train (Training — costs gold), gamble (**Wagerden**).
 7. **Scrabblers never eat or sleep.** Slap them to work harder. Drop one on the Heart to reclaim half its gold.
 8. Hero waves march toward the Heart — **survive 3 waves** OR gather **2500 gold** (needs Treasury space) to win.

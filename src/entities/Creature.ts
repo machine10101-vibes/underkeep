@@ -43,7 +43,17 @@ export class Creature {
   selected = false;
   trainNeed = 0;
   held = false;
+  /** Knocked out in combat — can be dragged to Prison. */
+  knockedOut = false;
+  /** Held in Prison / converting in Torture. */
+  isPrisoner = false;
+  /** 0–100 conversion progress while imprisoned. */
+  convertProgress = 0;
   fleeTimer = 0;
+  /** Temple prayer buff timer (seconds) — mood floor / soft combat edge. */
+  prayerBuff = 0;
+  /** Lightweight Temple talisman unlock (once). */
+  hasTalisman = false;
   attackCooldown = 0;
   goldCarried = 0;
   alive = true;
@@ -136,6 +146,18 @@ export class Creature {
         if (this.pickaxe) this.pickaxe.visible = false;
         this.updateHealthFlower(time);
         if (this.goldBag) this.goldBag.visible = this.goldCarried > 0;
+        return;
+      }
+      if (this.knockedOut || this.isPrisoner) {
+        const bob = Math.sin(time * 1.5 + this.bobPhase) * 0.01;
+        this.mesh.position.set(wx, 0.08 + bob, wz);
+        this.mesh.rotation.x = 0.05;
+        this.mesh.rotation.z = this.knockedOut ? 1.35 : 0.55;
+        if (this.selectRing) {
+          this.selectRing.visible = this.selected || this.knockedOut;
+          this.selectRing.rotation.z = time * 1.2;
+        }
+        if (this.pickaxe) this.pickaxe.visible = false;
         return;
       }
     const digging = this.job === JobType.Dig || this.job === JobType.Mine || this.job === JobType.Claim || this.job === JobType.Fortify;
@@ -260,8 +282,10 @@ export class Creature {
   /** Dig/work multiplier from mood (≈0.5–1.2). */
   workEfficiency(): number {
     const mood = Number.isFinite(this.mood) ? Math.max(0, Math.min(100, this.mood)) : 50;
-    const eff = 0.5 + (mood / 100) * 0.7;
-    return Number.isFinite(eff) ? Math.max(0.5, Math.min(1.2, eff)) : 0.85;
+    let eff = 0.5 + (mood / 100) * 0.7;
+    if (this.prayerBuff > 0) eff += 0.05;
+    if (this.hasTalisman) eff += 0.03;
+    return Number.isFinite(eff) ? Math.max(0.5, Math.min(1.25, eff)) : 0.85;
   }
 
   pulseTint(mode: 'heal' | 'feast', seconds = 0.85): void {
@@ -326,7 +350,7 @@ export class Creature {
   }
 
   moveAlongPath(dt: number, grid: Grid): boolean {
-    if (this.stunTimer > 0 || this.held) {
+    if (this.stunTimer > 0 || this.held || this.knockedOut || this.isPrisoner) {
       this.moving = false;
       return false;
     }

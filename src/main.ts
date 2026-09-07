@@ -108,7 +108,47 @@ if (
     params.get('shot') === '7' ||
     params.get('shot') === '7.0' ||
     params.get('shot') === '8' ||
-    params.get('shot') === '8.0')
+    params.get('shot') === '8.0' ||
+    params.get('shot') === '7.1' ||
+    params.get('shot') === '71' ||
+    params.get('shot') === '7.1-lava' ||
+    params.get('shot') === '71-lava' ||
+    params.get('shot') === '7.1-bridge' ||
+    params.get('shot') === '71-bridge' ||
+    params.get('shot') === '7.1-possess' ||
+    params.get('shot') === '71-possess' ||
+    params.get('shot') === '7.1-payday' ||
+    params.get('shot') === '71-payday' ||
+    params.get('shot') === '7.2' ||
+    params.get('shot') === '72' ||
+    params.get('shot') === '7.2-minimap' ||
+    params.get('shot') === '72-minimap' ||
+    params.get('shot') === '7.2-mission' ||
+    params.get('shot') === '72-mission' ||
+    params.get('shot') === '7.2-workshop' ||
+    params.get('shot') === '72-workshop' ||
+    params.get('shot') === '7.2-worker' ||
+    params.get('shot') === '72-worker' ||
+    params.get('shot') === '7.3' ||
+    params.get('shot') === '73' ||
+    params.get('shot') === '7.3-prison' ||
+    params.get('shot') === '73-prison' ||
+    params.get('shot') === '7.3-torture' ||
+    params.get('shot') === '73-torture' ||
+    params.get('shot') === '7.3-graveyard' ||
+    params.get('shot') === '73-graveyard' ||
+    params.get('shot') === '7.3-efficiency' ||
+    params.get('shot') === '73-efficiency' ||
+    params.get('shot') === '7.4' ||
+    params.get('shot') === '74' ||
+    params.get('shot') === '7.4-temple' ||
+    params.get('shot') === '74-temple' ||
+    params.get('shot') === '7.4-combat' ||
+    params.get('shot') === '74-combat' ||
+    params.get('shot') === '7.4-roster' ||
+    params.get('shot') === '74-roster' ||
+    params.get('shot') === '7.4-flee' ||
+    params.get('shot') === '74-flee')
 ) {
   // Auto-arrange evidence shots
   setTimeout(() => {
@@ -129,11 +169,35 @@ if (
       preparePass65Shot?: (focus?: 'fow' | 'fortify' | 'both') => void;
       preparePass7Shot?: () => void;
       preparePass8Shot?: () => void;
+      preparePass71Shot?: (focus?: 'lava' | 'bridge' | 'possess' | 'payday' | 'both') => void;
+      preparePass72Shot?: (focus?: 'minimap' | 'mission' | 'workshop' | 'worker' | 'both') => void;
+      preparePass73Shot?: (focus?: 'prison' | 'torture' | 'graveyard' | 'efficiency' | 'both') => void;
+      preparePass74Shot?: (focus?: 'temple' | 'combatPit' | 'roster' | 'flee' | 'both') => void;
     };
     g.hud.hideOverlay();
     const shot = params.get('shot');
     if (shot === '8' || shot === '8.0') g.preparePass8Shot?.();
     else if (shot === '7' || shot === '7.0') g.preparePass7Shot?.();
+    else if (shot === '7.4-temple' || shot === '74-temple') g.preparePass74Shot?.('temple');
+    else if (shot === '7.4-combat' || shot === '74-combat') g.preparePass74Shot?.('combatPit');
+    else if (shot === '7.4-roster' || shot === '74-roster') g.preparePass74Shot?.('roster');
+    else if (shot === '7.4-flee' || shot === '74-flee') g.preparePass74Shot?.('flee');
+    else if (shot === '7.4' || shot === '74') g.preparePass74Shot?.('both');
+    else if (shot === '7.3-prison' || shot === '73-prison') g.preparePass73Shot?.('prison');
+    else if (shot === '7.3-torture' || shot === '73-torture') g.preparePass73Shot?.('torture');
+    else if (shot === '7.3-graveyard' || shot === '73-graveyard') g.preparePass73Shot?.('graveyard');
+    else if (shot === '7.3-efficiency' || shot === '73-efficiency') g.preparePass73Shot?.('efficiency');
+    else if (shot === '7.3' || shot === '73') g.preparePass73Shot?.('both');
+    else if (shot === '7.2-minimap' || shot === '72-minimap') g.preparePass72Shot?.('minimap');
+    else if (shot === '7.2-mission' || shot === '72-mission') g.preparePass72Shot?.('mission');
+    else if (shot === '7.2-workshop' || shot === '72-workshop') g.preparePass72Shot?.('workshop');
+    else if (shot === '7.2-worker' || shot === '72-worker') g.preparePass72Shot?.('worker');
+    else if (shot === '7.2' || shot === '72') g.preparePass72Shot?.('both');
+    else if (shot === '7.1-lava' || shot === '71-lava') g.preparePass71Shot?.('lava');
+    else if (shot === '7.1-bridge' || shot === '71-bridge') g.preparePass71Shot?.('bridge');
+    else if (shot === '7.1-possess' || shot === '71-possess') g.preparePass71Shot?.('possess');
+    else if (shot === '7.1-payday' || shot === '71-payday') g.preparePass71Shot?.('payday');
+    else if (shot === '7.1' || shot === '71') g.preparePass71Shot?.('both');
     else if (shot === '6.5-fortify') g.preparePass65Shot?.('fortify');
     else if (shot === '6.5-fow') g.preparePass65Shot?.('fow');
     else if (shot === '6.5' || shot === '65') g.preparePass65Shot?.('both');

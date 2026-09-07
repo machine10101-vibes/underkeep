@@ -6,7 +6,7 @@ Original-IP dungeon management game inspired by **Dungeon Keeper 2** (3D). Dark-
 
 **https://machine10101-vibes.github.io/underkeep/?v=pass8**
 
-Pass 8: layered exposed wall faces, a monumental ritual Heart, animated crystal Portal, airborne cavern dust, softer desktop shadows, and a gothic HUD frame.
+Pass 8 visuals on the live Pass 7.4 game: layered cavern walls, ritual Heart, crystal Portal, gothic HUD — plus Temple, Combat Pit, roster, Prison/Torture/Graveyard, lava, Possession, and payday.
 
 Works on desktop and phones (touch controls).
 
@@ -46,6 +46,13 @@ npm run preview
 | **Q** | Create Scrabbler (gold; cost scales) |
 | **E** | Speed Burst (mana) — haste all minions |
 | **R** | Lightning (mana) — strike nearest hero |
+| **T** | Heal (mana; Library research unlock) |
+| **P** | Possess (mana) — FP control one minion; Esc exits |
+| **B** / **N** | Wooden / Stone bridge over lava or water |
+| **U** | Workshop room |
+| **J** / **K** / **H** | Prison / Torture Chamber / Graveyard |
+| **M** / **C** | Temple / Combat Pit |
+| **L** | Creature roster sheet |
 
 ## Mobile / touch controls
 
@@ -72,9 +79,14 @@ Dropping a creature into a fight **stuns** them briefly (DK2-style).
 4. Build rooms on claimed tiles (costs gold).
 5. Place a **Portal**; attract **Skitterwing**, **Rattlekin**, **Emberling** when thresholds are met.
 6. Minions sleep (Lair), eat (Hatchery), train (Training).
-7. ~90s in, a **hero wave** marches toward the Heart — survive to win.
+7. Hero waves march toward the Heart — **survive 3 waves** OR gather **2500 gold** to win.
 8. **Fog of war** — unexplored tiles stay dark until dig/claim / LOS from claimed land.
 9. Idle Scrabblers **auto-fortify** soft earth walls adjacent to claimed territory (rock stays impassable).
+10. **Workshop** — Scrabblers craft free door/Sentry kits (or discounted gold builds).
+11. **Minimap** — explored/claimed overview with Heart marker.
+10. **Lava** burns non-resistant units; Scrabblers will not path across — build **wooden/stone bridges**.
+11. **Possess** a minion (mana) for temporary FP steering; Esc returns to Keeper view.
+12. **Payday** drains wages from the Treasury; empty coffers crash moods.
 
 ## Stack
 

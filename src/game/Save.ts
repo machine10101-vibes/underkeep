@@ -11,6 +11,10 @@ const VALID_TILE_KINDS = new Set<number>([
   TileKind.Claimed,
   TileKind.Heart,
   TileKind.Wall,
+  TileKind.Lava,
+  TileKind.Water,
+  TileKind.BridgeWood,
+  TileKind.BridgeStone,
 ]);
 
 export interface SavedCreature {
@@ -66,6 +70,11 @@ export interface SaveData {
   won: boolean;
   cam?: { tx: number; tz: number; cx: number; cy: number; cz: number };
   rallyPos?: Vec2 | null;
+  /** Pass 7.2 — hero waves cleared toward WIN_WAVES. */
+  wavesCleared?: number;
+  doorKits?: number;
+  sentryKits?: number;
+  goldEver?: number;
 }
 
 function finiteNum(n: unknown): n is number {

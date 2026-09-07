@@ -15,6 +15,9 @@ import {
   makeGoldVeinGeo,
   makeHeartGeo,
   makeRockGeo,
+  makeLavaMesh,
+  makeWaterMesh,
+  makeBridgeMesh,
   makeDoorMesh,
   makeRallyFlagMesh,
   makeRoomDecal,
@@ -107,7 +110,7 @@ export class DungeonRenderer {
   private markOverlay = new THREE.Group();
   private markPlaneGeo = new THREE.PlaneGeometry(TILE_SIZE * 0.7, TILE_SIZE * 0.7);
   private digWireGeo = new THREE.EdgesGeometry(new THREE.BoxGeometry(TILE_SIZE * 0.92, 2.2, TILE_SIZE * 0.92));
-  /** Fog of war — shared geo/mat, recycled meshes; never full rebuild storms. */
+  /** Fog of war — one InstancedMesh (shared geo/mat); no per-tile mesh storms. */
   private fogOverlay = new THREE.Group();
   private fogBoxGeo = new THREE.BoxGeometry(TILE_SIZE * 1.05, 4.4, TILE_SIZE * 1.05);
   private fogMat = new THREE.MeshBasicMaterial({
@@ -116,8 +119,9 @@ export class DungeonRenderer {
     opacity: 0.38,
     depthWrite: false,
   });
-  private fogMeshes = new Map<string, THREE.Mesh>();
-  private fogPool: THREE.Mesh[] = [];
+  private fogInstanced: THREE.InstancedMesh | null = null;
+  private fogCapacity = 0;
+  private fogDummy = new THREE.Object3D();
   private keeperHand: THREE.Group;
   private goldHoard = new THREE.Group();
   private goldHoardScale = 0;
@@ -449,6 +453,47 @@ export class DungeonRenderer {
         continue;
       }
 
+      // Hazard / bridge floors (before generic Claimed/Dirt)
+      if (tile.kind === TileKind.Lava) {
+        const lava = makeLavaMesh();
+        lava.position.set(w.x, 0, w.z);
+        lava.userData.tileX = tile.x;
+        lava.userData.tileY = tile.y;
+        lava.traverse((o) => {
+          o.userData.tileX = tile.x;
+          o.userData.tileY = tile.y;
+        });
+        this.gridGroup.add(lava);
+        this.tileMeshes.set(key, lava);
+        continue;
+      }
+      if (tile.kind === TileKind.Water) {
+        const water = makeWaterMesh();
+        water.position.set(w.x, 0, w.z);
+        water.userData.tileX = tile.x;
+        water.userData.tileY = tile.y;
+        water.traverse((o) => {
+          o.userData.tileX = tile.x;
+          o.userData.tileY = tile.y;
+        });
+        this.gridGroup.add(water);
+        this.tileMeshes.set(key, water);
+        continue;
+      }
+      if (tile.kind === TileKind.BridgeWood || tile.kind === TileKind.BridgeStone) {
+        const br = makeBridgeMesh(tile.kind === TileKind.BridgeStone);
+        br.position.set(w.x, 0, w.z);
+        br.userData.tileX = tile.x;
+        br.userData.tileY = tile.y;
+        br.traverse((o) => {
+          o.userData.tileX = tile.x;
+          o.userData.tileY = tile.y;
+        });
+        this.gridGroup.add(br);
+        this.tileMeshes.set(key, br);
+        continue;
+      }
+
       // floors — Claimed uses geometric fitted stone; Dirt/Heart stay simple
       if (tile.kind === TileKind.Claimed) {
         const claimed = makeClaimedFloorMesh(tile.room);
@@ -627,57 +672,55 @@ export class DungeonRenderer {
 
   /**
    * Fog of war overlay — unexplored tiles get a solid dark column.
-   * Recycles meshes (pool); shared geo/mat — NO dispose storms, NO terrain rebuild.
+   * Single InstancedMesh (shared geo/mat) — NO dispose storms, NO terrain rebuild.
    */
   syncFogOverlay(grid: Grid): void {
-    const keep = new Set<string>();
+    const fogged: { x: number; y: number }[] = [];
     for (const tile of grid.tiles) {
-      if (tile.explored) continue;
-      // DK2 overview shows the earth mass; don't black-box solid cubes
-      if (
-        tile.kind === TileKind.Earth ||
-        tile.kind === TileKind.Gold ||
-        tile.kind === TileKind.Rock ||
-        tile.fortified
-      ) {
-        continue;
-      }
       const key = `${tile.x},${tile.y}`;
-      keep.add(key);
-      let mesh = this.fogMeshes.get(key);
-      if (!mesh) {
-        mesh = this.fogPool.pop() ?? new THREE.Mesh(this.fogBoxGeo, this.fogMat);
-        mesh.castShadow = false;
-        mesh.receiveShadow = false;
-        this.fogMeshes.set(key, mesh);
-        this.fogOverlay.add(mesh);
+      const under = this.tileMeshes.get(key);
+      if (!tile.explored) {
+        // DK2 overview shows the earth mass; don't black-box solid cubes
+        const solidMass =
+          tile.kind === TileKind.Earth ||
+          tile.kind === TileKind.Gold ||
+          tile.kind === TileKind.Rock ||
+          tile.fortified;
+        if (!solidMass) fogged.push(tile);
+        if (under) under.visible = true;
+      } else if (under && !under.visible) {
+        under.visible = true;
       }
-      const w = grid.tileToWorld(tile.x, tile.y);
-      mesh.position.set(w.x, 2.15, w.z);
-      mesh.visible = true;
-      mesh.scale.set(1, 0.55, 1);
-      // Keep terrain visible — DK2 overview shows earth/gold even before claim
-      const under = this.tileMeshes.get(key);
-      if (under) under.visible = true;
     }
-    // Recycle fog meshes for explored tiles; restore underlying visibility
-    for (const [key, mesh] of [...this.fogMeshes.entries()]) {
-      if (keep.has(key)) continue;
-      mesh.visible = false;
-      this.fogOverlay.remove(mesh);
-      this.fogMeshes.delete(key);
-      this.fogPool.push(mesh);
-      const under = this.tileMeshes.get(key);
-      if (under) under.visible = true;
+    const need = Math.max(fogged.length, 1);
+    if (!this.fogInstanced || this.fogCapacity < need) {
+      if (this.fogInstanced) {
+        this.fogOverlay.remove(this.fogInstanced);
+        // Shared geo/mat — do not dispose them with the instanced mesh
+        this.fogInstanced = null;
+      }
+      const cap = Math.max(need, 256);
+      const mesh = new THREE.InstancedMesh(this.fogBoxGeo, this.fogMat, cap);
+      mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+      mesh.castShadow = false;
+      mesh.receiveShadow = false;
+      mesh.frustumCulled = false;
+      this.fogInstanced = mesh;
+      this.fogCapacity = cap;
+      this.fogOverlay.add(mesh);
     }
-    // Ensure explored tiles are visible even if never fogged
-    for (const tile of grid.tiles) {
-      if (!tile.explored) continue;
-      const under = this.tileMeshes.get(`${tile.x},${tile.y}`);
-      if (under && !under.visible) under.visible = true;
+    const mesh = this.fogInstanced!;
+    for (let i = 0; i < fogged.length; i++) {
+      const t = fogged[i];
+      const w = grid.tileToWorld(t.x, t.y);
+      this.fogDummy.position.set(w.x, 1.9, w.z);
+      this.fogDummy.scale.set(1, 1, 1);
+      this.fogDummy.updateMatrix();
+      mesh.setMatrixAt(i, this.fogDummy.matrix);
     }
-    // Cap pool so context-loss path stays lean
-    while (this.fogPool.length > 256) this.fogPool.pop();
+    mesh.count = fogged.length;
+    mesh.instanceMatrix.needsUpdate = true;
+    mesh.visible = fogged.length > 0;
   }
 
   private addEdge(x: number, z: number, height: number, mat: THREE.LineBasicMaterial): void {

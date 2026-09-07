@@ -110,6 +110,12 @@ export function makeClaimedFloorMesh(room: RoomType): THREE.Group {
     [RoomType.Library]: 0x5070c8,
     [RoomType.Portal]: 0xa050d0,
     [RoomType.Guard]: 0x708090,
+    [RoomType.Workshop]: 0xa07840,
+    [RoomType.Prison]: 0x606870,
+    [RoomType.Torture]: 0xa04050,
+    [RoomType.Graveyard]: 0x507060,
+    [RoomType.Temple]: 0xc0a050,
+    [RoomType.CombatPit]: 0xa05040,
   };
   const slabColor = roomTint[room] ?? 0xc2b5a0;
   const slabEmissive =
@@ -127,7 +133,19 @@ export function makeClaimedFloorMesh(room: RoomType): THREE.Group {
                 ? 0x101848
                 : room === RoomType.Guard
                   ? 0x202830
-                  : 0x301048;
+                  : room === RoomType.Workshop
+                    ? 0x402810
+                    : room === RoomType.Prison
+                      ? 0x202830
+                      : room === RoomType.Torture
+                        ? 0x401018
+                        : room === RoomType.Graveyard
+                          ? 0x183028
+                          : room === RoomType.Temple
+                            ? 0x403010
+                            : room === RoomType.CombatPit
+                              ? 0x401810
+                              : 0x301048;
 
   const under = new THREE.Mesh(
     cachedGeo('claimed-under-v7', () => new THREE.BoxGeometry(TILE_SIZE * 0.98, 0.14, TILE_SIZE * 0.98)),
@@ -882,6 +900,82 @@ export function makeCreatureMesh(color: number, scale: number, kind: string): TH
     );
     orb.position.set(0.38, 1.45, 0.05);
     g.add(orb);
+  } else if (kind === 'thornwitch') {
+    // Torture specialist — violet/crimson robes, thorn crown
+    const silk = new THREE.MeshStandardMaterial({
+      color: 0xa03060,
+      metalness: 0.25,
+      roughness: 0.45,
+      emissive: 0x601028,
+      emissiveIntensity: 0.35,
+    });
+    const body = new THREE.Mesh(new THREE.CapsuleGeometry(0.22, 0.5, 5, 10), silk);
+    body.position.y = 0.72;
+    body.castShadow = true;
+    g.add(body);
+    const head = new THREE.Mesh(
+      new THREE.SphereGeometry(0.18, 10, 8),
+      new THREE.MeshStandardMaterial({ color: 0xc8a0b0, roughness: 0.5 })
+    );
+    head.position.y = 1.22;
+    g.add(head);
+    const crown = new THREE.MeshStandardMaterial({
+      color: 0x301018,
+      emissive: 0xff2040,
+      emissiveIntensity: 0.55,
+    });
+    for (let i = 0; i < 5; i++) {
+      const thorn = new THREE.Mesh(new THREE.ConeGeometry(0.04, 0.2, 4), crown);
+      const a = (i / 5) * Math.PI * 2;
+      thorn.position.set(Math.cos(a) * 0.12, 1.38, Math.sin(a) * 0.12);
+      g.add(thorn);
+    }
+    for (const sx of [-1, 1]) {
+      g.add(limb(new THREE.CylinderGeometry(0.04, 0.03, 0.42, 5), silk, sx * 0.28, 0.72, 0, 0, 0, sx * 0.35));
+      g.add(limb(new THREE.CylinderGeometry(0.045, 0.035, 0.4, 5), silk, sx * 0.1, 0.28, 0));
+    }
+    const lash = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.02, 0.015, 0.9, 4),
+      new THREE.MeshStandardMaterial({ color: 0x401020, roughness: 0.6 })
+    );
+    lash.position.set(0.4, 0.7, 0.05);
+    lash.rotation.z = -0.4;
+    g.add(lash);
+  } else if (kind === 'bonewretch') {
+    // Undead skeleton-like — pale bones, hollow glow eyes
+    const bone = new THREE.MeshStandardMaterial({
+      color: 0xd8d0b8,
+      metalness: 0.2,
+      roughness: 0.4,
+      emissive: 0x304018,
+      emissiveIntensity: 0.15,
+    });
+    const torso = new THREE.Mesh(new THREE.CapsuleGeometry(0.16, 0.32, 4, 8), bone);
+    torso.position.y = 0.68;
+    torso.castShadow = true;
+    g.add(torso);
+    for (let i = 0; i < 3; i++) {
+      const rib = new THREE.Mesh(new THREE.TorusGeometry(0.15, 0.02, 4, 10, Math.PI), bone);
+      rib.rotation.x = Math.PI / 2;
+      rib.position.set(0, 0.55 + i * 0.1, 0.04);
+      g.add(rib);
+    }
+    const skull = new THREE.Mesh(new THREE.SphereGeometry(0.17, 10, 8), bone);
+    skull.scale.set(1, 1.1, 1.15);
+    skull.position.y = 1.15;
+    g.add(skull);
+    const eyeMat = new THREE.MeshStandardMaterial({
+      color: 0x102008,
+      emissive: 0x80ff40,
+      emissiveIntensity: 0.95,
+    });
+    for (const sx of [-1, 1]) {
+      const eye = new THREE.Mesh(new THREE.SphereGeometry(0.04, 6, 6), eyeMat);
+      eye.position.set(sx * 0.07, 1.18, 0.14);
+      g.add(eye);
+      g.add(limb(new THREE.CylinderGeometry(0.03, 0.025, 0.42, 4), bone, sx * 0.26, 0.7, 0, 0, 0, sx * 0.3));
+      g.add(limb(new THREE.CylinderGeometry(0.035, 0.03, 0.38, 4), bone, sx * 0.1, 0.26, 0, 0.1, 0, sx * 0.08));
+    }
   } else if (kind === 'hero_knight' || kind === 'hero') {
 
     const armor = new THREE.MeshStandardMaterial({
@@ -1050,6 +1144,50 @@ function texturedMat(
 }
 
 export function floorMaterial(kind: TileKind, room: RoomType): THREE.MeshStandardMaterial {
+  if (kind === TileKind.Lava) {
+    return cachedMat('floor-lava', () =>
+      new THREE.MeshStandardMaterial({
+        color: 0xff4010,
+        roughness: 0.4,
+        metalness: 0.15,
+        emissive: 0xff2a00,
+        emissiveIntensity: 1.2,
+      })
+    );
+  }
+  if (kind === TileKind.Water) {
+    return cachedMat('floor-water', () =>
+      new THREE.MeshStandardMaterial({
+        color: 0x2a6088,
+        roughness: 0.2,
+        metalness: 0.45,
+        emissive: 0x143858,
+        emissiveIntensity: 0.45,
+      })
+    );
+  }
+  if (kind === TileKind.BridgeWood) {
+    return cachedMat('floor-bridge-wood', () =>
+      new THREE.MeshStandardMaterial({
+        color: 0x8a5a28,
+        roughness: 0.85,
+        metalness: 0.05,
+        emissive: 0x2a1808,
+        emissiveIntensity: 0.08,
+      })
+    );
+  }
+  if (kind === TileKind.BridgeStone) {
+    return cachedMat('floor-bridge-stone', () =>
+      new THREE.MeshStandardMaterial({
+        color: 0x6a7080,
+        roughness: 0.65,
+        metalness: 0.3,
+        emissive: 0x202428,
+        emissiveIntensity: 0.1,
+      })
+    );
+  }
   if (kind === TileKind.Heart) {
     return texturedMat('floor-heart', heartFloorTex(), {
       metalness: 0.3,
@@ -1127,6 +1265,33 @@ export function floorMaterial(kind: TileKind, room: RoomType): THREE.MeshStandar
         bump: 0.1,
         color: 0x8090a0,
       });
+    case RoomType.Workshop:
+      return texturedMat('floor-training', trainingFloorTex(), {
+        metalness: 0.35,
+        roughness: 0.55,
+        emissive: 0x301808,
+        emissiveIntensity: 0.18,
+        bump: 0.12,
+        color: 0xb88850,
+      });
+    case RoomType.Temple:
+      return texturedMat('floor-library', libraryFloorTex(), {
+        metalness: 0.35,
+        roughness: 0.5,
+        emissive: 0x403018,
+        emissiveIntensity: 0.28,
+        bump: 0.06,
+        color: 0xd0b060,
+      });
+    case RoomType.CombatPit:
+      return texturedMat('floor-training', trainingFloorTex(), {
+        metalness: 0.22,
+        roughness: 0.72,
+        emissive: 0x401010,
+        emissiveIntensity: 0.2,
+        bump: 0.12,
+        color: 0xb05040,
+      });
     default:
       return texturedMat('floor-claimed-v2', claimedStoneTex(), {
         color: 0xb8a890,
@@ -1153,6 +1318,12 @@ export function makeRoomDecal(room: RoomType): THREE.Mesh | null {
     [RoomType.Library]: { kind: 'runes', color: [90, 120, 210], emissive: 0x4060c0, ei: 0.4, size: 1.45 },
     [RoomType.Portal]: { kind: 'swirl', color: [160, 80, 220], emissive: 0x8030c0, ei: 0.55, size: 1.5 },
     [RoomType.Guard]: { kind: 'worn', color: [100, 120, 140], emissive: 0x406080, ei: 0.22, size: 1.4 },
+    [RoomType.Workshop]: { kind: 'worn', color: [170, 120, 60], emissive: 0x804010, ei: 0.28, size: 1.4 },
+    [RoomType.Prison]: { kind: 'worn', color: [90, 100, 110], emissive: 0x304050, ei: 0.2, size: 1.4 },
+    [RoomType.Torture]: { kind: 'worn', color: [160, 50, 60], emissive: 0x801020, ei: 0.35, size: 1.4 },
+    [RoomType.Graveyard]: { kind: 'runes', color: [70, 110, 90], emissive: 0x206040, ei: 0.3, size: 1.45 },
+    [RoomType.Temple]: { kind: 'runes', color: [200, 170, 80], emissive: 0xc09030, ei: 0.45, size: 1.5 },
+    [RoomType.CombatPit]: { kind: 'worn', color: [180, 70, 50], emissive: 0xa03020, ei: 0.3, size: 1.45 },
   };
   const s = specs[room];
   if (!s) return null;
@@ -1221,6 +1392,14 @@ export function tileMaterial(kind: TileKind, fortified: boolean, _room: RoomType
       return floorMaterial(TileKind.Claimed, _room);
     case TileKind.Heart:
       return floorMaterial(TileKind.Heart, RoomType.None);
+    case TileKind.Lava:
+      return floorMaterial(TileKind.Lava, RoomType.None);
+    case TileKind.Water:
+      return floorMaterial(TileKind.Water, RoomType.None);
+    case TileKind.BridgeWood:
+      return floorMaterial(TileKind.BridgeWood, RoomType.None);
+    case TileKind.BridgeStone:
+      return floorMaterial(TileKind.BridgeStone, RoomType.None);
     default:
       return cachedMat('default', () => new THREE.MeshStandardMaterial({ color: 0x555555 }));
   }
@@ -1456,6 +1635,222 @@ export function makeRoomProps(room: RoomType, variant = 0): THREE.Group | null {
     const rack = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.08, 0.2), wood);
     rack.position.set(-0.35, 0.35, 0.25);
     g.add(rack);
+  } else if (room === RoomType.Workshop) {
+    const wood = new THREE.MeshStandardMaterial({ color: 0x6a4830, roughness: 0.75 });
+    const iron = new THREE.MeshStandardMaterial({
+      color: 0x606870,
+      metalness: 0.85,
+      roughness: 0.3,
+      emissive: 0x401808,
+      emissiveIntensity: 0.2,
+    });
+    const glow = new THREE.MeshStandardMaterial({
+      color: 0xff6020,
+      emissive: 0xff4010,
+      emissiveIntensity: 0.9,
+      metalness: 0.4,
+      roughness: 0.4,
+    });
+    // Workbench
+    const bench = new THREE.Mesh(new THREE.BoxGeometry(1.1, 0.18, 0.55), wood);
+    bench.position.set(-0.15, 0.55, 0.1);
+    bench.castShadow = true;
+    g.add(bench);
+    const leg1 = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.5, 0.1), wood);
+    leg1.position.set(-0.55, 0.28, 0.25);
+    g.add(leg1);
+    const leg2 = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.5, 0.1), wood);
+    leg2.position.set(0.25, 0.28, -0.05);
+    g.add(leg2);
+    // Anvil
+    const anvil = new THREE.Mesh(new THREE.BoxGeometry(0.45, 0.22, 0.28), iron);
+    anvil.position.set(0.45, 0.45, -0.25);
+    anvil.castShadow = true;
+    g.add(anvil);
+    const horn = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.1, 0.14), iron);
+    horn.position.set(0.68, 0.5, -0.25);
+    g.add(horn);
+    // Ember forge pot
+    const pot = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.22, 0.28, 8), iron);
+    pot.position.set(-0.45, 0.35, -0.35);
+    g.add(pot);
+    const ember = new THREE.Mesh(new THREE.SphereGeometry(0.1, 8, 6), glow);
+    ember.position.set(-0.45, 0.48, -0.35);
+    g.add(ember);
+    // Door kit stack visual
+    const kit = new THREE.Mesh(
+      new THREE.BoxGeometry(0.28, 0.35, 0.08),
+      new THREE.MeshStandardMaterial({ color: 0x8a6040, roughness: 0.7 })
+    );
+    kit.position.set(0.1, 0.72, 0.15);
+    g.add(kit);
+  } else if (room === RoomType.Prison) {
+    const iron = new THREE.MeshStandardMaterial({
+      color: 0x606870,
+      metalness: 0.85,
+      roughness: 0.35,
+      emissive: 0x101820,
+      emissiveIntensity: 0.12,
+    });
+    const wood = new THREE.MeshStandardMaterial({ color: 0x4a3828, roughness: 0.8 });
+    // Cell bars
+    for (let i = 0; i < 4; i++) {
+      const bar = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 1.2, 5), iron);
+      bar.position.set(-0.45 + i * 0.28, 0.7, 0.55);
+      bar.castShadow = true;
+      g.add(bar);
+    }
+    const cross = new THREE.Mesh(new THREE.BoxGeometry(1.05, 0.06, 0.06), iron);
+    cross.position.set(-0.05, 0.85, 0.55);
+    g.add(cross);
+    const bunk = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.12, 0.45), wood);
+    bunk.position.set(0.15, 0.28, -0.25);
+    g.add(bunk);
+    const chain = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.025, 0.55, 5), iron);
+    chain.position.set(0.55, 0.55, -0.1);
+    g.add(chain);
+  } else if (room === RoomType.Torture) {
+    const wood = new THREE.MeshStandardMaterial({ color: 0x5a3020, roughness: 0.75 });
+    const iron = new THREE.MeshStandardMaterial({
+      color: 0x707880,
+      metalness: 0.8,
+      roughness: 0.3,
+      emissive: 0x401010,
+      emissiveIntensity: 0.25,
+    });
+    const rack = new THREE.Mesh(new THREE.BoxGeometry(1.15, 0.14, 0.55), wood);
+    rack.position.set(0, 0.55, 0);
+    rack.castShadow = true;
+    g.add(rack);
+    for (const sx of [-1, 1]) {
+      const post = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.07, 0.9, 6), wood);
+      post.position.set(sx * 0.5, 0.55, 0);
+      g.add(post);
+    }
+    const spike = new THREE.Mesh(
+      new THREE.ConeGeometry(0.08, 0.28, 5),
+      new THREE.MeshStandardMaterial({ color: 0xa0a8b0, metalness: 0.7, roughness: 0.3 })
+    );
+    spike.position.set(0, 0.85, 0.1);
+    g.add(spike);
+    const wheel = new THREE.Mesh(new THREE.TorusGeometry(0.28, 0.04, 6, 12), iron);
+    wheel.position.set(-0.35, 0.7, -0.35);
+    wheel.rotation.y = 0.4;
+    g.add(wheel);
+  } else if (room === RoomType.Graveyard) {
+    const stone = new THREE.MeshStandardMaterial({
+      color: 0x687868,
+      roughness: 0.7,
+      metalness: 0.15,
+      emissive: 0x183028,
+      emissiveIntensity: 0.2,
+    });
+    const moss = new THREE.MeshStandardMaterial({
+      color: 0x406048,
+      emissive: 0x204028,
+      emissiveIntensity: 0.25,
+      roughness: 0.8,
+    });
+    const slab = new THREE.Mesh(new THREE.BoxGeometry(0.55, 0.7, 0.12), stone);
+    slab.position.set(-0.35, 0.45, 0.2);
+    slab.castShadow = true;
+    g.add(slab);
+    const crossH = new THREE.Mesh(new THREE.BoxGeometry(0.35, 0.08, 0.08), stone);
+    crossH.position.set(-0.35, 0.7, 0.2);
+    g.add(crossH);
+    const mound = new THREE.Mesh(new THREE.SphereGeometry(0.32, 8, 6), moss);
+    mound.scale.set(1.2, 0.45, 0.9);
+    mound.position.set(0.35, 0.22, -0.15);
+    g.add(mound);
+    const bone = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.03, 0.03, 0.35, 5),
+      new THREE.MeshStandardMaterial({ color: 0xd8d0b0, roughness: 0.5 })
+    );
+    bone.rotation.z = 0.8;
+    bone.position.set(0.2, 0.35, 0.25);
+    g.add(bone);
+  } else if (room === RoomType.Temple) {
+    const gold = new THREE.MeshStandardMaterial({
+      color: 0xd4b050,
+      metalness: 0.7,
+      roughness: 0.35,
+      emissive: 0x806020,
+      emissiveIntensity: 0.45,
+    });
+    const dark = new THREE.MeshStandardMaterial({ color: 0x3a2818, roughness: 0.75 });
+    const plinth = new THREE.Mesh(new THREE.CylinderGeometry(0.35, 0.42, 0.35, 8), dark);
+    plinth.position.set(0, 0.28, 0);
+    plinth.castShadow = true;
+    g.add(plinth);
+    const idol = new THREE.Mesh(new THREE.ConeGeometry(0.22, 0.55, 6), gold);
+    idol.position.set(0, 0.72, 0);
+    idol.castShadow = true;
+    g.add(idol);
+    const orb = new THREE.Mesh(
+      new THREE.SphereGeometry(0.1, 8, 8),
+      new THREE.MeshStandardMaterial({
+        color: 0xffe080,
+        emissive: 0xffc040,
+        emissiveIntensity: 1.1,
+        metalness: 0.4,
+        roughness: 0.3,
+      })
+    );
+    orb.position.set(0, 1.05, 0);
+    g.add(orb);
+    for (const sx of [-0.55, 0.55]) {
+      const candle = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.05, 0.35, 5), dark);
+      candle.position.set(sx, 0.35, -0.4);
+      g.add(candle);
+      const flame = new THREE.Mesh(
+        new THREE.SphereGeometry(0.06, 6, 6),
+        new THREE.MeshStandardMaterial({
+          color: 0xffaa40,
+          emissive: 0xff8020,
+          emissiveIntensity: 1.2,
+        })
+      );
+      flame.position.set(sx, 0.58, -0.4);
+      g.add(flame);
+    }
+  } else if (room === RoomType.CombatPit) {
+    const sand = new THREE.MeshStandardMaterial({
+      color: 0xa07040,
+      roughness: 0.9,
+      metalness: 0.05,
+      emissive: 0x301808,
+      emissiveIntensity: 0.12,
+    });
+    const iron = new THREE.MeshStandardMaterial({
+      color: 0x707880,
+      metalness: 0.8,
+      roughness: 0.35,
+      emissive: 0x401010,
+      emissiveIntensity: 0.2,
+    });
+    const pit = new THREE.Mesh(new THREE.CylinderGeometry(0.7, 0.78, 0.18, 12), sand);
+    pit.position.set(0, 0.2, 0);
+    pit.receiveShadow = true;
+    g.add(pit);
+    // Arena ring
+    const ring = new THREE.Mesh(new THREE.TorusGeometry(0.72, 0.05, 6, 16), iron);
+    ring.rotation.x = Math.PI / 2;
+    ring.position.set(0, 0.28, 0);
+    g.add(ring);
+    // Dummy posts
+    for (const [px, pz] of [[-0.45, 0.35], [0.4, -0.3]]) {
+      const post = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.08, 0.95, 6), iron);
+      post.position.set(px, 0.55, pz);
+      post.castShadow = true;
+      g.add(post);
+    }
+    const blade = new THREE.Mesh(
+      new THREE.BoxGeometry(0.08, 0.55, 0.04),
+      new THREE.MeshStandardMaterial({ color: 0xc0c8d0, metalness: 0.85, roughness: 0.25 })
+    );
+    blade.position.set(0.35, 0.55, 0.35);
+    blade.rotation.z = 0.35;
+    g.add(blade);
   } else {
     return null;
   }
@@ -1505,6 +1900,133 @@ export function makeGoldGlitter(): THREE.Group {
   return g;
 }
 
+
+/** Glowing lava pool floor — red/orange emissive, distinct from gold veins. */
+export function makeLavaMesh(): THREE.Group {
+  const g = new THREE.Group();
+  const crust = new THREE.Mesh(
+    new THREE.BoxGeometry(TILE_SIZE * 0.98, 0.18, TILE_SIZE * 0.98),
+    new THREE.MeshStandardMaterial({
+      color: 0x3a1208,
+      roughness: 0.85,
+      metalness: 0.05,
+      emissive: 0x4a1008,
+      emissiveIntensity: 0.35,
+    })
+  );
+  crust.position.y = 0.05;
+  crust.receiveShadow = true;
+  g.add(crust);
+  const glow = new THREE.Mesh(
+    new THREE.BoxGeometry(TILE_SIZE * 0.82, 0.08, TILE_SIZE * 0.82),
+    new THREE.MeshStandardMaterial({
+      color: 0xff5510,
+      roughness: 0.35,
+      metalness: 0.2,
+      emissive: 0xff3a00,
+      emissiveIntensity: 1.35,
+    })
+  );
+  glow.position.y = 0.14;
+  g.add(glow);
+  // Dark crust islands so it never reads as gold glitter
+  for (const [ox, oz, s] of [
+    [-0.45, -0.3, 0.35],
+    [0.4, 0.35, 0.28],
+    [0.1, -0.5, 0.22],
+    [-0.2, 0.45, 0.3],
+  ] as const) {
+    const island = new THREE.Mesh(
+      new THREE.BoxGeometry(s, 0.06, s * 0.85),
+      new THREE.MeshStandardMaterial({
+        color: 0x1a0a06,
+        roughness: 0.95,
+        emissive: 0x801800,
+        emissiveIntensity: 0.45,
+      })
+    );
+    island.position.set(ox, 0.17, oz);
+    g.add(island);
+  }
+  return g;
+}
+
+/** Cool water / moat tile. */
+export function makeWaterMesh(): THREE.Group {
+  const g = new THREE.Group();
+  const basin = new THREE.Mesh(
+    new THREE.BoxGeometry(TILE_SIZE * 0.98, 0.16, TILE_SIZE * 0.98),
+    new THREE.MeshStandardMaterial({
+      color: 0x1a3048,
+      roughness: 0.25,
+      metalness: 0.35,
+      emissive: 0x0a2038,
+      emissiveIntensity: 0.4,
+    })
+  );
+  basin.position.y = 0.04;
+  basin.receiveShadow = true;
+  g.add(basin);
+  const sheen = new THREE.Mesh(
+    new THREE.BoxGeometry(TILE_SIZE * 0.78, 0.04, TILE_SIZE * 0.78),
+    new THREE.MeshStandardMaterial({
+      color: 0x3a80b0,
+      roughness: 0.15,
+      metalness: 0.55,
+      emissive: 0x184868,
+      emissiveIntensity: 0.55,
+      transparent: true,
+      opacity: 0.92,
+    })
+  );
+  sheen.position.y = 0.12;
+  g.add(sheen);
+  return g;
+}
+
+/** Wooden or stone bridge planks over a hazard. */
+export function makeBridgeMesh(stone: boolean): THREE.Group {
+  const g = new THREE.Group();
+  // Dim lava/water glow under the gaps
+  const under = new THREE.Mesh(
+    new THREE.BoxGeometry(TILE_SIZE * 0.95, 0.1, TILE_SIZE * 0.95),
+    new THREE.MeshStandardMaterial({
+      color: stone ? 0x1a2838 : 0x4a1808,
+      roughness: 0.7,
+      metalness: 0.1,
+      emissive: stone ? 0x102030 : 0xc02800,
+      emissiveIntensity: stone ? 0.25 : 0.7,
+    })
+  );
+  under.position.y = 0.06;
+  g.add(under);
+  const plankMat = new THREE.MeshStandardMaterial({
+    color: stone ? 0x6a7080 : 0x8a5a28,
+    roughness: stone ? 0.65 : 0.82,
+    metalness: stone ? 0.35 : 0.08,
+    emissive: stone ? 0x202428 : 0x3a2010,
+    emissiveIntensity: 0.12,
+  });
+  for (let i = -2; i <= 2; i++) {
+    const plank = new THREE.Mesh(new THREE.BoxGeometry(TILE_SIZE * 0.92, 0.12, 0.28), plankMat);
+    plank.position.set(0, 0.2, i * 0.36);
+    plank.castShadow = true;
+    plank.receiveShadow = true;
+    g.add(plank);
+  }
+  // Side rails
+  const railMat = new THREE.MeshStandardMaterial({
+    color: stone ? 0x505868 : 0x5a3a18,
+    roughness: 0.75,
+    metalness: stone ? 0.3 : 0.05,
+  });
+  for (const ox of [-0.85, 0.85]) {
+    const rail = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.35, TILE_SIZE * 0.9), railMat);
+    rail.position.set(ox, 0.38, 0);
+    g.add(rail);
+  }
+  return g;
+}
 
 /** Wooden door mesh — closed slab or open leaf. */
 export function makeDoorMesh(state: DoorState): THREE.Group {

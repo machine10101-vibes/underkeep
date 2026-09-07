@@ -175,9 +175,47 @@ export class Grid {
       paintGold(cx + 4, cy + i, 300 + i * 35);
     }
 
+    // Lava river / pools (west of heart) — distinct from gold veins
+    this.paintHazardBlob(cx - 10, cy + 2, 3, TileKind.Lava);
+    this.paintHazardBlob(cx - 12, cy - 1, 2, TileKind.Lava);
+    // Thin lava seam south-east for bridge demos
+    for (let i = 0; i < 5; i++) {
+      const t = this.get(cx + 6 + (i % 2), cy + 6 + Math.floor(i / 2));
+      if (t && (t.kind === TileKind.Earth || t.kind === TileKind.Gold)) {
+        t.kind = TileKind.Lava;
+        t.goldAmount = 0;
+        t.fortified = false;
+      }
+    }
+    // Small water moat pocket north-west
+    this.paintHazardBlob(cx - 8, cy - 8, 2, TileKind.Water);
+
     // Place a few torches on claimed tiles near walls
     this.refreshTorches();
     this.seedExploration();
+  }
+
+  /** Carve a soft blob of lava/water into diggable earth (keeps clear of heart). */
+  private paintHazardBlob(cx: number, cy: number, radius: number, kind: TileKind.Lava | TileKind.Water): void {
+    const hx = this.heartPos.x;
+    const hy = this.heartPos.y;
+    for (let dy = -radius; dy <= radius; dy++) {
+      for (let dx = -radius; dx <= radius; dx++) {
+        if (dx * dx + dy * dy > radius * radius + 0.5) continue;
+        const x = cx + dx;
+        const y = cy + dy;
+        if (Math.abs(x - hx) < 5 && Math.abs(y - hy) < 5) continue;
+        const t = this.get(x, y);
+        if (!t) continue;
+        if (t.kind === TileKind.Earth || t.kind === TileKind.Gold) {
+          t.kind = kind;
+          t.goldAmount = 0;
+          t.fortified = false;
+          t.digProgress = 0;
+          t.room = RoomType.None;
+        }
+      }
+    }
   }
 
   refreshTorches(): void {
@@ -213,14 +251,51 @@ export class Grid {
     );
   }
 
-  isWalkable(x: number, y: number): boolean {
+  isHazard(x: number, y: number): boolean {
+    const t = this.get(x, y);
+    return !!t && (t.kind === TileKind.Lava || t.kind === TileKind.Water);
+  }
+
+  isBridge(x: number, y: number): boolean {
+    const t = this.get(x, y);
+    return !!t && (t.kind === TileKind.BridgeWood || t.kind === TileKind.BridgeStone);
+  }
+
+  /**
+   * Default walkable floors. Lava/water are NOT walkable for Scrabblers (block pathing).
+   * Pass allowHazard for heat-resistant / flyers / combat units that can risk crossing.
+   */
+  isWalkable(x: number, y: number, opts?: { allowHazard?: boolean }): boolean {
+    const t = this.get(x, y);
+    if (!t || t.fortified) return false;
+    if (
+      t.kind === TileKind.Dirt ||
+      t.kind === TileKind.Claimed ||
+      t.kind === TileKind.Heart ||
+      t.kind === TileKind.BridgeWood ||
+      t.kind === TileKind.BridgeStone
+    ) {
+      return true;
+    }
+    if (opts?.allowHazard && (t.kind === TileKind.Lava || t.kind === TileKind.Water)) {
+      return true;
+    }
+    return false;
+  }
+
+  /** Bridge must sit on lava/water and touch an existing walkable tile. */
+  canPlaceBridge(x: number, y: number): boolean {
     const t = this.get(x, y);
     if (!t) return false;
-    return (
-      !t.fortified &&
-      (t.kind === TileKind.Dirt ||
-        t.kind === TileKind.Claimed ||
-        t.kind === TileKind.Heart)
+    if (t.kind !== TileKind.Lava && t.kind !== TileKind.Water) return false;
+    return this.neighbors4(x, y).some(
+      (n) =>
+        !n.fortified &&
+        (n.kind === TileKind.Dirt ||
+          n.kind === TileKind.Claimed ||
+          n.kind === TileKind.Heart ||
+          n.kind === TileKind.BridgeWood ||
+          n.kind === TileKind.BridgeStone)
     );
   }
 
@@ -242,6 +317,34 @@ export class Grid {
     let n = 0;
     for (const t of this.tiles) if (t.room === room) n++;
     return n;
+  }
+
+  /** Largest 4-connected contiguous block of a room type. */
+  largestContiguousRoom(room: RoomType): number {
+    if (room === RoomType.None) return 0;
+    const seen = new Set<string>();
+    let best = 0;
+    for (const start of this.tiles) {
+      if (start.room !== room) continue;
+      const key0 = `${start.x},${start.y}`;
+      if (seen.has(key0)) continue;
+      let size = 0;
+      const stack = [start];
+      seen.add(key0);
+      while (stack.length) {
+        const t = stack.pop()!;
+        size++;
+        for (const n of this.neighbors4(t.x, t.y)) {
+          const k = `${n.x},${n.y}`;
+          if (n.room === room && !seen.has(k)) {
+            seen.add(k);
+            stack.push(n);
+          }
+        }
+      }
+      if (size > best) best = size;
+    }
+    return best;
   }
 
   neighbors4(x: number, y: number): Tile[] {
@@ -290,7 +393,11 @@ export class Grid {
       }
       if (
         !n.fortified &&
-        (n.kind === TileKind.Dirt || n.kind === TileKind.Claimed || n.kind === TileKind.Heart)
+        (n.kind === TileKind.Dirt ||
+          n.kind === TileKind.Claimed ||
+          n.kind === TileKind.Heart ||
+          n.kind === TileKind.BridgeWood ||
+          n.kind === TileKind.BridgeStone)
       ) {
         walk++;
       }
@@ -393,7 +500,7 @@ export class Grid {
     sy: number,
     gx: number,
     gy: number,
-    opts?: { forHero?: boolean }
+    opts?: { forHero?: boolean; allowHazard?: boolean }
   ): Vec2[] | null {
     if (!this.inBounds(sx, sy) || !this.inBounds(gx, gy)) return null;
     if (sx === gx && sy === gy) return [{ x: gx, y: gy }];
@@ -406,13 +513,21 @@ export class Grid {
     const closed = new Set<number>();
     const h = (x: number, y: number) => Math.abs(x - gx) + Math.abs(y - gy);
     const forHero = !!opts?.forHero;
+    const allowHazard = !!opts?.allowHazard;
     const passable = (nx: number, ny: number): boolean => {
       if (forHero && this.blocksHero(nx, ny)) return false;
-      if (this.isWalkable(nx, ny)) return true;
+      if (this.isWalkable(nx, ny, { allowHazard })) return true;
       // Allow stepping onto diggable goal only (stand-in for adjacent jobs uses walkable goals)
       if (nx === gx && ny === gy && this.isDiggable(nx, ny)) return true;
       if (nx === gx && ny === gy && (nx === this.heartPos.x && ny === this.heartPos.y)) return true;
       return false;
+    };
+    const stepCost = (nx: number, ny: number): number => {
+      const t = this.get(nx, ny);
+      if (!t) return 1;
+      if (t.kind === TileKind.Lava) return 4; // slow / discourage
+      if (t.kind === TileKind.Water) return 3;
+      return 1;
     };
 
     let guard = 0;
@@ -444,7 +559,7 @@ export class Grid {
         if (!this.inBounds(nx, ny) || !passable(nx, ny)) continue;
         const nk = key(nx, ny);
         if (closed.has(nk)) continue;
-        const tent = (gScore.get(ck) ?? Infinity) + 1;
+        const tent = (gScore.get(ck) ?? Infinity) + stepCost(nx, ny);
         if (tent < (gScore.get(nk) ?? Infinity)) {
           came.set(nk, ck);
           gScore.set(nk, tent);
@@ -461,7 +576,7 @@ export class Grid {
     sy: number,
     tx: number,
     ty: number,
-    opts?: { forHero?: boolean }
+    opts?: { forHero?: boolean; allowHazard?: boolean }
   ): Vec2[] | null {
     let best: Vec2[] | null = null;
     for (const [dx, dy] of [

@@ -6,7 +6,7 @@ Original-IP dungeon management game inspired by **Dungeon Keeper 2** (3D). Dark-
 
 **https://machine10101-vibes.github.io/underkeep/?v=pass10.6**
 
-Pass 10 play: the keeper loop follows the classic dungeon-keeper playthrough — dig, claim, fortify, rooms, Portal, payday, Heart defense — with Underkeep names and unique gold-cost workers. Pass 10.1: Scrabblers keep digging when the vault is full, and Dig paint marks only the tiles you sweep. Pass 10.2: **Studio (V)** inspects every creature, item, enemy, and room mesh. Pass 10.6: torch-lit cavern (no dig-load brightness snaps), Prison/Workshop loops actually tick, HUD stays on-screen.
+Pass 10 play: the keeper loop follows the classic dungeon-keeper playthrough — dig, claim, fortify, rooms, Portal, payday, Heart defense — with Underkeep names and unique gold-cost workers. Pass 10.1: Scrabblers keep digging when the vault is full, and Dig paint marks only the tiles you sweep. Pass 10.2: **Studio (V)** inspects every creature, item, enemy, and room mesh. Pass 10.6: torch-lit cavern (no dig-load brightness snaps), Prison/Workshop loops actually tick, HUD stays on-screen. Pass 10.7: Fortify is a Keeper mark only; the first hero party waits until the keep is built.
 
 Works on desktop and phones (touch controls).
 
@@ -95,7 +95,7 @@ Dropping a creature into a fight **stuns** them briefly (DK2-style).
 7. **Scrabblers never eat or sleep.** Slap them to work harder. Drop one on the Heart to reclaim half its gold.
 8. Hero waves march toward the Heart — **survive 3 waves** OR gather **2500 gold** (needs Treasury space) to win.
 9. **Fog of war** — unexplored tiles stay dark until dig/claim, or **Sight of Evil**.
-10. Idle Scrabblers **auto-fortify** after a delay when no dig/claim marks wait.
+10. **Fortify** is a Keeper mark — idle Scrabblers claim dug dirt, they do not brick walls on their own.
 11. **Payday** and **Heart HP** sit on the top bar. Workers defend the Heart instead of fleeing.
 12. **Call to Arms** musters fighters. **Possess**, lava/bridges, Workshop, Prison/Torture/Graveyard, Temple, Combat Pit remain.
 

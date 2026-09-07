@@ -152,6 +152,12 @@ export const PAYDAY_INTERVAL = 48;
 export const HEART_MAX_HP = 500;
 /** Survive this many hero waves to win (or hit gold threshold). */
 export const WIN_WAVES = 3;
+/** First party never before this many seconds, even if the keep is ready. */
+export const FIRST_WAVE_MIN_TIME = 240;
+/** Seconds of warning after the keep is ready (Portal + Lair, or the fallback). */
+export const FIRST_WAVE_GRACE = 90;
+/** Hard fallback so a player who never builds rooms still gets a late raid. */
+export const FIRST_WAVE_FALLBACK = 480;
 /** Treasury gold threshold alternate win. */
 export const GOLD_WIN_THRESHOLD = 2500;
 /** Max manufactured kits stored from Workshop. */

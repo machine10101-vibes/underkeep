@@ -32,6 +32,9 @@ import {
   Vec2,
   TileKind,
   WIN_WAVES,
+  FIRST_WAVE_FALLBACK,
+  FIRST_WAVE_GRACE,
+  FIRST_WAVE_MIN_TIME,
   goldCapacity,
   isDiggableKind,
   isFlyer,
@@ -112,7 +115,7 @@ export class Game {
   private portalCooldown = 0;
   private attracted = { skitterwing: false, rattlekin: false, emberling: false, gravemage: false };
   private heroWaveSpawned = false;
-  private heroWaveTimer = 90; // seconds until heroes
+  private heroWaveTimer = FIRST_WAVE_GRACE; // counts down only after the keep is ready
   private gameOver = false;
   private won = false;
   private paint = false;
@@ -310,7 +313,7 @@ export class Game {
     this.portalCooldown = 0;
     this.attracted = { skitterwing: false, rattlekin: false, emberling: false, gravemage: false };
     this.heroWaveSpawned = false;
-    this.heroWaveTimer = 90;
+    this.heroWaveTimer = FIRST_WAVE_GRACE;
     this.wavesCleared = 0;
     this.doorKits = 0;
     this.sentryKits = 0;
@@ -528,7 +531,7 @@ export class Game {
     this.researchRank = (data as SaveData & { researchRank?: number }).researchRank ?? 0;
     this.healUnlocked = !!(data as SaveData & { healUnlocked?: boolean }).healUnlocked;
     this.heroWaveSpawned = !!data.heroWaveSpawned;
-    this.heroWaveTimer = data.heroWaveTimer ?? 90;
+    this.heroWaveTimer = data.heroWaveTimer ?? FIRST_WAVE_GRACE;
     this.workerCostScale = data.workerCostScale ?? 0;
     this.portalCooldown = data.portalCooldown ?? 0;
     this.time = data.time ?? 0;
@@ -5199,15 +5202,18 @@ export class Game {
     }
 
     // Player marks steal workers off chores (DK2: tagged earth is the order)
-    if (digMarks.length + claimMarks.length > 0) {
+    if (digMarks.length + claimMarks.length + fortMarks.length > 0) {
       let stolen = false;
       for (const w of workers) {
         if (w.job === JobType.Flee || w.job === JobType.DragPrisoner || w.job === JobType.DragWounded) continue;
-        if (w.job === JobType.Dig || w.job === JobType.Mine || w.job === JobType.Claim || w.job === JobType.Haul) continue;
+        if (w.job === JobType.Dig || w.job === JobType.Mine || w.job === JobType.Haul) continue;
+        if (w.job === JobType.Claim && digMarks.length + claimMarks.length > 0) continue;
+        if (w.job === JobType.Fortify && digMarks.length + claimMarks.length === 0) continue;
         const desperate = w.hunger > 78 || w.sleepNeed > 82 || w.hp < w.maxHp * 0.4;
         if ((w.job === JobType.Eat || w.job === JobType.Sleep) && desperate) continue;
         if (
           w.job === JobType.Fortify ||
+          w.job === JobType.Claim ||
           w.job === JobType.Craft ||
           w.job === JobType.Idle ||
           w.job === JobType.Eat ||
@@ -5315,6 +5321,7 @@ export class Game {
       if (
         digMarks.length === 0 &&
         claimMarks.length === 0 &&
+        fortMarks.length === 0 &&
         this.grid.countRoom(RoomType.Workshop) > 0 &&
         (this.doorKits < KIT_CAP || this.sentryKits < KIT_CAP)
       ) {
@@ -5376,6 +5383,22 @@ export class Game {
       }
       if (assigned) continue;
 
+      for (const m of fortMarks) {
+        const key = `${m.x},${m.y}`;
+        if (claimedTargets.has(key)) continue;
+        if (!this.grid.isReachableSolid(m.x, m.y)) continue;
+        const path = this.grid.findPathAdjacent(w.x, w.y, m.x, m.y);
+        if (!path) continue;
+        w.job = JobType.Fortify;
+        w.jobTarget = m;
+        w.setPath(path);
+        w.workTimer = 0;
+        claimedTargets.add(key);
+        assigned = true;
+        break;
+      }
+      if (assigned) continue;
+
       // Auto-claim unmarked dirt next to owned land (DK2 imps claim without a tag)
       if (!assigned) {
         let best: Vec2 | null = null;
@@ -5407,61 +5430,6 @@ export class Game {
             claimedTargets.add(`${best.x},${best.y}`);
             assigned = true;
             this.mentioneOnce('autoClaim', MENTOR_LINES.autoClaim);
-          }
-        }
-      }
-      if (assigned) continue;
-
-      for (const m of fortMarks) {
-        const key = `${m.x},${m.y}`;
-        if (claimedTargets.has(key)) continue;
-        if (!this.grid.isReachableSolid(m.x, m.y)) continue;
-        const path = this.grid.findPathAdjacent(w.x, w.y, m.x, m.y);
-        if (!path) continue;
-        w.job = JobType.Fortify;
-        w.jobTarget = m;
-        w.setPath(path);
-        w.workTimer = 0;
-        claimedTargets.add(key);
-        assigned = true;
-        break;
-      }
-      // Auto-fortify only after the opening excavate — never brick the starting gold
-      if (!assigned && this.time >= 40 && digMarks.length === 0 && claimMarks.length === 0) {
-        let best: Vec2 | null = null;
-        let bestD = 999;
-        // Scan claimed/heart neighbors only — O(frontier) instead of full map
-        for (const claimed of this.grid.tiles) {
-          if (claimed.kind !== TileKind.Claimed && claimed.kind !== TileKind.Heart) continue;
-          for (const tile of this.grid.neighbors4(claimed.x, claimed.y)) {
-            if (tile.kind !== TileKind.Earth || tile.fortified) continue;
-            if (tile.mark === MarkType.Dig) continue; // don't steal dig marks
-            if (!tile.explored) continue; // FoW: don't send workers into the dark
-            if (!this.grid.isReachableSolid(tile.x, tile.y)) continue;
-            const key = `${tile.x},${tile.y}`;
-            if (claimedTargets.has(key)) continue;
-            const d = Math.abs(tile.x - w.x) + Math.abs(tile.y - w.y);
-            if (d < bestD && d <= 16) {
-              bestD = d;
-              best = { x: tile.x, y: tile.y };
-            }
-          }
-        }
-        if (best) {
-          const path = this.grid.findPathAdjacent(w.x, w.y, best.x, best.y);
-          if (path) {
-            const ft = this.grid.get(best.x, best.y)!;
-            if (ft.mark !== MarkType.Fortify) {
-              ft.mark = MarkType.Fortify;
-              this.marksDirty = true;
-            }
-            w.job = JobType.Fortify;
-            w.jobTarget = best;
-            w.setPath(path);
-            w.workTimer = 0;
-            claimedTargets.add(`${best.x},${best.y}`);
-            assigned = true;
-            this.mentioneOnce('autoFortify', MENTOR_LINES.autoFortify);
           }
         }
       }
@@ -7049,6 +7017,16 @@ export class Game {
     }
   }
 
+  /** First raid waits for a real keep (or a long fallback), not the opening excavate. */
+  private firstInvasionReady(): boolean {
+    if (this.time >= FIRST_WAVE_FALLBACK) return true;
+    if (this.time < FIRST_WAVE_MIN_TIME) return false;
+    const claimed = this.grid.countClaimed();
+    const portal = this.grid.countRoom(RoomType.Portal) > 0;
+    const lair = this.grid.countRoom(RoomType.Lair) >= 2;
+    return claimed >= 16 && portal && lair;
+  }
+
   private updateHeroWave(dt: number): void {
     if (this.heroWaveSpawned) {
       // Wave clear → next wave or mission win
@@ -7063,8 +7041,8 @@ export class Game {
             this.checkMissionWin();
             return;
           }
-          // Schedule next wave
-          this.heroWaveTimer = 50 + this.wavesCleared * 8;
+          // Schedule next wave — a real breather, not another raid in a minute
+          this.heroWaveTimer = 90 + this.wavesCleared * 20;
           this.heroWarn30 = false;
           this.heroWarn10 = false;
           this.heroEngageAnnounced = false;
@@ -7078,6 +7056,11 @@ export class Game {
           this.hud.say(MENTOR_LINES.win); // keep classic toast flavor between waves
         }
       }
+      return;
+    }
+    // First party waits until the keep is a keep — not 90s into the opening excavate.
+    if (this.wavesCleared === 0 && !this.firstInvasionReady()) {
+      if (this.heroWaveTimer < FIRST_WAVE_GRACE) this.heroWaveTimer = FIRST_WAVE_GRACE;
       return;
     }
     this.heroWaveTimer -= dt;
@@ -7129,21 +7112,25 @@ export class Game {
     }
     this.requestStructuralRebuild();
 
-    const k1 = this.spawnCreature(CreatureKind.HeroKnight, sx, sy);
-    const k2 = this.spawnCreature(CreatureKind.HeroKnight, sx + 1, sy);
-    const a1 = this.spawnCreature(CreatureKind.HeroArcher, sx - 1, sy);
-    // Slightly tougher wave so doors/traps/fighters matter (scales with wave #)
     const waveScale = 1.05 + this.wavesCleared * 0.12;
-    for (const h of [k1, k2, a1]) {
+    const spawnHero = (kind: CreatureKind, x: number, y: number) => {
+      const h = this.spawnCreature(kind, x, y);
       h.job = JobType.Fight;
       h.jobTarget = { ...this.grid.heartPos };
       h.hp = Math.floor(h.maxHp * waveScale);
       h.maxHp = h.hp;
       const w = this.grid.tileToWorld(h.x, h.y);
       this.renderer.spawnFx(new THREE.Vector3(w.x, 1.2, w.z), 0xa0c0ff, 0.65);
+      return h;
+    };
+    // Wave 1 is a scouting raid; later waves bring the full party.
+    spawnHero(CreatureKind.HeroKnight, sx, sy);
+    spawnHero(CreatureKind.HeroArcher, sx - 1, sy);
+    if (waveNum >= 2) {
+      spawnHero(CreatureKind.HeroKnight, sx + 1, sy);
     }
-    // Optional 4th skirmisher if dungeon is well developed
-    if (this.grid.countClaimed() >= 40) {
+    // Optional extra skirmisher if the dungeon is well developed
+    if (waveNum >= 2 && this.grid.countClaimed() >= 40) {
       const k3 = this.spawnCreature(CreatureKind.HeroKnight, sx, sy + 1);
       k3.job = JobType.Fight;
       k3.jobTarget = { ...this.grid.heartPos };

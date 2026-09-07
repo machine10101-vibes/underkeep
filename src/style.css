@@ -73,7 +73,7 @@ html, body, #app {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
   z-index: 8;
   pointer-events: none;
 }
@@ -313,7 +313,7 @@ html, body, #app {
   #hud-chrome-top {
     top: max(6px, env(safe-area-inset-top, 0px));
     width: calc(100vw - 10px);
-    gap: 5px;
+    gap: 8px;
   }
   #hud-top {
     gap: 8px; padding: 5px 10px;
@@ -329,7 +329,7 @@ html, body, #app {
     position: absolute;
     left: 50%;
     transform: translateX(-50%);
-    bottom: max(10px, calc(8px + env(safe-area-inset-bottom, 0px)));
+    bottom: max(14px, calc(12px + env(safe-area-inset-bottom, 0px)));
     display: grid;
     grid-template-columns: repeat(5, minmax(0, 1fr));
     gap: 5px;
@@ -424,15 +424,18 @@ html, body, #app {
   .sheet { display: block; }
   .sheet[hidden] { display: none !important; }
   #toolbar.primary-bar {
-    bottom: calc(14px + env(safe-area-inset-bottom, 0px));
-    gap: 8px;
+    bottom: calc(16px + env(safe-area-inset-bottom, 0px));
+    gap: 6px;
+    flex-wrap: nowrap;
+    max-width: calc(100vw - 24px);
   }
   #toolbar.primary-bar .tool,
   #toolbar.primary-bar .spell,
   #toolbar.primary-bar .sheet-toggle {
     min-height: 40px;
-    padding: 8px 14px;
+    padding: 8px 11px;
     font-size: 13px;
+    white-space: nowrap;
   }
   .sheet {
     bottom: calc(64px + env(safe-area-inset-bottom, 0px));

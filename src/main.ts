@@ -233,6 +233,14 @@ if (
   }, 400);
 }
 
+if (game && (params.get('studio') === '1' || params.get('shot') === 'studio')) {
+  setTimeout(() => {
+    const g = game as unknown as { hud: { hideOverlay: () => void }; openStudio?: () => void };
+    g.hud.hideOverlay();
+    g.openStudio?.();
+  }, 500);
+}
+
 if (game && params.get('smoke') === '1') {
   setTimeout(() => {
     const g = game as unknown as { hud: { hideOverlay: () => void }; runGuideSmoke?: (s?: number) => unknown };

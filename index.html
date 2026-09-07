@@ -6,7 +6,7 @@
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="mobile-web-app-capable" content="yes" />
     <title>Underkeep</title>
-    <meta name="underkeep-build" content="pass10.1" />
+    <meta name="underkeep-build" content="pass10.2" />
     <link rel="stylesheet" href="/src/style.css" />
   </head>
   <body class="booting">
@@ -42,6 +42,7 @@
           <button type="button" id="btn-build-desktop" class="sheet-toggle" title="Build rooms" aria-expanded="false">🏗 Build</button>
           <button type="button" id="btn-spells-desktop" class="sheet-toggle" title="Spells" aria-expanded="false">🪄 Spells</button>
           <button type="button" id="btn-roster-desktop" class="sheet-toggle" title="Creature roster" aria-expanded="false">📋 Roster</button>
+          <button type="button" id="btn-studio" class="sheet-toggle" title="Model Studio (V) — inspect every 3D mesh">◈ Studio</button>
         </div>
 
         <div id="mobile-bar" class="mobile-only-ui" aria-label="Primary tools">
@@ -54,6 +55,7 @@
           <button type="button" id="btn-build" class="sheet-toggle" title="Build rooms" aria-expanded="false">🏗</button>
           <button type="button" id="btn-spells" class="sheet-toggle" title="Spells" aria-expanded="false">🪄</button>
           <button type="button" id="btn-roster" class="sheet-toggle" title="Roster" aria-expanded="false">📋</button>
+          <button type="button" id="btn-studio-mobile" class="sheet-toggle" title="Model Studio">◈</button>
         </div>
 
         <div id="build-sheet" class="sheet" hidden>
@@ -124,6 +126,27 @@
         </div>
         <div id="tooltip"></div>
         <div id="touch-hint" class="mobile-only">Tap · Long-press slap · Drag pan · Pinch zoom</div>
+      </div>
+      <div id="studio" hidden>
+        <div id="studio-top">
+          <div class="studio-brand">
+            <span class="studio-kicker">Inspect</span>
+            <span id="studio-model-name">Scrabbler</span>
+          </div>
+          <span id="studio-hint">Drag to orbit · Scroll to zoom · Shift-drag to pan · Esc to close</span>
+          <button type="button" id="studio-close" aria-label="Close studio">✕</button>
+        </div>
+        <aside id="studio-side">
+          <div class="panel-head">Models</div>
+          <div id="studio-list"></div>
+        </aside>
+        <div id="studio-bottom">
+          <div id="studio-poses"></div>
+          <div id="studio-tools">
+            <button type="button" id="studio-spin">Spin</button>
+            <button type="button" id="studio-reset">Reset</button>
+          </div>
+        </div>
       </div>
       <div id="overlay" class="hidden">
         <div id="overlay-panel">

@@ -6,7 +6,7 @@
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="mobile-web-app-capable" content="yes" />
     <title>Underkeep</title>
-    <meta name="underkeep-build" content="pass10.4" />
+    <meta name="underkeep-build" content="pass10.5" />
     <link rel="stylesheet" href="/src/style.css" />
   </head>
   <body class="booting">
@@ -20,6 +20,7 @@
       <canvas id="game-canvas"></canvas>
       <div id="select-marquee" class="hidden" aria-hidden="true"></div>
       <div id="hud">
+        <div id="hud-chrome-top">
         <div id="hud-top">
           <div class="stat" id="stat-gold"><span class="label">Gold</span><span class="value"><span id="gold-value">0</span><span id="gold-cap" class="cap">/1000</span></span></div>
           <div class="stat" id="stat-mana"><span class="label">Mana</span><span class="value" id="mana-value">0</span><div class="bar"><div id="mana-bar"></div></div></div>
@@ -29,6 +30,11 @@
           <div class="stat" id="stat-creatures"><span class="label">Minions</span><span class="value" id="creatures-value">0</span></div>
           <div class="stat" id="stat-objective"><span class="label">Mission</span><span class="value" id="objective-value">—</span></div>
           <button type="button" id="btn-new-game" class="hud-new-game" title="Clear save and start a new dungeon">New Game</button>
+        </div>
+        <div id="mentor">
+          <span id="mentor-text">The earth awaits your cruelty, Keeper.</span>
+          <button type="button" id="mentor-dismiss" aria-label="Dismiss">✕</button>
+        </div>
         </div>
 
         <!-- Compact primary bar (desktop + mobile) — rooms/spells in sheets -->
@@ -105,10 +111,6 @@
         <canvas id="minimap" width="148" height="148" title="Minimap — explored / claimed / Heart" aria-label="Dungeon minimap"></canvas>
         <div id="kits-hud" aria-live="polite"><span id="kits-label">Kits</span> <span id="kits-value">D0 · S0</span></div>
         <div id="pan-zone" title="Drag to pan camera" aria-label="Pan camera">✥</div>
-        <div id="mentor">
-          <span id="mentor-text">The earth awaits your cruelty, Keeper.</span>
-          <button type="button" id="mentor-dismiss" aria-label="Dismiss">✕</button>
-        </div>
         <div id="inspector" class="hidden" aria-live="polite">
           <div class="insp-head">
             <span id="insp-name">Creature</span>

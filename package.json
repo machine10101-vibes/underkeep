@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "publish:pages": "bash scripts/publish-pages.sh"
   },
   "dependencies": {
     "three": "^0.170.0"

@@ -5202,15 +5202,18 @@ export class Game {
     }
 
     // Player marks steal workers off chores (DK2: tagged earth is the order)
-    if (digMarks.length + claimMarks.length > 0) {
+    if (digMarks.length + claimMarks.length + fortMarks.length > 0) {
       let stolen = false;
       for (const w of workers) {
         if (w.job === JobType.Flee || w.job === JobType.DragPrisoner || w.job === JobType.DragWounded) continue;
-        if (w.job === JobType.Dig || w.job === JobType.Mine || w.job === JobType.Claim || w.job === JobType.Haul) continue;
+        if (w.job === JobType.Dig || w.job === JobType.Mine || w.job === JobType.Haul) continue;
+        if (w.job === JobType.Claim && digMarks.length + claimMarks.length > 0) continue;
+        if (w.job === JobType.Fortify && digMarks.length + claimMarks.length === 0) continue;
         const desperate = w.hunger > 78 || w.sleepNeed > 82 || w.hp < w.maxHp * 0.4;
         if ((w.job === JobType.Eat || w.job === JobType.Sleep) && desperate) continue;
         if (
           w.job === JobType.Fortify ||
+          w.job === JobType.Claim ||
           w.job === JobType.Craft ||
           w.job === JobType.Idle ||
           w.job === JobType.Eat ||
@@ -5318,6 +5321,7 @@ export class Game {
       if (
         digMarks.length === 0 &&
         claimMarks.length === 0 &&
+        fortMarks.length === 0 &&
         this.grid.countRoom(RoomType.Workshop) > 0 &&
         (this.doorKits < KIT_CAP || this.sentryKits < KIT_CAP)
       ) {
@@ -5379,6 +5383,22 @@ export class Game {
       }
       if (assigned) continue;
 
+      for (const m of fortMarks) {
+        const key = `${m.x},${m.y}`;
+        if (claimedTargets.has(key)) continue;
+        if (!this.grid.isReachableSolid(m.x, m.y)) continue;
+        const path = this.grid.findPathAdjacent(w.x, w.y, m.x, m.y);
+        if (!path) continue;
+        w.job = JobType.Fortify;
+        w.jobTarget = m;
+        w.setPath(path);
+        w.workTimer = 0;
+        claimedTargets.add(key);
+        assigned = true;
+        break;
+      }
+      if (assigned) continue;
+
       // Auto-claim unmarked dirt next to owned land (DK2 imps claim without a tag)
       if (!assigned) {
         let best: Vec2 | null = null;
@@ -5412,22 +5432,6 @@ export class Game {
             this.mentioneOnce('autoClaim', MENTOR_LINES.autoClaim);
           }
         }
-      }
-      if (assigned) continue;
-
-      for (const m of fortMarks) {
-        const key = `${m.x},${m.y}`;
-        if (claimedTargets.has(key)) continue;
-        if (!this.grid.isReachableSolid(m.x, m.y)) continue;
-        const path = this.grid.findPathAdjacent(w.x, w.y, m.x, m.y);
-        if (!path) continue;
-        w.job = JobType.Fortify;
-        w.jobTarget = m;
-        w.setPath(path);
-        w.workTimer = 0;
-        claimedTargets.add(key);
-        assigned = true;
-        break;
       }
       if (!assigned && w.goldCarried > 0 && this.vaultRoom() > 0 && digMarks.length === 0) {
         const treasury = this.grid.tiles.find((t) => t.room === RoomType.Treasury);

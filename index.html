@@ -6,9 +6,9 @@
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="mobile-web-app-capable" content="yes" />
     <title>Underkeep</title>
-    <meta name="underkeep-build" content="pass7.1" />
-    <script type="module" crossorigin src="/underkeep/assets/index-BGYGzbeo.js"></script>
-    <link rel="stylesheet" crossorigin href="/underkeep/assets/index-BBHsW2x2.css">
+    <meta name="underkeep-build" content="pass7.2" />
+    <script type="module" crossorigin src="/underkeep/assets/index-ZiyZaQqU.js"></script>
+    <link rel="stylesheet" crossorigin href="/underkeep/assets/index-Dtxd_2zm.css">
   </head>
   <body class="booting">
     <div id="boot-splash" aria-live="polite">
@@ -26,6 +26,7 @@
           <div class="stat" id="stat-mana"><span class="label">Mana</span><span class="value" id="mana-value">0</span><div class="bar"><div id="mana-bar"></div></div></div>
           <div class="stat" id="stat-workers"><span class="label">Scrabblers</span><span class="value" id="workers-value">0</span></div>
           <div class="stat" id="stat-creatures"><span class="label">Minions</span><span class="value" id="creatures-value">0</span></div>
+          <div class="stat" id="stat-objective"><span class="label">Mission</span><span class="value" id="objective-value">—</span></div>
           <button type="button" id="btn-new-game" class="hud-new-game" title="Clear save and start a new dungeon">New Game</button>
         </div>
 
@@ -35,7 +36,7 @@
           <button class="tool" data-tool="dig" title="Mark Dig (2)">⛏ Dig</button>
           <button class="tool" data-tool="claim" title="Mark Claim (3)">⚑ Claim</button>
           <button class="tool" data-tool="fortify" title="Fortify (4)">🧱 Fortify</button>
-          <button class="spell" data-spell="createWorker" title="Create Scrabbler (Q)">✨ Worker</button>
+          <button class="spell" data-spell="createWorker" id="btn-create-worker" title="Create Scrabbler (Q) — cost scales">✨ Worker</button>
           <button type="button" id="btn-build-desktop" class="sheet-toggle" title="Build rooms" aria-expanded="false">🏗 Build</button>
           <button type="button" id="btn-spells-desktop" class="sheet-toggle" title="Spells" aria-expanded="false">🪄 Spells</button>
         </div>
@@ -60,7 +61,8 @@
             <button class="tool room-tool" data-tool="library" title="Library — 250 gold">📚 Library<span class="cost">250g</span></button>
             <button class="tool room-tool" data-tool="portal" title="Portal — 300 gold">🌀 Portal<span class="cost">300g</span></button>
             <button class="tool room-tool" data-tool="guard" title="Guard Room — 175 gold">🛡 Guard<span class="cost">175g</span></button>
-            <button class="tool room-tool" data-tool="door" title="Wooden Door — 75 gold (corridor mouths)">🚪 Door<span class="cost">75g</span></button>
+            <button class="tool room-tool" data-tool="workshop" title="Workshop — 200 gold (craft door/trap kits)">⚒ Workshop<span class="cost">200g</span></button>
+            <button class="tool room-tool" data-tool="door" title="Wooden Door — 75 gold (or Workshop kit)">🚪 Door<span class="cost">75g</span></button>
             <button class="tool room-tool" data-tool="sentry" title="Sentry Trap — 150 gold">🏹 Sentry<span class="cost">150g</span></button>
             <button class="tool room-tool" data-tool="rally" title="Rally Flag — 40 gold (call to arms)">🚩 Rally<span class="cost">40g</span></button>
             <button class="tool room-tool" data-tool="bridgeWood" title="Wooden Bridge — 60 gold (over lava/water)">🌉 Wood Bridge<span class="cost">60g</span></button>
@@ -78,6 +80,8 @@
           </div>
         </div>
 
+        <canvas id="minimap" width="148" height="148" title="Minimap — explored / claimed / Heart" aria-label="Dungeon minimap"></canvas>
+        <div id="kits-hud" aria-live="polite"><span id="kits-label">Kits</span> <span id="kits-value">D0 · S0</span></div>
         <div id="pan-zone" title="Drag to pan camera" aria-label="Pan camera">✥</div>
         <div id="mentor">
           <span id="mentor-text">The earth awaits your cruelty, Keeper.</span>

@@ -23,6 +23,7 @@ export enum RoomType {
   Library = 5,
   Portal = 6,
   Guard = 7,
+  Workshop = 8,
 }
 
 /** Wooden door on a claimed corridor tile. */
@@ -71,6 +72,7 @@ export enum JobType {
   Wander = 'wander',
   Guard = 'guard',
   AttackMove = 'attack',
+  Craft = 'craft',
 }
 
 export interface Tile {
@@ -107,6 +109,7 @@ export const ROOM_COST: Record<RoomType, number> = {
   [RoomType.Library]: 250,
   [RoomType.Portal]: 300,
   [RoomType.Guard]: 175,
+  [RoomType.Workshop]: 200,
 };
 
 export const DOOR_COST = 75;
@@ -117,6 +120,13 @@ export const BRIDGE_STONE_COST = 120;
 export const POSSESS_COST = 35;
 /** Payday interval (seconds). */
 export const PAYDAY_INTERVAL = 48;
+/** Survive this many hero waves to win (or hit gold threshold). */
+export const WIN_WAVES = 3;
+/** Treasury gold threshold alternate win. */
+export const GOLD_WIN_THRESHOLD = 2500;
+/** Max manufactured kits stored from Workshop. */
+export const KIT_CAP = 5;
+
 
 export const ROOM_NAMES: Record<RoomType, string> = {
   [RoomType.None]: 'None',
@@ -127,6 +137,7 @@ export const ROOM_NAMES: Record<RoomType, string> = {
   [RoomType.Library]: 'Library',
   [RoomType.Portal]: 'Portal',
   [RoomType.Guard]: 'Guard Room',
+  [RoomType.Workshop]: 'Workshop',
 };
 
 export const CREATURE_STATS: Record<
@@ -158,7 +169,8 @@ export type ToolMode =
   | 'sentry'
   | 'rally'
   | 'bridgeWood'
-  | 'bridgeStone';
+  | 'bridgeStone'
+  | 'workshop';
 
 export type SpellId = 'createWorker' | 'speed' | 'lightning' | 'heal' | 'possess';
 

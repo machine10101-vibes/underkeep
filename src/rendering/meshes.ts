@@ -68,6 +68,7 @@ export function makeClaimedFloorMesh(room: RoomType): THREE.Group {
     [RoomType.Library]: 0x5070c8,
     [RoomType.Portal]: 0xa050d0,
     [RoomType.Guard]: 0x708090,
+    [RoomType.Workshop]: 0xa07840,
   };
   const slabColor = roomTint[room] ?? 0xb8a888;
   const slabEmissive =
@@ -85,7 +86,9 @@ export function makeClaimedFloorMesh(room: RoomType): THREE.Group {
                 ? 0x101848
                 : room === RoomType.Guard
                   ? 0x202830
-                  : 0x301048;
+                  : room === RoomType.Workshop
+                    ? 0x402810
+                    : 0x301048;
 
   const mortar = new THREE.MeshStandardMaterial({
     color: 0x2a2218,
@@ -1008,6 +1011,15 @@ export function floorMaterial(kind: TileKind, room: RoomType): THREE.MeshStandar
         bump: 0.1,
         color: 0x8090a0,
       });
+    case RoomType.Workshop:
+      return texturedMat('floor-training', trainingFloorTex(), {
+        metalness: 0.35,
+        roughness: 0.55,
+        emissive: 0x301808,
+        emissiveIntensity: 0.18,
+        bump: 0.12,
+        color: 0xb88850,
+      });
     default:
       return texturedMat('floor-claimed-v2', claimedStoneTex(), {
         color: 0xb8a890,
@@ -1034,6 +1046,7 @@ export function makeRoomDecal(room: RoomType): THREE.Mesh | null {
     [RoomType.Library]: { kind: 'runes', color: [90, 120, 210], emissive: 0x4060c0, ei: 0.4, size: 1.45 },
     [RoomType.Portal]: { kind: 'swirl', color: [160, 80, 220], emissive: 0x8030c0, ei: 0.55, size: 1.5 },
     [RoomType.Guard]: { kind: 'worn', color: [100, 120, 140], emissive: 0x406080, ei: 0.22, size: 1.4 },
+    [RoomType.Workshop]: { kind: 'worn', color: [170, 120, 60], emissive: 0x804010, ei: 0.28, size: 1.4 },
   };
   const s = specs[room];
   if (!s) return null;
@@ -1290,6 +1303,55 @@ export function makeRoomProps(room: RoomType): THREE.Group | null {
     const rack = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.08, 0.2), wood);
     rack.position.set(-0.35, 0.35, 0.25);
     g.add(rack);
+  } else if (room === RoomType.Workshop) {
+    const wood = new THREE.MeshStandardMaterial({ color: 0x6a4830, roughness: 0.75 });
+    const iron = new THREE.MeshStandardMaterial({
+      color: 0x606870,
+      metalness: 0.85,
+      roughness: 0.3,
+      emissive: 0x401808,
+      emissiveIntensity: 0.2,
+    });
+    const glow = new THREE.MeshStandardMaterial({
+      color: 0xff6020,
+      emissive: 0xff4010,
+      emissiveIntensity: 0.9,
+      metalness: 0.4,
+      roughness: 0.4,
+    });
+    // Workbench
+    const bench = new THREE.Mesh(new THREE.BoxGeometry(1.1, 0.18, 0.55), wood);
+    bench.position.set(-0.15, 0.55, 0.1);
+    bench.castShadow = true;
+    g.add(bench);
+    const leg1 = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.5, 0.1), wood);
+    leg1.position.set(-0.55, 0.28, 0.25);
+    g.add(leg1);
+    const leg2 = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.5, 0.1), wood);
+    leg2.position.set(0.25, 0.28, -0.05);
+    g.add(leg2);
+    // Anvil
+    const anvil = new THREE.Mesh(new THREE.BoxGeometry(0.45, 0.22, 0.28), iron);
+    anvil.position.set(0.45, 0.45, -0.25);
+    anvil.castShadow = true;
+    g.add(anvil);
+    const horn = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.1, 0.14), iron);
+    horn.position.set(0.68, 0.5, -0.25);
+    g.add(horn);
+    // Ember forge pot
+    const pot = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.22, 0.28, 8), iron);
+    pot.position.set(-0.45, 0.35, -0.35);
+    g.add(pot);
+    const ember = new THREE.Mesh(new THREE.SphereGeometry(0.1, 8, 6), glow);
+    ember.position.set(-0.45, 0.48, -0.35);
+    g.add(ember);
+    // Door kit stack visual
+    const kit = new THREE.Mesh(
+      new THREE.BoxGeometry(0.28, 0.35, 0.08),
+      new THREE.MeshStandardMaterial({ color: 0x8a6040, roughness: 0.7 })
+    );
+    kit.position.set(0.1, 0.72, 0.15);
+    g.add(kit);
   } else {
     return null;
   }

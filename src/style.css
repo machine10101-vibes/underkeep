@@ -218,7 +218,7 @@ html, body, #app {
   margin: env(safe-area-inset-top, 0) env(safe-area-inset-right, 0) env(safe-area-inset-bottom, 0) env(safe-area-inset-left, 0);
 }
 #overlay-panel h1 { font-size: 36px; color: #f0a040; margin-bottom: 12px; text-shadow: 0 0 20px rgba(240,100,20,0.6); }
-#overlay-panel p { color: #c8b090; margin-bottom: 24px; line-height: 1.5; }
+#overlay-panel p { color: #c8b090; margin-bottom: 24px; line-height: 1.5; white-space: pre-line; }
 #overlay-btn {
   background: linear-gradient(180deg, #6a4020, #3a2010); border: 1px solid #c08040;
   color: #ffe0a0; padding: 12px 28px; font-size: 16px; border-radius: 8px; cursor: pointer;
@@ -458,3 +458,48 @@ html, body, #app {
   box-shadow: 0 0 0 1px rgba(0,0,0,0.35), inset 0 0 12px rgba(255,200,80,0.15);
 }
 #select-marquee.hidden { display: none !important; }
+
+
+/* Pass 7.2 — minimap + kits + mission */
+#minimap {
+  position: absolute;
+  left: max(10px, env(safe-area-inset-left, 0px));
+  bottom: calc(118px + env(safe-area-inset-bottom, 0px));
+  width: 132px;
+  height: 132px;
+  border: 1px solid #6a4828;
+  border-radius: 8px;
+  background: rgba(8, 6, 4, 0.88);
+  box-shadow: 0 4px 18px rgba(0,0,0,0.55), inset 0 0 12px rgba(0,0,0,0.4);
+  pointer-events: none;
+  z-index: 6;
+  image-rendering: pixelated;
+}
+#kits-hud {
+  position: absolute;
+  left: max(10px, env(safe-area-inset-left, 0px));
+  bottom: calc(98px + env(safe-area-inset-bottom, 0px));
+  font-size: 11px;
+  color: #c8a870;
+  background: rgba(12, 8, 6, 0.85);
+  border: 1px solid #5a3a1a;
+  border-radius: 6px;
+  padding: 3px 8px;
+  pointer-events: none;
+  z-index: 6;
+  letter-spacing: 0.04em;
+}
+#kits-hud #kits-value { color: #f0c060; font-weight: 700; margin-left: 4px; }
+#stat-objective .value { font-size: 13px; max-width: 160px; text-align: center; line-height: 1.2; }
+@media (max-width: 700px) {
+  #minimap {
+    width: 96px;
+    height: 96px;
+    bottom: calc(148px + env(safe-area-inset-bottom, 0px));
+  }
+  #kits-hud {
+    bottom: calc(130px + env(safe-area-inset-bottom, 0px));
+    font-size: 10px;
+  }
+  #stat-objective { display: none; }
+}

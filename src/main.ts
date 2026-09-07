@@ -114,7 +114,17 @@ if (
     params.get('shot') === '7.1-possess' ||
     params.get('shot') === '71-possess' ||
     params.get('shot') === '7.1-payday' ||
-    params.get('shot') === '71-payday')
+    params.get('shot') === '71-payday' ||
+    params.get('shot') === '7.2' ||
+    params.get('shot') === '72' ||
+    params.get('shot') === '7.2-minimap' ||
+    params.get('shot') === '72-minimap' ||
+    params.get('shot') === '7.2-mission' ||
+    params.get('shot') === '72-mission' ||
+    params.get('shot') === '7.2-workshop' ||
+    params.get('shot') === '72-workshop' ||
+    params.get('shot') === '7.2-worker' ||
+    params.get('shot') === '72-worker')
 ) {
   // Auto-arrange evidence shots
   setTimeout(() => {
@@ -134,10 +144,16 @@ if (
       preparePass64bShot?: () => void;
       preparePass65Shot?: (focus?: 'fow' | 'fortify' | 'both') => void;
       preparePass71Shot?: (focus?: 'lava' | 'bridge' | 'possess' | 'payday' | 'both') => void;
+      preparePass72Shot?: (focus?: 'minimap' | 'mission' | 'workshop' | 'worker' | 'both') => void;
     };
     g.hud.hideOverlay();
     const shot = params.get('shot');
-    if (shot === '7.1-lava' || shot === '71-lava') g.preparePass71Shot?.('lava');
+    if (shot === '7.2-minimap' || shot === '72-minimap') g.preparePass72Shot?.('minimap');
+    else if (shot === '7.2-mission' || shot === '72-mission') g.preparePass72Shot?.('mission');
+    else if (shot === '7.2-workshop' || shot === '72-workshop') g.preparePass72Shot?.('workshop');
+    else if (shot === '7.2-worker' || shot === '72-worker') g.preparePass72Shot?.('worker');
+    else if (shot === '7.2' || shot === '72') g.preparePass72Shot?.('both');
+    else if (shot === '7.1-lava' || shot === '71-lava') g.preparePass71Shot?.('lava');
     else if (shot === '7.1-bridge' || shot === '71-bridge') g.preparePass71Shot?.('bridge');
     else if (shot === '7.1-possess' || shot === '71-possess') g.preparePass71Shot?.('possess');
     else if (shot === '7.1-payday' || shot === '71-payday') g.preparePass71Shot?.('payday');

@@ -10,7 +10,9 @@ import {
   CreatureKind,
   DOOR_COST,
   DoorState,
+  GOLD_WIN_THRESHOLD,
   JobType,
+  KIT_CAP,
   MarkType,
   PAYDAY_INTERVAL,
   POSSESS_COST,
@@ -24,6 +26,7 @@ import {
   TrapType,
   Vec2,
   TileKind,
+  WIN_WAVES,
   isFlyer,
   isHeatResistant,
 } from './types';
@@ -66,6 +69,13 @@ export class Game {
   private possessArmed = false;
   private lavaDmgAcc = 0;
   private paydayToastCooldown = 0;
+  /** Pass 7.2 mission progress */
+  private wavesCleared = 0;
+  private doorKits = 0;
+  private sentryKits = 0;
+  private goldEver = 600;
+  private minimapAcc = 0;
+  private nextKitIsDoor = true;
   private boxSelecting = false;
   private boxStartClient: { x: number; y: number } | null = null;
   private boxMoved = false;
@@ -253,6 +263,12 @@ export class Game {
     this.attracted = { skitterwing: false, rattlekin: false, emberling: false, gravemage: false };
     this.heroWaveSpawned = false;
     this.heroWaveTimer = 90;
+    this.wavesCleared = 0;
+    this.doorKits = 0;
+    this.sentryKits = 0;
+    this.goldEver = 600;
+    this.minimapAcc = 0;
+    this.nextKitIsDoor = true;
     this.gameOver = false;
     this.won = false;
     this.mentored = new Set();
@@ -339,10 +355,11 @@ export class Game {
     this.hud.say(MENTOR_LINES.start);
     if (showIntro) {
       this.hud.showOverlay(
-        'Underkeep',
-        'You are the Keeper of the Underkeep. Dig earth, claim territory, raise rooms, and crush the heroes who dare enter. The Dungeon Heart must not fall.',
+        'Mission Briefing',
+        `You are the Keeper of the Underkeep. Dig, claim, raise rooms, and crush heroes — the Heart must not fall. Objective: Survive ${WIN_WAVES} hero waves — OR gather ${GOLD_WIN_THRESHOLD} gold in the Treasury. Workshop kits arm doors & traps.`,
         'Begin'
       );
+      this.hud.say(MENTOR_LINES.missionBrief.replace('%w', String(WIN_WAVES)).replace('%g', String(GOLD_WIN_THRESHOLD)));
     }
   }
 
@@ -414,6 +431,10 @@ export class Game {
       mentored: [...this.mentored],
       gameOver: this.gameOver,
       won: this.won,
+      wavesCleared: this.wavesCleared,
+      doorKits: this.doorKits,
+      sentryKits: this.sentryKits,
+      goldEver: this.goldEver,
       cam: {
         tx: this.camTarget.x,
         tz: this.camTarget.z,
@@ -465,6 +486,26 @@ export class Game {
     this.mentored = new Set(data.mentored ?? []);
     this.gameOver = !!data.gameOver;
     this.won = !!data.won;
+    this.wavesCleared = data.wavesCleared ?? 0;
+    this.doorKits = data.doorKits ?? 0;
+    this.sentryKits = data.sentryKits ?? 0;
+    this.goldEver = data.goldEver ?? Math.max(data.gold, 600);
+    // Mid-wave-clear saves from pre-7.2: count a finished first wave
+    if (
+      this.heroWaveSpawned &&
+      this.wavesCleared === 0 &&
+      !this.won &&
+      !this.gameOver &&
+      !(data.creatures ?? []).some((c) => c.isHero)
+    ) {
+      this.wavesCleared = 1;
+      if (this.wavesCleared < WIN_WAVES) {
+        this.heroWaveSpawned = false;
+        this.heroWaveTimer = 55;
+        this.heroWarn30 = false;
+        this.heroWarn10 = false;
+      }
+    }
 
     for (const c of this.creatures) {
       this.renderer.removeEntityMesh(c.mesh);
@@ -608,6 +649,7 @@ export class Game {
         '9': 'library',
         '0': 'portal',
         g: 'guard',
+        u: 'workshop',
         d: 'door',
         f: 'sentry',
         y: 'rally',
@@ -1081,8 +1123,11 @@ export class Game {
     const tile = this.grid.get(tp.x, tp.y);
     if (tile) {
       let room =
-        tile.room !== RoomType.None ? ` · ${['', 'Treasury', 'Lair', 'Hatchery', 'Training', 'Library', 'Portal', 'Guard'][tile.room]}` : '';
+        tile.room !== RoomType.None
+          ? ` · ${['', 'Treasury', 'Lair', 'Hatchery', 'Training', 'Library', 'Portal', 'Guard', 'Workshop'][tile.room]}`
+          : '';
       if (tile.room === RoomType.Hatchery) room += ` · food ${Math.floor(this.hatcheryFood)}`;
+      if (tile.room === RoomType.Workshop) room += ` · kits D${this.doorKits}/S${this.sentryKits}`;
       if (tile.door === DoorState.Closed) room += ' · Door (closed)';
       if (tile.door === DoorState.Open) room += ' · Door (open)';
       if (tile.trap === TrapType.Sentry) room += ' · Sentry trap';
@@ -1470,8 +1515,7 @@ export class Game {
     } else if (this.tool === 'door') {
       if (this.grid.canPlaceDoor(x, y)) {
         if (tile.door === DoorState.None) {
-          if (this.gold < DOOR_COST) return;
-          this.gold -= DOOR_COST;
+          if (!this.spendDoorOrSentry('door')) return;
           tile.door = DoorState.Closed;
           this.requestStructuralRebuild();
           this.mentioneOnce('doorBuilt', MENTOR_LINES.doorBuilt);
@@ -1490,8 +1534,7 @@ export class Game {
       }
     } else if (this.tool === 'sentry') {
       if (tile.kind === TileKind.Claimed && tile.trap === TrapType.None) {
-        if (this.gold < SENTRY_COST) return;
-        this.gold -= SENTRY_COST;
+        if (!this.spendDoorOrSentry('sentry')) return;
         tile.trap = TrapType.Sentry;
         this.requestStructuralRebuild();
         this.mentioneOnce('sentryBuilt', MENTOR_LINES.sentryBuilt);
@@ -1538,6 +1581,7 @@ export class Game {
         library: RoomType.Library,
         portal: RoomType.Portal,
         guard: RoomType.Guard,
+        workshop: RoomType.Workshop,
       };
       const room = roomMap[this.tool];
       if (room && tile.kind === TileKind.Claimed && tile.room === RoomType.None) {
@@ -1560,6 +1604,9 @@ export class Game {
           }
           if (room === RoomType.Guard) {
             this.mentioneOnce('guardBuilt', MENTOR_LINES.guardBuilt);
+          }
+          if (room === RoomType.Workshop) {
+            this.mentioneOnce('workshopBuilt', MENTOR_LINES.workshopBuilt);
           }
           this.saveNow();
         }
@@ -1693,6 +1740,70 @@ export class Game {
     }
   }
 
+
+  /** Prefer Workshop kits; else gold (discounted if Workshop exists). */
+  private spendDoorOrSentry(kind: 'door' | 'sentry'): boolean {
+    if (kind === 'door' && this.doorKits > 0) {
+      this.doorKits--;
+      this.hud.sayNow(`Door kit spent (${this.doorKits} left).`);
+      return true;
+    }
+    if (kind === 'sentry' && this.sentryKits > 0) {
+      this.sentryKits--;
+      this.hud.sayNow(`Sentry kit spent (${this.sentryKits} left).`);
+      return true;
+    }
+    const hasShop = this.grid.countRoom(RoomType.Workshop) > 0;
+    const base = kind === 'door' ? DOOR_COST : SENTRY_COST;
+    const cost = hasShop ? Math.floor(base * 0.7) : base;
+    if (this.gold < cost) {
+      this.hud.sayNow(
+        hasShop
+          ? `Need ${cost}g (Workshop discount) or a ${kind} kit.`
+          : `Need ${cost} gold — or craft kits in a Workshop.`
+      );
+      return false;
+    }
+    this.gold -= cost;
+    if (hasShop) this.hud.say(`Workshop discount — ${kind} for ${cost}g.`);
+    return true;
+  }
+
+  private syncMissionHud(): void {
+    this.hud.setObjective(`W${this.wavesCleared}/${WIN_WAVES} · ${Math.floor(this.gold)}/${GOLD_WIN_THRESHOLD}g`);
+    this.hud.setKits(this.doorKits, this.sentryKits);
+    this.hud.setWorkerCost(this.workerCost());
+  }
+
+  private updateMinimap(): void {
+    this.hud.drawMinimap({
+      width: this.grid.width,
+      height: this.grid.height,
+      heartX: this.grid.heartPos.x,
+      heartY: this.grid.heartPos.y,
+      kindAt: (x, y) => this.grid.get(x, y)?.kind ?? 0,
+      exploredAt: (x, y) => !!this.grid.get(x, y)?.explored,
+      roomAt: (x, y) => this.grid.get(x, y)?.room ?? 0,
+    });
+  }
+
+  private checkMissionWin(): void {
+    if (this.won || this.gameOver) return;
+    if (this.gold >= GOLD_WIN_THRESHOLD) {
+      this.won = true;
+      this.gameOver = true;
+      this.hud.sayNow(MENTOR_LINES.winGold);
+      this.hud.showOverlay('Victory — Gold', MENTOR_LINES.winGold + ' The Underkeep gleams.', 'Reign Again');
+      return;
+    }
+    if (this.wavesCleared >= WIN_WAVES) {
+      this.won = true;
+      this.gameOver = true;
+      this.hud.sayNow(MENTOR_LINES.winWaves);
+      this.hud.showOverlay('Victory', MENTOR_LINES.winWaves + ' The dark endures.', 'Reign Again');
+    }
+  }
+
   private workerCost(): number {
     return WORKER_BASE_COST + this.workerCostScale * 50;
   }
@@ -1701,7 +1812,10 @@ export class Game {
     if (this.gameOver) return;
     if (spell === 'createWorker') {
       const cost = this.workerCost();
-      if (this.gold < cost) return;
+      if (this.gold < cost) {
+        this.hud.sayNow(`Need ${cost} gold to forge a Scrabbler.`);
+        return;
+      }
       // spawn near heart on claimed
       const hx = this.grid.heartPos.x;
       const hy = this.grid.heartPos.y;
@@ -1721,8 +1835,19 @@ export class Game {
       }
       this.gold -= cost;
       this.workerCostScale++;
-      this.spawnCreature(CreatureKind.Scrabbler, sx, sy);
+      const c = this.spawnCreature(CreatureKind.Scrabbler, sx, sy);
+      c.pulseTint('heal', 0.9);
+      c.speedBuff = Math.max(c.speedBuff, 2.5);
+      const w = this.grid.tileToWorld(sx, sy);
+      this.renderer.spawnFx(new THREE.Vector3(w.x, 0.6, w.z), 0x88ff60, 0.85);
+      this.renderer.spawnFx(new THREE.Vector3(w.x, 1.2, w.z), 0xffe080, 0.7);
+      this.renderer.spawnCareSparks(w.x, w.z, 'heal', true);
+      const next = this.workerCost();
+      this.hud.sayNow(
+        MENTOR_LINES.workerSpawn.replace('%g', String(cost)).replace('%n', String(next))
+      );
       this.hud.say(MENTOR_LINES.worker);
+      this.hud.setWorkerCost(next);
       return;
     }
     if (spell === 'speed') {
@@ -2739,6 +2864,162 @@ export class Game {
     this.renderer.camera.lookAt(this.camTarget.x, 0, this.camTarget.z);
   }
 
+
+  /** QA/screenshot: Pass 7.2 minimap, mission, Workshop craft, Scrabbler polish. */
+  preparePass72Shot(focus: 'minimap' | 'mission' | 'workshop' | 'worker' | 'both' = 'both'): void {
+    this.hud.hideOverlay();
+    const hx = this.grid.heartPos.x;
+    const hy = this.grid.heartPos.y;
+    const claim = (x: number, y: number, room = RoomType.None) => {
+      const t = this.grid.get(x, y);
+      if (!t || t.kind === TileKind.Heart) return;
+      t.kind = TileKind.Claimed;
+      t.claimedProgress = 1;
+      t.room = room;
+      t.mark = MarkType.None;
+      t.digProgress = 0;
+      t.door = DoorState.None;
+      t.trap = TrapType.None;
+      t.rally = false;
+      t.fortified = false;
+      t.explored = true;
+    };
+
+    for (let y = hy - 3; y <= hy + 4; y++) {
+      for (let x = hx - 3; x <= hx + 5; x++) claim(x, y);
+    }
+    // Non-regression: lava/bridge strip + FoW contrast
+    for (let x = hx - 1; x <= hx + 3; x++) {
+      const lava = this.grid.get(x, hy + 5);
+      if (lava && lava.kind !== TileKind.Heart) {
+        lava.kind = TileKind.Lava;
+        lava.room = RoomType.None;
+        lava.explored = true;
+      }
+    }
+    const wood = this.grid.get(hx + 1, hy + 5)!;
+    wood.kind = TileKind.BridgeWood;
+    wood.explored = true;
+    const stone = this.grid.get(hx + 2, hy + 5)!;
+    stone.kind = TileKind.BridgeStone;
+    stone.explored = true;
+
+    claim(hx + 2, hy, RoomType.Treasury);
+    claim(hx + 3, hy, RoomType.Treasury);
+    claim(hx + 2, hy + 1, RoomType.Lair);
+    claim(hx + 3, hy + 1, RoomType.Hatchery);
+    claim(hx + 4, hy + 1, RoomType.Training);
+    claim(hx + 4, hy, RoomType.Library);
+    claim(hx + 5, hy, RoomType.Portal);
+    claim(hx - 1, hy + 1, RoomType.Guard);
+    claim(hx + 2, hy + 2, RoomType.Workshop);
+    claim(hx + 3, hy + 2, RoomType.Workshop);
+    claim(hx + 4, hy + 2, RoomType.Workshop);
+
+    // Door + sentry non-regression
+    claim(hx, hy - 1);
+    this.grid.get(hx, hy - 1)!.door = DoorState.Closed;
+    claim(hx, hy - 2);
+    this.grid.get(hx, hy - 2)!.trap = TrapType.Sentry;
+
+    // Explored tongue + fog beyond for minimap contrast
+    for (let x = hx + 6; x <= hx + 9; x++) {
+      const t = this.grid.get(x, hy);
+      if (t && t.kind !== TileKind.Heart) {
+        t.kind = TileKind.Dirt;
+        t.explored = true;
+        t.room = RoomType.None;
+      }
+    }
+    for (let x = hx + 10; x <= hx + 14; x++) {
+      for (let y = hy - 1; y <= hy + 1; y++) {
+        const t = this.grid.get(x, y);
+        if (t) t.explored = false;
+      }
+    }
+
+    this.gold = focus === 'mission' ? 2480 : 900;
+    this.goldEver = this.gold;
+    this.doorKits = 2;
+    this.sentryKits = 1;
+    this.wavesCleared = focus === 'mission' ? 2 : 1;
+    this.heroWaveSpawned = false;
+    this.heroWaveTimer = 40;
+    this.mana = 80;
+    this.hatcheryFood = 6;
+    this.workerCostScale = 1;
+
+    const workers = this.creatures.filter((c) => c.isWorker && c.alive);
+    while (workers.length < 4) {
+      workers.push(this.spawnCreature(CreatureKind.Scrabbler, hx - 1, hy));
+    }
+    // Crafting Scrabblers at Workshop
+    for (let i = 0; i < Math.min(2, workers.length); i++) {
+      const w = workers[i];
+      const wx = hx + 2 + i;
+      const wy = hy + 2;
+      const world = this.grid.tileToWorld(wx, wy);
+      w.x = wx;
+      w.y = wy;
+      w.wx = world.x;
+      w.wz = world.z;
+      w.job = JobType.Craft;
+      w.jobTarget = { x: wx, y: wy };
+      w.workTimer = 3 + i;
+      w.setPath(null);
+    }
+
+    if (!this.creatures.some((c) => c.kind === CreatureKind.Rattlekin && c.alive)) {
+      this.spawnCreature(CreatureKind.Rattlekin, hx - 1, hy + 1);
+    }
+    if (!this.creatures.some((c) => c.kind === CreatureKind.Emberling && c.alive)) {
+      const ember = this.spawnCreature(CreatureKind.Emberling, hx + 1, hy + 5);
+      ember.job = JobType.Idle;
+    }
+
+    this.grid.revealFromTerritory();
+    this.requestStructuralRebuild();
+    this.rebuild();
+    this.updateMinimap();
+    this.syncMissionHud();
+
+    if (focus === 'mission') {
+      this.hud.showOverlay(
+        'Mission Briefing',
+        `Survive ${WIN_WAVES} hero waves — OR gather ${GOLD_WIN_THRESHOLD} gold. Heart must stand.`,
+        'Begin'
+      );
+      this.hud.sayNow(MENTOR_LINES.missionBrief.replace('%w', String(WIN_WAVES)).replace('%g', String(GOLD_WIN_THRESHOLD)));
+      this.hud.setTooltip(`Mission W${this.wavesCleared}/${WIN_WAVES} · Gold ${this.gold}/${GOLD_WIN_THRESHOLD}`);
+    } else if (focus === 'workshop') {
+      this.hud.sayNow(MENTOR_LINES.workshopBuilt);
+      this.hud.say(MENTOR_LINES.craftBusy);
+      this.hud.setTooltip('Workshop — Scrabblers craft Door/Sentry kits');
+      const focusW = this.grid.tileToWorld(hx + 3, hy + 2);
+      this.camTarget.set(focusW.x, 0, focusW.z);
+      this.renderer.camera.position.set(focusW.x + 2, 16, focusW.z + 11);
+    } else if (focus === 'worker') {
+      const cost = this.workerCost();
+      this.gold = Math.max(this.gold, cost + 50);
+      this.castSpell('createWorker');
+      this.hud.setTooltip(`Create Scrabbler — ${cost}g · cost scales`);
+    } else if (focus === 'minimap') {
+      this.hud.sayNow('Minimap — explored claim glow, Heart marker, fog beyond.');
+      this.hud.setTooltip('Minimap · explored / claimed / Heart');
+      const focusW = this.grid.tileToWorld(hx + 2, hy + 1);
+      this.camTarget.set(focusW.x, 0, focusW.z);
+      this.renderer.camera.position.set(focusW.x + 3, 22, focusW.z + 14);
+    } else {
+      this.hud.sayNow('Pass 7.2 — minimap, mission win, Workshop kits, Scrabbler polish.');
+      this.hud.say(MENTOR_LINES.workshopBuilt);
+      this.hud.setTooltip('Pass 7.2 — minimap · mission · Workshop · Worker');
+      const focusW = this.grid.tileToWorld(hx + 2, hy + 2);
+      this.camTarget.set(focusW.x, 0, focusW.z);
+      this.renderer.camera.position.set(focusW.x + 2, 18, focusW.z + 12);
+    }
+    this.renderer.camera.lookAt(this.camTarget.x, 0, this.camTarget.z);
+  }
+
   preparePass65Shot(focus: 'fow' | 'fortify' | 'both' = 'both'): void {
     this.hud.hideOverlay();
     const hx = this.grid.heartPos.x;
@@ -3143,6 +3424,7 @@ export class Game {
       this.mana = Math.max(0, Math.min(this.maxMana(), this.mana));
       if (!Number.isFinite(this.gold)) this.gold = 0;
       this.gold = Math.max(0, this.gold);
+      if (this.gold > this.goldEver) this.goldEver = this.gold;
 
       if (!this.gameOver) {
         this.time += dt;
@@ -3157,6 +3439,7 @@ export class Game {
         try { this.checkHeart(); } catch (e) { console.warn('[underkeep] heart', e); }
         try { this.payWages(dt); } catch (e) { console.warn('[underkeep] wages', e); }
         try { this.updateHazards(dt); } catch (e) { console.warn('[underkeep] hazards', e); }
+        try { this.checkMissionWin(); } catch (e) { console.warn('[underkeep] mission', e); }
         this.saveAcc += dt;
         if (this.saveAcc >= 4) {
           this.saveAcc = 0;
@@ -3221,6 +3504,12 @@ export class Game {
       this.hud.setSpellAffordable('lightning', this.mana >= LIGHTNING_COST);
       this.hud.setSpellAffordable('heal', this.healUnlocked && this.mana >= 30);
       this.hud.setSpellAffordable('possess', this.possessed ? true : this.mana >= POSSESS_COST);
+      this.syncMissionHud();
+      this.minimapAcc += dt;
+      if (this.minimapAcc >= 0.35) {
+        this.minimapAcc = 0;
+        try { this.updateMinimap(); } catch { /* ignore */ }
+      }
 
       // cleanup dead meshes periodically
       this.creatures = this.creatures.filter((c) => {
@@ -3596,6 +3885,29 @@ export class Game {
           w.jobTarget = { x: tx, y: ty };
           w.setPath(path);
           assigned = true;
+        }
+      }
+      if (assigned) continue;
+
+      // Workshop craft — idle Scrabblers manufacture door/sentry kits when under cap
+      if (
+        this.grid.countRoom(RoomType.Workshop) > 0 &&
+        (this.doorKits < KIT_CAP || this.sentryKits < KIT_CAP)
+      ) {
+        const shop = this.findRoomTile(RoomType.Workshop);
+        if (shop) {
+          const crafters = workers.filter((c) => c.job === JobType.Craft).length;
+          if (crafters < Math.max(1, Math.min(3, this.grid.countRoom(RoomType.Workshop)))) {
+            const path = this.grid.findPath(w.x, w.y, shop.x, shop.y);
+            if (path) {
+              w.job = JobType.Craft;
+              w.jobTarget = shop;
+              w.setPath(path);
+              w.workTimer = 0;
+              assigned = true;
+              this.mentioneOnce('craftBusy', MENTOR_LINES.craftBusy);
+            }
+          }
         }
       }
       if (assigned) continue;
@@ -4398,6 +4710,54 @@ export class Game {
         c.jobTarget = null;
         // Keep bed reservation for attraction/capacity; release only if leaving dungeon
       }
+    } else if (c.job === JobType.Craft) {
+      if (!c.jobTarget) {
+        c.job = JobType.Idle;
+        return;
+      }
+      const shopTile = this.grid.get(c.jobTarget.x, c.jobTarget.y);
+      if (!shopTile || shopTile.room !== RoomType.Workshop) {
+        c.job = JobType.Idle;
+        c.jobTarget = null;
+        return;
+      }
+      if (!arrived) {
+        if (c.path.length === 0) {
+          const path = this.grid.findPath(c.x, c.y, c.jobTarget.x, c.jobTarget.y);
+          if (path) c.setPath(path);
+        }
+        return;
+      }
+      c.setPath(null);
+      c.workTimer += dt * c.workEfficiency();
+      if (Math.random() < dt * 0.5) {
+        this.renderer.spawnFx(new THREE.Vector3(c.wx, 0.7, c.wz), 0xffaa44, 0.3);
+      }
+      // ~6s per kit at full efficiency
+      if (c.workTimer >= 6) {
+        c.workTimer = 0;
+        let made: 'door' | 'sentry' | null = null;
+        if (this.nextKitIsDoor && this.doorKits < KIT_CAP) {
+          this.doorKits++;
+          made = 'door';
+        } else if (this.sentryKits < KIT_CAP) {
+          this.sentryKits++;
+          made = 'sentry';
+        } else if (this.doorKits < KIT_CAP) {
+          this.doorKits++;
+          made = 'door';
+        }
+        this.nextKitIsDoor = !this.nextKitIsDoor;
+        if (made) {
+          this.hud.sayNow(MENTOR_LINES.craftKit.replace('%k', made === 'door' ? 'Door' : 'Sentry'));
+          this.renderer.spawnFx(new THREE.Vector3(c.wx, 1.1, c.wz), 0xffd070, 0.75);
+        }
+        // Leave craft if both caps full
+        if (this.doorKits >= KIT_CAP && this.sentryKits >= KIT_CAP) {
+          c.job = JobType.Idle;
+          c.jobTarget = null;
+        }
+      }
     } else if (c.job === JobType.Research && arrived) {
       // Gravemage (and library researchers) unlock/improve spells over time
       this.researchProgress = Math.min(100, this.researchProgress + 12 * dt);
@@ -4639,14 +4999,29 @@ export class Game {
 
   private updateHeroWave(dt: number): void {
     if (this.heroWaveSpawned) {
-      // win check
+      // Wave clear → next wave or mission win
       if (!this.won && !this.gameOver) {
         const heroesLeft = this.creatures.some((c) => c.alive && c.isHero);
         if (!heroesLeft && this.time > 2) {
-          this.won = true;
-          this.hud.say(MENTOR_LINES.win);
-          this.hud.showOverlay('Victory', MENTOR_LINES.win + ' The Underkeep stands.', 'Reign Again');
-          this.gameOver = true;
+          this.wavesCleared = Math.min(WIN_WAVES, this.wavesCleared + 1);
+          this.heroWaveSpawned = false;
+          if (this.wavesCleared >= WIN_WAVES) {
+            this.checkMissionWin();
+            return;
+          }
+          // Schedule next wave
+          this.heroWaveTimer = 50 + this.wavesCleared * 8;
+          this.heroWarn30 = false;
+          this.heroWarn10 = false;
+          this.heroEngageAnnounced = false;
+          const next = this.wavesCleared + 1;
+          this.hud.sayNow(
+            MENTOR_LINES.waveCleared
+              .replace('%n', String(this.wavesCleared))
+              .replace('%next', String(next))
+              .replace('%w', String(WIN_WAVES))
+          );
+          this.hud.say(MENTOR_LINES.win); // keep classic toast flavor between waves
         }
       }
       return;
@@ -4662,7 +5037,8 @@ export class Game {
     }
     if (this.heroWaveTimer > 0) return;
     this.heroWaveSpawned = true;
-    this.hud.sayNow(MENTOR_LINES.heroes);
+    const waveNum = this.wavesCleared + 1;
+    this.hud.sayNow(`${MENTOR_LINES.heroes} (Wave ${waveNum}/${WIN_WAVES})`);
     this.hud.say(MENTOR_LINES.heroes);
 
     // Spawn at north edge — carve a clear entry corridor so pathing/fight loop reads
@@ -4702,11 +5078,12 @@ export class Game {
     const k1 = this.spawnCreature(CreatureKind.HeroKnight, sx, sy);
     const k2 = this.spawnCreature(CreatureKind.HeroKnight, sx + 1, sy);
     const a1 = this.spawnCreature(CreatureKind.HeroArcher, sx - 1, sy);
-    // Slightly tougher wave so doors/traps/fighters matter
+    // Slightly tougher wave so doors/traps/fighters matter (scales with wave #)
+    const waveScale = 1.05 + this.wavesCleared * 0.12;
     for (const h of [k1, k2, a1]) {
       h.job = JobType.Fight;
       h.jobTarget = { ...this.grid.heartPos };
-      h.hp = Math.floor(h.maxHp * 1.05);
+      h.hp = Math.floor(h.maxHp * waveScale);
       h.maxHp = h.hp;
       const w = this.grid.tileToWorld(h.x, h.y);
       this.renderer.spawnFx(new THREE.Vector3(w.x, 1.2, w.z), 0xa0c0ff, 0.65);

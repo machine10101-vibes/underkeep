@@ -1,6 +1,6 @@
 import { SpellId, ToolMode } from '../game/types';
 
-const ROOM_TOOLS: ToolMode[] = ['treasury', 'lair', 'hatchery', 'training', 'library', 'portal', 'guard', 'door', 'sentry', 'rally', 'bridgeWood', 'bridgeStone'];
+const ROOM_TOOLS: ToolMode[] = ['treasury', 'lair', 'hatchery', 'training', 'library', 'portal', 'guard', 'workshop', 'door', 'sentry', 'rally', 'bridgeWood', 'bridgeStone'];
 
 export class HUD {
   private goldEl: HTMLElement;
@@ -30,6 +30,11 @@ export class HUD {
   private inspMood: HTMLElement;
   private inspMoodBar: HTMLElement;
   private inspEfficiency: HTMLElement;
+  private minimap: HTMLCanvasElement | null;
+  private minimapCtx: CanvasRenderingContext2D | null;
+  private objectiveEl: HTMLElement | null;
+  private kitsValueEl: HTMLElement | null;
+  private createWorkerBtn: HTMLElement | null;
 
   onToolChange: ((tool: ToolMode) => void) | null = null;
   onSpell: ((spell: SpellId) => void) | null = null;
@@ -63,6 +68,12 @@ export class HUD {
     this.inspMood = document.getElementById('insp-mood')!;
     this.inspMoodBar = document.getElementById('insp-mood-bar')!;
     this.inspEfficiency = document.getElementById('insp-efficiency')!;
+    this.minimap = document.getElementById('minimap') as HTMLCanvasElement | null;
+    this.minimapCtx = this.minimap?.getContext('2d') ?? null;
+    this.objectiveEl = document.getElementById('objective-value');
+    this.kitsValueEl = document.getElementById('kits-value');
+    this.createWorkerBtn = document.getElementById('btn-create-worker')
+      ?? (document.querySelector('.spell[data-spell="createWorker"]') as HTMLElement | null);
     document.getElementById('insp-close')?.addEventListener('click', () => {
       this.hideInspector();
       this.onInspectorClose?.();
@@ -274,6 +285,85 @@ export class HUD {
     this.inspectorEl.classList.add('hidden');
   }
 
+
+  setObjective(text: string): void {
+    if (this.objectiveEl) this.objectiveEl.textContent = text;
+  }
+
+  setKits(doorKits: number, sentryKits: number): void {
+    if (this.kitsValueEl) this.kitsValueEl.textContent = `D${doorKits} · S${sentryKits}`;
+  }
+
+  setWorkerCost(cost: number): void {
+    if (!this.createWorkerBtn) return;
+    const label = this.createWorkerBtn.classList.contains('tool') || true;
+    // Keep emoji; show cost for desktop primary bar
+    if (this.createWorkerBtn.id === 'btn-create-worker' || (this.createWorkerBtn.textContent || '').includes('Worker')) {
+      this.createWorkerBtn.textContent = `✨ Worker ${cost}g`;
+    }
+    this.createWorkerBtn.title = `Create Scrabbler (Q) — ${cost} gold (cost scales)`;
+    void label;
+  }
+
+  /** Draw explored/claimed overview with Heart marker. */
+  drawMinimap(opts: {
+    width: number;
+    height: number;
+    heartX: number;
+    heartY: number;
+    kindAt: (x: number, y: number) => number;
+    exploredAt: (x: number, y: number) => boolean;
+    roomAt: (x: number, y: number) => number;
+  }): void {
+    const canvas = this.minimap;
+    const ctx = this.minimapCtx;
+    if (!canvas || !ctx) return;
+    const W = canvas.width;
+    const H = canvas.height;
+    ctx.fillStyle = '#0a0806';
+    ctx.fillRect(0, 0, W, H);
+    const gw = opts.width;
+    const gh = opts.height;
+    const cell = Math.min(W / gw, H / gh);
+    const ox = (W - gw * cell) / 2;
+    const oy = (H - gh * cell) / 2;
+    for (let y = 0; y < gh; y++) {
+      for (let x = 0; x < gw; x++) {
+        if (!opts.exploredAt(x, y)) continue;
+        const kind = opts.kindAt(x, y);
+        const room = opts.roomAt(x, y);
+        let color = '#3a3028'; // dirt / generic explored
+        // TileKind: Rock=0 Earth=1 Gold=2 Dirt=3 Claimed=4 Heart=5 Wall=6 Lava=7 Water=8 BridgeWood=9 BridgeStone=10
+        if (kind === 0) color = '#1a1820';
+        else if (kind === 1) color = '#4a3828';
+        else if (kind === 2) color = '#c0a020';
+        else if (kind === 3) color = '#5a4838';
+        else if (kind === 4) color = '#7a6848';
+        else if (kind === 5) color = '#e04020';
+        else if (kind === 6) color = '#686060';
+        else if (kind === 7) color = '#e05010';
+        else if (kind === 8) color = '#2060a0';
+        else if (kind === 9 || kind === 10) color = '#8a7050';
+        if (kind === 4 && room === 8) color = '#a07840'; // Workshop
+        if (kind === 4 && room === 7) color = '#607080'; // Guard
+        ctx.fillStyle = color;
+        ctx.fillRect(ox + x * cell, oy + y * cell, Math.max(1, cell), Math.max(1, cell));
+      }
+    }
+    // Heart marker (pulsing ring)
+    const hx = ox + (opts.heartX + 0.5) * cell;
+    const hy = oy + (opts.heartY + 0.5) * cell;
+    ctx.strokeStyle = '#ff6040';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(hx, hy, Math.max(3, cell * 1.1), 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.fillStyle = '#ff3020';
+    ctx.beginPath();
+    ctx.arc(hx, hy, Math.max(1.5, cell * 0.45), 0, Math.PI * 2);
+    ctx.fill();
+  }
+
   showOverlay(title: string, msg: string, btn = 'Continue', secondaryBtn?: string): void {
     this.overlayTitle.textContent = title;
     this.overlayMsg.textContent = msg;
@@ -359,4 +449,12 @@ export const MENTOR_LINES = {
   heroesImminent: "Steel at the gate! Heroes arrive any moment.",
   heroEngage: "Heroes clash with your minions — doors and traps earn their keep.",
   heroDown: "A hero falls. The Underkeep drinks deep.",
+  workshopBuilt: "Workshop raised! Scrabblers craft door and Sentry kits — or pay less gold at the bench.",
+  craftKit: "Workshop finished a %k kit. Place it free from Build.",
+  craftBusy: "Scrabblers hammer in the Workshop. Kits will stack for doors and traps.",
+  missionBrief: "Mission: Survive %w hero waves — or amass %g gold in the Treasury. Protect the Heart.",
+  waveCleared: "Wave %n cleared! Steel will return — prepare for wave %next of %w.",
+  winWaves: "All hero waves broken. The Underkeep endures!",
+  winGold: "Treasury overflows! Gold wins the day — heroes be damned.",
+  workerSpawn: "Scrabbler forged for %g gold. Next costs %n. Point it at dirt!",
 };

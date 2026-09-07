@@ -2692,7 +2692,7 @@ export class Game {
       c.clampStats();
       if (c.isWorker) {
         c.goldCarried = 90;
-        c.job = JobType.Mine;
+        c.job = JobType.Idle;
         c.hp = c.maxHp * 0.55;
       } else if (!c.isHero) {
         c.hp = c.maxHp * 0.7;
@@ -2729,8 +2729,8 @@ export class Game {
     };
 
     // A compact crystal gateway chamber in the south-east of the plaza.
-    for (let y = hy + 3; y <= hy + 4; y++) {
-      for (let x = hx + 4; x <= hx + 5; x++) claim(x, y, RoomType.Portal);
+    for (let y = hy + 2; y <= hy + 3; y++) {
+      for (let x = hx + 3; x <= hx + 4; x++) claim(x, y, RoomType.Portal);
     }
     // Exposed wall showcase: dressed fortification beside earth and gold strata.
     const fort = this.grid.get(hx - 2, hy + 2);
@@ -2749,7 +2749,7 @@ export class Game {
     }
 
     this.rebuild();
-    const focus = this.grid.tileToWorld(hx + 1, hy + 1);
+    const focus = this.grid.tileToWorld(hx + 1.5, hy + 1.5);
     this.camTarget.set(focus.x, 0, focus.z);
     this.renderer.camera.position.set(focus.x + 4.5, 19.5, focus.z + 15.5);
     this.renderer.camera.lookAt(this.camTarget);

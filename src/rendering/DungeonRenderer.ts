@@ -823,6 +823,7 @@ export class DungeonRenderer {
     if (active) {
       this.useComposer = false;
       this.bloomPass.enabled = false;
+      this.renderer.toneMappingExposure = 1.08;
       this.renderer.setPixelRatio(Math.min(this.basePixelRatio, 1.0));
       this.renderer.shadowMap.enabled = false;
       if (this.dirLight) this.dirLight.castShadow = false;
@@ -830,6 +831,7 @@ export class DungeonRenderer {
     } else {
       this.bloomPass.enabled = true;
       this.useComposer = !this.contextLost;
+      this.renderer.toneMappingExposure = 1.28;
       this.renderer.setPixelRatio(this.basePixelRatio);
       this.renderer.shadowMap.enabled = true;
       if (this.dirLight) this.dirLight.castShadow = true;

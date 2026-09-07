@@ -488,13 +488,13 @@ export class Grid {
   }
 
   /**
-   * The open face an imp can actually chip.
-   * If the tagged block is buried, walk through earth/gold to the first
-   * solid that touches claimed/dirt — DK2-style "mark the vein, work the face".
+   * Open marked face a Scrabbler may chip.
+   * Only tagged earth/gold/gem is legal — never an unmarked neighbor
+   * used as a shortcut tunnel.
    */
   findDiggableFace(x: number, y: number): Vec2 | null {
     const start = this.get(x, y);
-    if (!start || !isDiggableKind(start.kind)) return null;
+    if (!start || !isDiggableKind(start.kind) || start.mark !== MarkType.Dig) return null;
     if (this.isReachableSolid(x, y)) return { x, y };
     const seen = new Set<string>([`${x},${y}`]);
     const q: Vec2[] = [{ x, y }];
@@ -505,7 +505,7 @@ export class Grid {
         const key = `${n.x},${n.y}`;
         if (seen.has(key)) continue;
         seen.add(key);
-        if (!isDiggableKind(n.kind)) continue;
+        if (!isDiggableKind(n.kind) || n.mark !== MarkType.Dig) continue;
         if (n.fortified && n.mark !== MarkType.Dig) continue;
         if (this.isReachableSolid(n.x, n.y)) return { x: n.x, y: n.y };
         q.push({ x: n.x, y: n.y });
@@ -514,17 +514,12 @@ export class Grid {
     return null;
   }
 
-  /**
-   * Tiles workers may chip for current Dig marks: the marked block itself
-   * plus its open face. The face is work, not an extra player mark.
-   */
+  /** Tiles workers may chip: only blocks the Keeper tagged Dig. */
   activeDigWorkKeys(): Set<string> {
     const keys = new Set<string>();
     for (const t of this.tiles) {
       if (t.mark !== MarkType.Dig || !isDiggableKind(t.kind)) continue;
       keys.add(`${t.x},${t.y}`);
-      const face = this.findDiggableFace(t.x, t.y);
-      if (face) keys.add(`${face.x},${face.y}`);
     }
     return keys;
   }
@@ -633,6 +628,7 @@ export class Grid {
   revealFromTerritory(): boolean {
     let changed = false;
     for (const t of this.tiles) {
+      if (t.room === RoomType.Portal && t.kind !== TileKind.Claimed) continue;
       if (
         t.kind !== TileKind.Claimed &&
         t.kind !== TileKind.Heart &&

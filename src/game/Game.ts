@@ -511,8 +511,7 @@ export class Game {
     }
     unpackTiles(this.grid.tiles, data.tiles);
     this.grid.heartPos = { x: data.heartPos.x, y: data.heartPos.y };
-    const savedPortal = this.grid.tiles.find((t) => t.room === RoomType.Portal);
-    if (savedPortal) this.grid.portalPos = { x: savedPortal.x, y: savedPortal.y };
+    this.grid.restorePortalPos();
     // Pre-6.5 saves lack explored flags — seed from claimed territory once
     if (!this.grid.tiles.some((tile) => tile.explored)) {
       this.grid.seedExploration();

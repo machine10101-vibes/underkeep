@@ -428,6 +428,17 @@ export class Grid {
     return this.countClaimedRoom(RoomType.Portal) > 0;
   }
 
+  /** Recompute the gateway center from Portal tiles (save restore / extra chambers). */
+  restorePortalPos(): void {
+    const pts = this.tiles.filter((t) => t.room === RoomType.Portal);
+    if (!pts.length) return;
+    const minX = Math.min(...pts.map((t) => t.x));
+    const maxX = Math.max(...pts.map((t) => t.x));
+    const minY = Math.min(...pts.map((t) => t.y));
+    const maxY = Math.max(...pts.map((t) => t.y));
+    this.portalPos = { x: Math.round((minX + maxX) / 2), y: Math.round((minY + maxY) / 2) };
+  }
+
   /** Largest 4-connected contiguous block of a room type. */
   largestContiguousRoom(room: RoomType): number {
     if (room === RoomType.None) return 0;

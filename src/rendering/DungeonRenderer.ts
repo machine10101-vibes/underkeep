@@ -538,7 +538,7 @@ export class DungeonRenderer {
         tile.room === RoomType.Portal &&
         tile.x === grid.portalPos.x &&
         tile.y === grid.portalPos.y;
-      const props = makeRoomProps(tile.room, portalHub ? 0 : Math.abs(tile.x * 3 + tile.y * 5));
+      const props = makeRoomProps(tile.room, portalHub ? 0 : 1);
       if (props) {
         props.position.set(w.x, 0.14, w.z);
         this.gridGroup.add(props);

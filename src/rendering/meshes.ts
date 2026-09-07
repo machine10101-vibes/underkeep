@@ -1583,9 +1583,8 @@ export function makeRoomProps(room: RoomType, variant = 0): THREE.Group | null {
       depthWrite: false,
       blending: THREE.AdditiveBlending,
     });
-    // Only one in four Portal tiles carries the full gateway; neighboring tiles
-    // become a crystal field instead of duplicating the same large prop.
-    if (variant % 4 !== 0) {
+    // Only the chamber center (variant 0) carries the full gateway.
+    if (variant !== 0) {
       const shardGeo = new THREE.OctahedronGeometry(0.13, 0);
       const count = 2 + (variant % 2);
       for (let i = 0; i < count; i++) {

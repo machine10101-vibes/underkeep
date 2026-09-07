@@ -52,6 +52,10 @@ const WORKER_BASE_COST = 150;
 const MANA_MAX_BASE = 100;
 const SPEED_COST = 25;
 const LIGHTNING_COST = 40;
+/** Haul leftover gold when there is no tagged earth waiting. */
+const HAUL_WHEN_IDLE = 40;
+/** Keep chipping tagged gold until a full claw-load if the vault has room. */
+const HAUL_WHEN_DIGGING = 100;
 
 export class Game {
   private grid: Grid;
@@ -844,10 +848,7 @@ export class Game {
       if (this.paint && this.tool !== 'select') {
         const tp = this.pointerToTile(e, canvas);
         if (!tp) return;
-        if (!this.lastPaint || this.lastPaint.x !== tp.x || this.lastPaint.y !== tp.y) {
-          this.applyTool(tp.x, tp.y);
-          this.lastPaint = { ...tp };
-        }
+        this.paintToward(tp);
       }
       if (this.held) {
         try {
@@ -988,10 +989,7 @@ export class Game {
       if (this.touchMode === 'paint') {
         const tp = this.pointerToTile(p, canvas);
         if (tp) {
-          if (!this.lastPaint || this.lastPaint.x !== tp.x || this.lastPaint.y !== tp.y) {
-            this.applyTool(tp.x, tp.y);
-            this.lastPaint = { ...tp };
-          }
+          this.paintToward(tp);
           this.updatePointerHover(p, canvas);
         }
       } else if (this.touchMode === 'pan') {
@@ -1161,8 +1159,8 @@ export class Game {
         this.clearSelection();
       } else {
         this.paint = true;
-        this.applyTool(tx, ty);
-        this.lastPaint = { x: tx, y: ty };
+        this.lastPaint = null;
+        this.paintToward({ x: tx, y: ty });
       }
     } catch (err) {
       console.warn('[underkeep] primary input failed', err);
@@ -1635,6 +1633,26 @@ export class Game {
     }
   }
 
+  /**
+   * Paint the current tool onto tiles under a drag.
+   * Isometric ray picks can jump to a distant cube — ignore those so we
+   * never auto-highlight blocks the keeper did not sweep.
+   */
+  private paintToward(tp: Vec2): void {
+    if (this.lastPaint) {
+      const cheb = Math.max(Math.abs(tp.x - this.lastPaint.x), Math.abs(tp.y - this.lastPaint.y));
+      if (cheb === 0) return;
+      if (cheb > 2) return;
+      if (cheb === 2) {
+        const mx = this.lastPaint.x + Math.sign(tp.x - this.lastPaint.x);
+        const my = this.lastPaint.y + Math.sign(tp.y - this.lastPaint.y);
+        if (mx !== this.lastPaint.x || my !== this.lastPaint.y) this.applyTool(mx, my);
+      }
+    }
+    this.applyTool(tp.x, tp.y);
+    this.lastPaint = { ...tp };
+  }
+
   private applyTool(x: number, y: number): void {
     const tile = this.grid.get(x, y);
     if (!tile) return;
@@ -1646,14 +1664,6 @@ export class Game {
         if (tile.fortified) tile.fortified = false;
         tile.mark = MarkType.Dig;
         if (tile.digProgress <= 0) tile.digProgress = 0;
-        const face = this.grid.findDiggableFace(x, y);
-        if (face && (face.x !== x || face.y !== y)) {
-          const ft = this.grid.get(face.x, face.y);
-          if (ft && isDiggableKind(ft.kind)) {
-            if (ft.fortified) ft.fortified = false;
-            ft.mark = MarkType.Dig;
-          }
-        }
         this.marksDirty = true;
       } else if (!this.lastPaint && tile.kind === TileKind.Rock) {
         this.hud.sayNow(MENTOR_LINES.cannotDig);
@@ -2067,6 +2077,10 @@ export class Game {
 
   private vaultCap(): number {
     return goldCapacity(this.grid.countRoom(RoomType.Treasury));
+  }
+
+  private vaultRoom(): number {
+    return Math.max(0, this.vaultCap() - this.gold);
   }
 
   /** Deposit gold; leftover stays with the caller. */
@@ -4231,10 +4245,24 @@ export class Game {
     heartHp: number;
     paydayIn: number;
     mined: boolean;
+    extraDigMarks: number;
+    stuckHaul: number;
+    resumedDig: boolean;
   } {
     this.hud.hideOverlay();
     const hx = this.grid.heartPos.x;
     const hy = this.grid.heartPos.y;
+    for (const t of this.grid.tiles) {
+      if (t.mark === MarkType.Dig) t.mark = MarkType.None;
+    }
+    this.tool = 'dig';
+    this.lastPaint = null;
+    const buried = { x: hx + 4, y: hy };
+    this.applyTool(buried.x, buried.y);
+    let extraDigMarks = 0;
+    for (const t of this.grid.tiles) {
+      if (t.mark === MarkType.Dig && (t.x !== buried.x || t.y !== buried.y)) extraDigMarks++;
+    }
     const goldBefore = this.gold;
     this.tool = 'dig';
     this.lastPaint = null;
@@ -4265,9 +4293,35 @@ export class Game {
     const worker = this.creatures.find((c) => c.alive && c.isWorker);
     if (worker) this.slap(worker);
     this.castSightAt(hx + 6, hy - 5);
+    const goldAfter = this.gold;
+    const mined = goldAfter + carried > goldBefore;
+
+    // Vault-full: workers sitting on the Heart with leftover gold must resume Dig.
+    this.gold = this.vaultCap();
+    const heartW = this.grid.tileToWorld(hx, hy);
+    for (const w of this.creatures) {
+      if (!w.alive || !w.isWorker) continue;
+      w.goldCarried = Math.max(w.goldCarried, 80);
+      w.job = JobType.Haul;
+      w.jobTarget = { x: hx, y: hy };
+      w.setPath(null);
+      w.x = hx;
+      w.y = hy;
+      w.wx = heartW.x;
+      w.wz = heartW.z;
+    }
+    this.tool = 'dig';
+    this.lastPaint = null;
+    this.applyTool(hx + 3, hy);
+    this.applyTool(hx + 3, hy + 1);
+    for (let i = 0; i < 24; i++) this.update(0.05);
+    const afterVault = this.creatures.filter((c) => c.alive && c.isWorker);
+    const stuckHaul = afterVault.filter((w) => w.job === JobType.Haul).length;
+    const resumedDig = afterVault.some((w) => w.job === JobType.Dig || w.job === JobType.Mine);
+
     return {
       goldBefore,
-      goldAfter: this.gold,
+      goldAfter,
       carried,
       vaultCap: this.vaultCap(),
       soldRefund,
@@ -4276,7 +4330,10 @@ export class Game {
       workerSleep: worker?.sleepNeed ?? -1,
       heartHp: this.heartHp,
       paydayIn: Math.max(0, PAYDAY_INTERVAL - this.wageAcc),
-      mined: this.gold + carried > goldBefore,
+      mined,
+      extraDigMarks,
+      stuckHaul,
+      resumedDig,
     };
   }
 
@@ -4564,7 +4621,7 @@ export class Game {
       if (this.pendingStructuralRebuild || this.gridDirty) {
         if (this.rebuildCooldown <= 0) this.rebuild();
       } else {
-        if (this.marksDirty && !this.paint) this.flushMarks();
+        if (this.marksDirty) this.flushMarks();
         if (this.fogDirty) this.flushFog();
       }
 
@@ -4958,7 +5015,14 @@ export class Game {
       );
       if (threat) {
         const nearHeart = Math.hypot(w.x - hx, w.y - hy) < 8 && Math.hypot(threat.x - hx, threat.y - hy) < 7;
+        const busy =
+          w.job === JobType.Dig ||
+          w.job === JobType.Mine ||
+          w.job === JobType.Haul ||
+          w.job === JobType.Claim;
         if (nearHeart) {
+          // Don't yank diggers off a vein because a hero is merely near the Heart.
+          if (busy && Math.hypot(w.x - threat.x, w.y - threat.y) > 2.5) continue;
           w.job = JobType.Fight;
           w.jobTarget = { x: threat.x, y: threat.y };
           if (Math.hypot(w.x - threat.x, w.y - threat.y) > 1.2) {
@@ -5000,21 +5064,19 @@ export class Game {
     }
 
     const claimedTargets = new Set<string>();
+    const activeDig = this.grid.activeDigWorkKeys();
     for (const w of workers) {
       if (w.jobTarget && (w.job === JobType.Dig || w.job === JobType.Mine || w.job === JobType.Claim || w.job === JobType.Fortify)) {
         claimedTargets.add(`${w.jobTarget.x},${w.jobTarget.y}`);
       }
-      // Unstick: dig/mine job whose mark vanished or became unreachable
-      if (
-        (w.job === JobType.Dig || w.job === JobType.Mine) &&
-        w.jobTarget &&
-        (!this.grid.get(w.jobTarget.x, w.jobTarget.y) ||
-          this.grid.get(w.jobTarget.x, w.jobTarget.y)!.mark !== MarkType.Dig ||
-          !this.grid.isDiggable(w.jobTarget.x, w.jobTarget.y))
-      ) {
-        w.job = JobType.Idle;
-        w.jobTarget = null;
-        w.setPath(null);
+      // Unstick when the face is gone or no remaining Dig mark uses that face
+      if ((w.job === JobType.Dig || w.job === JobType.Mine) && w.jobTarget) {
+        const key = `${w.jobTarget.x},${w.jobTarget.y}`;
+        if (!activeDig.has(key) || !this.grid.isDiggable(w.jobTarget.x, w.jobTarget.y)) {
+          w.job = JobType.Idle;
+          w.jobTarget = null;
+          w.setPath(null);
+        }
       }
     }
 
@@ -5050,8 +5112,10 @@ export class Game {
       w.jobTarget = null;
       let assigned = false;
 
-      // Haul gold to Treasury first when carrying a load
-      if (w.goldCarried >= 40) {
+      // Haul gold to Treasury when the vault has room. If tagged earth is
+      // waiting, keep digging until a full claw-load — don't camp the Heart.
+      const haulNeed = digMarks.length + claimMarks.length > 0 ? HAUL_WHEN_DIGGING : HAUL_WHEN_IDLE;
+      if (w.goldCarried >= haulNeed && this.vaultRoom() > 0) {
         const treasury = this.grid.tiles.find((t) => t.room === RoomType.Treasury);
         const tx = treasury?.x ?? this.grid.heartPos.x;
         const ty = treasury?.y ?? this.grid.heartPos.y;
@@ -5164,10 +5228,6 @@ export class Game {
         const key = `${face.x},${face.y}`;
         if (claimedTargets.has(key)) continue;
         const tile = this.grid.get(face.x, face.y)!;
-        if (tile.mark !== MarkType.Dig) {
-          tile.mark = MarkType.Dig;
-          this.marksDirty = true;
-        }
         const path = this.grid.findPathAdjacent(w.x, w.y, face.x, face.y);
         if (!path) continue;
         w.job = tile.kind === TileKind.Gold || tile.kind === TileKind.Gem ? JobType.Mine : JobType.Dig;
@@ -5287,7 +5347,7 @@ export class Game {
           }
         }
       }
-      if (!assigned && w.goldCarried > 0) {
+      if (!assigned && w.goldCarried > 0 && this.vaultRoom() > 0 && digMarks.length === 0) {
         const treasury = this.grid.tiles.find((t) => t.room === RoomType.Treasury);
         const tx = treasury?.x ?? this.grid.heartPos.x;
         const ty = treasury?.y ?? this.grid.heartPos.y;
@@ -6178,11 +6238,11 @@ export class Game {
           this.mentioneOnce('treasuryFull', MENTOR_LINES.treasuryFull);
         }
       }
-      if (c.goldCarried <= 0) {
-        c.goldCarried = 0;
-        c.job = JobType.Idle;
-        c.jobTarget = null;
-      }
+      // Always leave Haul after a deposit attempt — leftover gold stays in claws.
+      // Sitting on the Heart with a full vault used to freeze the worker.
+      if (c.goldCarried <= 0) c.goldCarried = 0;
+      c.job = JobType.Idle;
+      c.jobTarget = null;
     }
   }
 

@@ -416,6 +416,21 @@ export class Grid {
     return null;
   }
 
+  /**
+   * Tiles workers may chip for current Dig marks: the marked block itself
+   * plus its open face. The face is work, not an extra player mark.
+   */
+  activeDigWorkKeys(): Set<string> {
+    const keys = new Set<string>();
+    for (const t of this.tiles) {
+      if (t.mark !== MarkType.Dig || !isDiggableKind(t.kind)) continue;
+      keys.add(`${t.x},${t.y}`);
+      const face = this.findDiggableFace(t.x, t.y);
+      if (face) keys.add(`${face.x},${face.y}`);
+    }
+    return keys;
+  }
+
   hasAdjacentClaimed(x: number, y: number): boolean {
     return this.neighbors4(x, y).some(
       (t) => t.kind === TileKind.Claimed || t.kind === TileKind.Heart

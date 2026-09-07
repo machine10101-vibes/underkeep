@@ -993,20 +993,32 @@ export class DungeonRenderer {
     const raycaster = new THREE.Raycaster();
     raycaster.setFromCamera(new THREE.Vector2(nx, ny), this.camera);
     const hits = raycaster.intersectObjects(this.gridGroup.children, true);
+    let sideHit: { x: number; z: number; tileX: number; tileY: number } | null = null;
     for (const h of hits) {
       let o: THREE.Object3D | null = h.object;
       while (o) {
         if (o.userData && typeof o.userData.tileX === 'number') {
-          return {
+          const picked = {
             x: h.point.x,
             z: h.point.z,
             tileX: o.userData.tileX as number,
             tileY: o.userData.tileY as number,
           };
+          // Prefer the cube top the cursor is on. Side hits of a neighbor
+          // cube otherwise steal the drag and light the wrong row.
+          let top = false;
+          if (h.face) {
+            const n = h.face.normal.clone().transformDirection(h.object.matrixWorld);
+            top = n.y > 0.45;
+          }
+          if (top) return picked;
+          if (!sideHit) sideHit = picked;
+          break;
         }
         o = o.parent;
       }
     }
+    if (sideHit) return sideHit;
     const ground = this.raycastGround(nx, ny);
     if (!ground) return null;
     return { x: ground.x, z: ground.z };

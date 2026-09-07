@@ -242,6 +242,13 @@ if (game && params.get('smoke') === '1') {
       document.body.appendChild(el);
     }
     el.textContent = JSON.stringify(result ?? { error: 'no-smoke' });
-    document.title = `smoke:${(result as { mined?: boolean } | null)?.mined ? 'ok' : 'fail'}`;
+    const r = result as {
+      mined?: boolean;
+      extraDigMarks?: number;
+      stuckHaul?: number;
+      resumedDig?: boolean;
+    } | null;
+    const ok = !!r?.mined && (r.extraDigMarks ?? 1) === 0 && (r.stuckHaul ?? 1) === 0 && r.resumedDig === true;
+    document.title = `smoke:${ok ? 'ok' : 'fail'}`;
   }, 600);
 }

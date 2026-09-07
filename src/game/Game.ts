@@ -119,6 +119,10 @@ export class Game {
   private lastPaint: Vec2 | null = null;
   /** First tile of a Dig/Claim/Fortify stroke decides paint vs erase. */
   private paintStroke: 'set' | 'clear' | null = null;
+  /** Click vs drag: paint starts after the pointer actually moves. */
+  private pendingPaintTile: Vec2 | null = null;
+  private paintStartClient: { x: number; y: number } | null = null;
+  private paintMoved = false;
   private camTarget = new THREE.Vector3(0, 0, 0);
   private camVel = new THREE.Vector3();
   private zoomPending = 0;
@@ -809,7 +813,17 @@ export class Game {
           this.handlePrimaryAt(tp.x, tp.y, hit, e.shiftKey);
           return;
         }
-        this.handlePrimaryAt(tp.x, tp.y, hit, e.shiftKey);
+        if (this.tool === 'select') {
+          this.handlePrimaryAt(tp.x, tp.y, hit, e.shiftKey);
+          return;
+        }
+        // Dig/Claim/rooms: wait for click vs drag so a second click can unmark
+        this.pendingPaintTile = { x: tp.x, y: tp.y };
+        this.paintStartClient = { x: e.clientX, y: e.clientY };
+        this.paintMoved = false;
+        this.paint = false;
+        this.lastPaint = null;
+        this.paintStroke = null;
       }
     });
 
@@ -832,6 +846,15 @@ export class Game {
         }
         this.cancelBoxSelect();
       }
+      if (this.pendingPaintTile && this.tool !== 'select' && !this.gameOver) {
+        this.paint = true;
+        this.paintStroke = null;
+        this.lastPaint = null;
+        this.paintToward(this.pendingPaintTile);
+      }
+      this.pendingPaintTile = null;
+      this.paintStartClient = null;
+      this.paintMoved = false;
       this.paint = false;
       this.lastPaint = null;
       this.paintStroke = null;
@@ -840,6 +863,12 @@ export class Game {
 
     canvas.addEventListener('mouseleave', () => {
       if (this.boxSelecting) this.cancelBoxSelect();
+      this.pendingPaintTile = null;
+      this.paintStartClient = null;
+      this.paintMoved = false;
+      this.paint = false;
+      this.lastPaint = null;
+      this.paintStroke = null;
     });
 
     canvas.addEventListener('mousemove', (e) => {
@@ -852,6 +881,16 @@ export class Game {
         if (Math.hypot(dx, dy) > 8) {
           this.boxMoved = true;
           this.updateMarquee(this.boxStartClient.x, this.boxStartClient.y, e.clientX, e.clientY);
+        }
+      }
+      if (this.pendingPaintTile && this.tool !== 'select' && this.paintStartClient) {
+        const pdx = e.clientX - this.paintStartClient.x;
+        const pdy = e.clientY - this.paintStartClient.y;
+        if (Math.hypot(pdx, pdy) > 7) {
+          this.paint = true;
+          this.paintMoved = true;
+          this.paintToward(this.pendingPaintTile);
+          this.pendingPaintTile = null;
         }
       }
       if (this.paint && this.tool !== 'select') {
@@ -1232,10 +1271,7 @@ export class Game {
       const hx = hit?.x ?? w.x;
       const hz = hit?.z ?? w.z;
       this.lastHand = { x: hx, z: hz };
-      const tall =
-        !!tile &&
-        (isDiggableKind(tile.kind) || tile.kind === TileKind.Rock || tile.fortified);
-      this.renderer.setKeeperHand(hx, hz, true, !!this.held, tall ? 3.35 : 2.45);
+      this.renderer.setKeeperHand(hx, hz, true, !!this.held, this.handHoverY(tile));
     } else {
       this.renderer.setKeeperHand(0, 0, false);
     }
@@ -1379,7 +1415,7 @@ export class Game {
   private toolColor(): number {
     switch (this.tool) {
       case 'dig':
-        return 0xff4422;
+        return 0xffcc44;
       case 'claim':
         return 0x4488ff;
       case 'fortify':
@@ -1674,6 +1710,14 @@ export class Game {
     this.lastPaint = { ...tp };
   }
 
+  /** Height of the 3D Hand so it floats above floors and solid cubes. */
+  private handHoverY(tile: { kind: TileKind; fortified: boolean } | null | undefined): number {
+    if (!tile) return 3.7;
+    if (tile.kind === TileKind.Rock) return 5.85;
+    if (isDiggableKind(tile.kind) || tile.fortified) return 5.15;
+    return 3.7;
+  }
+
   /** Click toggles a mark; a drag keeps the first tile's paint-or-erase choice. */
   private applyMarkStroke(tile: { mark: MarkType }, mark: MarkType): void {
     if (this.paint) {
@@ -1683,6 +1727,7 @@ export class Game {
       tile.mark = mark;
     }
     this.marksDirty = true;
+    this.flushMarks();
   }
 
   private applyTool(x: number, y: number): void {

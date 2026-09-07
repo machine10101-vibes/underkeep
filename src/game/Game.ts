@@ -1712,10 +1712,10 @@ export class Game {
 
   /** Height of the 3D Hand so it floats above floors and solid cubes. */
   private handHoverY(tile: { kind: TileKind; fortified: boolean } | null | undefined): number {
-    if (!tile) return 3.7;
-    if (tile.kind === TileKind.Rock) return 5.85;
-    if (isDiggableKind(tile.kind) || tile.fortified) return 5.15;
-    return 3.7;
+    if (!tile) return 4.6;
+    if (tile.kind === TileKind.Rock) return 7.4;
+    if (isDiggableKind(tile.kind) || tile.fortified) return 6.6;
+    return 4.6;
   }
 
   /** Click toggles a mark; a drag keeps the first tile's paint-or-erase choice. */

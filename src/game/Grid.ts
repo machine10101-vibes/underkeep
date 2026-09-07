@@ -370,6 +370,33 @@ export class Grid {
     return this.neighbors4(x, y).some((t) => this.isWalkable(t.x, t.y));
   }
 
+  /**
+   * The open face an imp can actually chip.
+   * If the tagged block is buried, walk through earth/gold to the first
+   * solid that touches claimed/dirt — DK2-style "mark the vein, work the face".
+   */
+  findDiggableFace(x: number, y: number): Vec2 | null {
+    const start = this.get(x, y);
+    if (!start || (start.kind !== TileKind.Earth && start.kind !== TileKind.Gold)) return null;
+    if (this.isReachableSolid(x, y)) return { x, y };
+    const seen = new Set<string>([`${x},${y}`]);
+    const q: Vec2[] = [{ x, y }];
+    let guard = 0;
+    while (q.length && guard++ < 256) {
+      const cur = q.shift()!;
+      for (const n of this.neighbors4(cur.x, cur.y)) {
+        const key = `${n.x},${n.y}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        if (n.kind !== TileKind.Earth && n.kind !== TileKind.Gold) continue;
+        if (n.fortified && n.mark !== MarkType.Dig) continue;
+        if (this.isReachableSolid(n.x, n.y)) return { x: n.x, y: n.y };
+        q.push({ x: n.x, y: n.y });
+      }
+    }
+    return null;
+  }
+
   hasAdjacentClaimed(x: number, y: number): boolean {
     return this.neighbors4(x, y).some(
       (t) => t.kind === TileKind.Claimed || t.kind === TileKind.Heart
@@ -505,6 +532,10 @@ export class Grid {
     gy: number,
     opts?: { forHero?: boolean; allowHazard?: boolean }
   ): Vec2[] | null {
+    sx = Math.round(sx);
+    sy = Math.round(sy);
+    gx = Math.round(gx);
+    gy = Math.round(gy);
     if (!this.inBounds(sx, sy) || !this.inBounds(gx, gy)) return null;
     if (sx === gx && sy === gy) return [{ x: gx, y: gy }];
 

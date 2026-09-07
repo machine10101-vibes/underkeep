@@ -1588,6 +1588,14 @@ export class Game {
         if (tile.fortified) tile.fortified = false;
         tile.mark = MarkType.Dig;
         if (tile.digProgress <= 0) tile.digProgress = 0;
+        const face = this.grid.findDiggableFace(x, y);
+        if (face && (face.x !== x || face.y !== y)) {
+          const ft = this.grid.get(face.x, face.y);
+          if (ft && (ft.kind === TileKind.Earth || ft.kind === TileKind.Gold)) {
+            if (ft.fortified) ft.fortified = false;
+            ft.mark = MarkType.Dig;
+          }
+        }
         this.marksDirty = true;
       } else if (!this.lastPaint && tile.kind === TileKind.Rock) {
         this.hud.sayNow(MENTOR_LINES.cannotDig);
@@ -4743,14 +4751,19 @@ export class Game {
         .map((m) => ({ m, d: Math.abs(m.x - w.x) + Math.abs(m.y - w.y) }))
         .sort((a, b) => a.d - b.d);
       for (const { m } of digSorted) {
-        const key = `${m.x},${m.y}`;
+        const face = this.grid.findDiggableFace(m.x, m.y) ?? (this.grid.isReachableSolid(m.x, m.y) ? m : null);
+        if (!face) continue;
+        const key = `${face.x},${face.y}`;
         if (claimedTargets.has(key)) continue;
-        if (!this.grid.isReachableSolid(m.x, m.y)) continue;
-        const tile = this.grid.get(m.x, m.y)!;
-        const path = this.grid.findPathAdjacent(w.x, w.y, m.x, m.y);
+        const tile = this.grid.get(face.x, face.y)!;
+        if (tile.mark !== MarkType.Dig) {
+          tile.mark = MarkType.Dig;
+          this.marksDirty = true;
+        }
+        const path = this.grid.findPathAdjacent(w.x, w.y, face.x, face.y);
         if (!path) continue;
         w.job = tile.kind === TileKind.Gold ? JobType.Mine : JobType.Dig;
-        w.jobTarget = m;
+        w.jobTarget = face;
         w.setPath(path);
         w.workTimer = 0;
         claimedTargets.add(key);

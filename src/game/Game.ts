@@ -4177,6 +4177,109 @@ export class Game {
     this.hud.sayNow('Claimed land wears gold. Flowers measure health. Scrabblers haul the glitter home.');
   }
 
+  /** QA: Pass 10 HUD + sell + slap-work + gem face in view. */
+  preparePass10Shot(): void {
+    this.hud.hideOverlay();
+    const hx = this.grid.heartPos.x;
+    const hy = this.grid.heartPos.y;
+    const claim = (x: number, y: number, room = RoomType.None) => {
+      const tile = this.grid.get(x, y);
+      if (!tile || tile.kind === TileKind.Heart) return;
+      tile.kind = TileKind.Claimed;
+      tile.room = room;
+      tile.mark = MarkType.None;
+      tile.digProgress = 0;
+      tile.claimedProgress = 1;
+      tile.fortified = false;
+      tile.explored = true;
+    };
+    claim(hx + 2, hy, RoomType.Treasury);
+    claim(hx + 3, hy, RoomType.Treasury);
+    claim(hx + 2, hy + 1, RoomType.Casino);
+    claim(hx + 3, hy + 1, RoomType.Casino);
+    this.gold = Math.min(this.vaultCap(), Math.max(this.gold, 720));
+    this.wageAcc = PAYDAY_INTERVAL - 12;
+    const worker = this.creatures.find((c) => c.alive && c.isWorker);
+    if (worker) {
+      worker.slapWorkBuff = 8;
+      worker.goldCarried = 80;
+    }
+    this.grid.revealAround(hx + 8, hy + 1, 3);
+    this.requestStructuralRebuild();
+    this.rebuild();
+    const focus = this.grid.tileToWorld(hx + 2, hy);
+    this.camTarget.set(focus.x, 0, focus.z);
+    this.renderer.camera.position.set(focus.x + 5, 26, focus.z + 16);
+    this.renderer.camera.lookAt(this.camTarget);
+    this.hud.setTooltip('Pass 10 — Heart · payday · vault cap · Wagerden · slap-work');
+    this.hud.sayNow('Scrabblers never rest. Sell rooms. Sight peels the fog. The Heart keeps score.');
+  }
+
+  /**
+   * Headless guide-loop smoke: mark starting gold, simulate time, sell a room, slap a worker.
+   * Used by the QA harness — not player-facing.
+   */
+  runGuideSmoke(seconds = 16): {
+    goldBefore: number;
+    goldAfter: number;
+    carried: number;
+    vaultCap: number;
+    soldRefund: number;
+    slapBuff: number;
+    workerHunger: number;
+    workerSleep: number;
+    heartHp: number;
+    paydayIn: number;
+    mined: boolean;
+  } {
+    this.hud.hideOverlay();
+    const hx = this.grid.heartPos.x;
+    const hy = this.grid.heartPos.y;
+    const goldBefore = this.gold;
+    this.tool = 'dig';
+    this.lastPaint = null;
+    for (let i = 0; i < 4; i++) this.applyTool(hx + 3, hy - 1 + i);
+    for (let i = 0; i < 5; i++) this.applyTool(hx - 1 + i, hy + 3);
+    const steps = Math.max(1, Math.ceil(seconds / 0.05));
+    for (let i = 0; i < steps; i++) this.update(0.05);
+    const carried = this.creatures
+      .filter((c) => c.alive && c.isWorker)
+      .reduce((sum, c) => sum + c.goldCarried, 0);
+    let soldRefund = 0;
+    const sx = hx + 1;
+    const sy = hy + 1;
+    const roomTile = this.grid.get(sx, sy);
+    if (roomTile && roomTile.kind === TileKind.Claimed) {
+      roomTile.room = RoomType.None;
+      this.tool = 'treasury';
+      this.lastPaint = null;
+      const beforePlace = this.gold;
+      this.applyTool(sx, sy);
+      this.tool = 'sell';
+      this.lastPaint = null;
+      const beforeSell = this.gold;
+      this.applyTool(sx, sy);
+      soldRefund = this.gold - beforeSell;
+      void beforePlace;
+    }
+    const worker = this.creatures.find((c) => c.alive && c.isWorker);
+    if (worker) this.slap(worker);
+    this.castSightAt(hx + 6, hy - 5);
+    return {
+      goldBefore,
+      goldAfter: this.gold,
+      carried,
+      vaultCap: this.vaultCap(),
+      soldRefund,
+      slapBuff: worker?.slapWorkBuff ?? 0,
+      workerHunger: worker?.hunger ?? -1,
+      workerSleep: worker?.sleepNeed ?? -1,
+      heartHp: this.heartHp,
+      paydayIn: Math.max(0, PAYDAY_INTERVAL - this.wageAcc),
+      mined: this.gold + carried > goldBefore,
+    };
+  }
+
   /** QA/screenshot: Pass 8 layered wall faces, monumental Heart/Portal, cavern atmosphere. */
   preparePass8Shot(): void {
     this.preparePass7Shot();

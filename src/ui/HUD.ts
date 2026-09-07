@@ -1,6 +1,6 @@
 import { SpellId, ToolMode } from '../game/types';
 
-const ROOM_TOOLS: ToolMode[] = ['treasury', 'lair', 'hatchery', 'training', 'library', 'portal', 'guard', 'workshop', 'door', 'sentry', 'rally', 'bridgeWood', 'bridgeStone'];
+const ROOM_TOOLS: ToolMode[] = ['treasury', 'lair', 'hatchery', 'training', 'library', 'portal', 'guard', 'workshop', 'prison', 'torture', 'graveyard', 'door', 'sentry', 'rally', 'bridgeWood', 'bridgeStone'];
 
 export class HUD {
   private goldEl: HTMLElement;
@@ -346,6 +346,9 @@ export class HUD {
         else if (kind === 9 || kind === 10) color = '#8a7050';
         if (kind === 4 && room === 8) color = '#a07840'; // Workshop
         if (kind === 4 && room === 7) color = '#607080'; // Guard
+        if (kind === 4 && room === 9) color = '#506070'; // Prison
+        if (kind === 4 && room === 10) color = '#a04050'; // Torture
+        if (kind === 4 && room === 11) color = '#406850'; // Graveyard
         ctx.fillStyle = color;
         ctx.fillRect(ox + x * cell, oy + y * cell, Math.max(1, cell), Math.max(1, cell));
       }
@@ -457,4 +460,14 @@ export const MENTOR_LINES = {
   winWaves: "All hero waves broken. The Underkeep endures!",
   winGold: "Treasury overflows! Gold wins the day — heroes be damned.",
   workerSpawn: "Scrabbler forged for %g gold. Next costs %n. Point it at dirt!",
+  prisonBuilt: "Prison raised! Knocked-out heroes can be dragged in — or drop them yourself.",
+  tortureBuilt: "Torture Chamber humming. Prisoners will convert into loyal Thornwitches.",
+  graveyardBuilt: "Graveyard consecrated. Corpses and starved captives rise as Bonewretches.",
+  heroKnocked: "Hero knocked out! Drag them to Prison before they fade.",
+  prisonerHeld: "Captive secured in the Prison. Starve them… or convert them.",
+  converting: "Conversion underway — the hero's will cracks.",
+  converted: "A Thornwitch joins your roster. Loyalty tastes like iron.",
+  boneRaised: "A Bonewretch claws up from the Graveyard. Fearless bones.",
+  starvedBones: "The prisoner starved — bones claim them for the dark.",
+  roomSizeBonus: "Room size %n · +%p% efficiency",
 };

@@ -124,7 +124,17 @@ if (
     params.get('shot') === '7.2-workshop' ||
     params.get('shot') === '72-workshop' ||
     params.get('shot') === '7.2-worker' ||
-    params.get('shot') === '72-worker')
+    params.get('shot') === '72-worker' ||
+    params.get('shot') === '7.3' ||
+    params.get('shot') === '73' ||
+    params.get('shot') === '7.3-prison' ||
+    params.get('shot') === '73-prison' ||
+    params.get('shot') === '7.3-torture' ||
+    params.get('shot') === '73-torture' ||
+    params.get('shot') === '7.3-graveyard' ||
+    params.get('shot') === '73-graveyard' ||
+    params.get('shot') === '7.3-efficiency' ||
+    params.get('shot') === '73-efficiency')
 ) {
   // Auto-arrange evidence shots
   setTimeout(() => {
@@ -145,10 +155,16 @@ if (
       preparePass65Shot?: (focus?: 'fow' | 'fortify' | 'both') => void;
       preparePass71Shot?: (focus?: 'lava' | 'bridge' | 'possess' | 'payday' | 'both') => void;
       preparePass72Shot?: (focus?: 'minimap' | 'mission' | 'workshop' | 'worker' | 'both') => void;
+      preparePass73Shot?: (focus?: 'prison' | 'torture' | 'graveyard' | 'efficiency' | 'both') => void;
     };
     g.hud.hideOverlay();
     const shot = params.get('shot');
-    if (shot === '7.2-minimap' || shot === '72-minimap') g.preparePass72Shot?.('minimap');
+    if (shot === '7.3-prison' || shot === '73-prison') g.preparePass73Shot?.('prison');
+    else if (shot === '7.3-torture' || shot === '73-torture') g.preparePass73Shot?.('torture');
+    else if (shot === '7.3-graveyard' || shot === '73-graveyard') g.preparePass73Shot?.('graveyard');
+    else if (shot === '7.3-efficiency' || shot === '73-efficiency') g.preparePass73Shot?.('efficiency');
+    else if (shot === '7.3' || shot === '73') g.preparePass73Shot?.('both');
+    else if (shot === '7.2-minimap' || shot === '72-minimap') g.preparePass72Shot?.('minimap');
     else if (shot === '7.2-mission' || shot === '72-mission') g.preparePass72Shot?.('mission');
     else if (shot === '7.2-workshop' || shot === '72-workshop') g.preparePass72Shot?.('workshop');
     else if (shot === '7.2-worker' || shot === '72-worker') g.preparePass72Shot?.('worker');

@@ -24,6 +24,9 @@ export enum RoomType {
   Portal = 6,
   Guard = 7,
   Workshop = 8,
+  Prison = 9,
+  Torture = 10,
+  Graveyard = 11,
 }
 
 /** Wooden door on a claimed corridor tile. */
@@ -52,6 +55,8 @@ export enum CreatureKind {
   Rattlekin = 'rattlekin',
   Emberling = 'emberling',
   Gravemage = 'gravemage',
+  Thornwitch = 'thornwitch',
+  Bonewretch = 'bonewretch',
   HeroKnight = 'hero_knight',
   HeroArcher = 'hero_archer',
 }
@@ -73,6 +78,7 @@ export enum JobType {
   Guard = 'guard',
   AttackMove = 'attack',
   Craft = 'craft',
+  DragPrisoner = 'drag',
 }
 
 export interface Tile {
@@ -110,6 +116,9 @@ export const ROOM_COST: Record<RoomType, number> = {
   [RoomType.Portal]: 300,
   [RoomType.Guard]: 175,
   [RoomType.Workshop]: 200,
+  [RoomType.Prison]: 225,
+  [RoomType.Torture]: 275,
+  [RoomType.Graveyard]: 250,
 };
 
 export const DOOR_COST = 75;
@@ -138,6 +147,9 @@ export const ROOM_NAMES: Record<RoomType, string> = {
   [RoomType.Portal]: 'Portal',
   [RoomType.Guard]: 'Guard Room',
   [RoomType.Workshop]: 'Workshop',
+  [RoomType.Prison]: 'Prison',
+  [RoomType.Torture]: 'Torture Chamber',
+  [RoomType.Graveyard]: 'Graveyard',
 };
 
 export const CREATURE_STATS: Record<
@@ -149,6 +161,8 @@ export const CREATURE_STATS: Record<
   [CreatureKind.Rattlekin]: { hp: 80, speed: 2.6, damage: 12, goldWage: 15, color: 0x8a7050, scale: 0.75 },
   [CreatureKind.Emberling]: { hp: 90, speed: 2.4, damage: 16, goldWage: 25, color: 0xe05020, scale: 0.8 },
   [CreatureKind.Gravemage]: { hp: 70, speed: 2.2, damage: 10, goldWage: 20, color: 0x7050c0, scale: 0.78 },
+  [CreatureKind.Thornwitch]: { hp: 85, speed: 2.5, damage: 15, goldWage: 22, color: 0xa03060, scale: 0.78 },
+  [CreatureKind.Bonewretch]: { hp: 55, speed: 2.8, damage: 11, goldWage: 0, color: 0xd8d0b8, scale: 0.72 },
   [CreatureKind.HeroKnight]: { hp: 120, speed: 2.2, damage: 18, goldWage: 0, color: 0xc0c8d8, scale: 0.85 },
   [CreatureKind.HeroArcher]: { hp: 70, speed: 2.5, damage: 14, goldWage: 0, color: 0x5080a0, scale: 0.7 },
 };
@@ -170,7 +184,10 @@ export type ToolMode =
   | 'rally'
   | 'bridgeWood'
   | 'bridgeStone'
-  | 'workshop';
+  | 'workshop'
+  | 'prison'
+  | 'torture'
+  | 'graveyard';
 
 export type SpellId = 'createWorker' | 'speed' | 'lightning' | 'heal' | 'possess';
 
@@ -181,4 +198,10 @@ export function isHeatResistant(kind: CreatureKind): boolean {
 
 export function isFlyer(kind: CreatureKind): boolean {
   return kind === CreatureKind.Skitterwing;
+}
+
+/** Contiguous room-size bonus for Lair/Hatchery/Library (0–0.5). */
+export function roomSizeEfficiencyBonus(tileCount: number): number {
+  if (tileCount <= 1) return 0;
+  return Math.min(0.5, (tileCount - 1) * 0.06);
 }

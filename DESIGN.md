@@ -55,6 +55,7 @@ Vite + TypeScript + Three.js (+ postprocessing). Blender for later art. Godot on
 | Manufacturer | Troll | Forgebrute |
 | Tank | Bile Demon | Ironhide |
 | Torture specialist | Dark Mistress | Thornwitch |
+| Undead (skeleton) | Skeleton | Bonewretch |
 | Elite call-in | Horned Reaper | Phase 3 unique |
 
 ## Phase 1 implementation status (game/)
@@ -65,7 +66,7 @@ Implemented: grid dig/claim/fortify/mine, Dungeon Heart lose condition, Scrabble
 
 Pass 5: WebGL context-loss recovery + incremental dig visuals (no full rebuild per chip), smoother creature facing/path follow, Dig/Mine plant-at-face + pickaxe cycle + gold haul to Treasury, Lair bed capacity/rest/heal, Hatchery food regen + hunger eat loop (workers + minions), mentor feedback.
 
-Gaps / later: possess, traps/doors, Combat Pit, research, workshop, Prison/Torture conversion, richer pathing through walls for heroes, audio, GLTF art upgrades.
+Pass 7.3: Prison capture, Torture→Thornwitch, Graveyard→Bonewretch, room-size efficiency. Gaps / later: Combat Pit, Temple, richer pathing, audio, GLTF art upgrades.
 
 ## Visual north star (YT X35cKEjvgrc from 2:20)
 Feel targets only — original IP art:

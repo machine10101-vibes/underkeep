@@ -43,6 +43,12 @@ export class Creature {
   selected = false;
   trainNeed = 0;
   held = false;
+  /** Knocked out in combat — can be dragged to Prison. */
+  knockedOut = false;
+  /** Held in Prison / converting in Torture. */
+  isPrisoner = false;
+  /** 0–100 conversion progress while imprisoned. */
+  convertProgress = 0;
   fleeTimer = 0;
   attackCooldown = 0;
   goldCarried = 0;
@@ -125,6 +131,18 @@ export class Creature {
         if (this.selectRing) {
           this.selectRing.visible = true;
           this.selectRing.rotation.z = time * 3;
+        }
+        if (this.pickaxe) this.pickaxe.visible = false;
+        return;
+      }
+      if (this.knockedOut || this.isPrisoner) {
+        const bob = Math.sin(time * 1.5 + this.bobPhase) * 0.01;
+        this.mesh.position.set(wx, 0.08 + bob, wz);
+        this.mesh.rotation.x = 0.05;
+        this.mesh.rotation.z = this.knockedOut ? 1.35 : 0.55;
+        if (this.selectRing) {
+          this.selectRing.visible = this.selected || this.knockedOut;
+          this.selectRing.rotation.z = time * 1.2;
         }
         if (this.pickaxe) this.pickaxe.visible = false;
         return;
@@ -275,7 +293,7 @@ export class Creature {
   }
 
   moveAlongPath(dt: number, grid: Grid): boolean {
-    if (this.stunTimer > 0 || this.held) return false;
+    if (this.stunTimer > 0 || this.held || this.knockedOut || this.isPrisoner) return false;
     if (this.pathIndex >= this.path.length) return true;
     const target = this.path[this.pathIndex];
     const w = grid.tileToWorld(target.x, target.y);

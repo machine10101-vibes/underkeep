@@ -319,6 +319,34 @@ export class Grid {
     return n;
   }
 
+  /** Largest 4-connected contiguous block of a room type. */
+  largestContiguousRoom(room: RoomType): number {
+    if (room === RoomType.None) return 0;
+    const seen = new Set<string>();
+    let best = 0;
+    for (const start of this.tiles) {
+      if (start.room !== room) continue;
+      const key0 = `${start.x},${start.y}`;
+      if (seen.has(key0)) continue;
+      let size = 0;
+      const stack = [start];
+      seen.add(key0);
+      while (stack.length) {
+        const t = stack.pop()!;
+        size++;
+        for (const n of this.neighbors4(t.x, t.y)) {
+          const k = `${n.x},${n.y}`;
+          if (n.room === room && !seen.has(k)) {
+            seen.add(k);
+            stack.push(n);
+          }
+        }
+      }
+      if (size > best) best = size;
+    }
+    return best;
+  }
+
   neighbors4(x: number, y: number): Tile[] {
     const out: Tile[] = [];
     for (const [dx, dy] of [

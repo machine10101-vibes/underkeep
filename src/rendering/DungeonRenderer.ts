@@ -768,11 +768,12 @@ export class DungeonRenderer {
   }
 
   /** 3D keeper claw follows the pointer in Hand mode. */
-  setKeeperHand(wx: number, wz: number, visible: boolean, grabbing = false): void {
+  setKeeperHand(wx: number, wz: number, visible: boolean, grabbing = false, hoverY = 2.45): void {
     this.keeperHand.visible = visible;
     if (!visible) return;
-    this.keeperHand.position.set(wx, grabbing ? 1.55 : 1.15, wz);
-    this.keeperHand.rotation.x = grabbing ? 0.55 : 0.18;
+    const y = grabbing ? Math.max(3.2, hoverY + 0.25) : hoverY;
+    this.keeperHand.position.set(wx, y, wz);
+    this.keeperHand.rotation.x = grabbing ? 0.42 : 0.12;
     this.keeperHand.rotation.z = grabbing ? -0.25 : Math.sin(this.clock * 3) * 0.06;
     this.keeperHand.rotation.y = grabbing ? 0.35 : 0.15;
   }

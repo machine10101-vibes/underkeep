@@ -117,6 +117,8 @@ export class Game {
   private won = false;
   private paint = false;
   private lastPaint: Vec2 | null = null;
+  /** First tile of a Dig/Claim/Fortify stroke decides paint vs erase. */
+  private paintStroke: 'set' | 'clear' | null = null;
   private camTarget = new THREE.Vector3(0, 0, 0);
   private camVel = new THREE.Vector3();
   private zoomPending = 0;
@@ -832,6 +834,7 @@ export class Game {
       }
       this.paint = false;
       this.lastPaint = null;
+      this.paintStroke = null;
       this.flushMarks();
     });
 
@@ -1037,6 +1040,7 @@ export class Game {
           this.touchMode = 'none';
           this.paint = false;
           this.lastPaint = null;
+          this.paintStroke = null;
         }
         return;
       }
@@ -1057,6 +1061,7 @@ export class Game {
       this.touchMode = 'none';
       this.paint = false;
       this.lastPaint = null;
+      this.paintStroke = null;
     }, { passive: false });
 
     canvas.addEventListener('touchcancel', (e) => {
@@ -1067,6 +1072,7 @@ export class Game {
       this.touchMode = 'none';
       this.paint = false;
       this.lastPaint = null;
+      this.paintStroke = null;
       this.pinchStartDist = 0;
     });
 
@@ -1169,6 +1175,7 @@ export class Game {
       } else {
         this.paint = true;
         this.lastPaint = null;
+        this.paintStroke = null;
         this.paintToward({ x: tx, y: ty });
       }
     } catch (err) {
@@ -1219,14 +1226,19 @@ export class Game {
     }
     const w = this.grid.tileToWorld(tp.x, tp.y);
     this.renderer.setHover(w.x, w.z, true, this.toolColor());
+    const tile = this.grid.get(tp.x, tp.y);
     const hit = this.pointerToWorld(e, canvas);
-    if (hit && this.tool === 'select') {
-      this.lastHand = { x: hit.x, z: hit.z };
-      this.renderer.setKeeperHand(hit.x, hit.z, true, !!this.held);
+    if (this.tool === 'select') {
+      const hx = hit?.x ?? w.x;
+      const hz = hit?.z ?? w.z;
+      this.lastHand = { x: hx, z: hz };
+      const tall =
+        !!tile &&
+        (isDiggableKind(tile.kind) || tile.kind === TileKind.Rock || tile.fortified);
+      this.renderer.setKeeperHand(hx, hz, true, !!this.held, tall ? 3.35 : 2.45);
     } else {
       this.renderer.setKeeperHand(0, 0, false);
     }
-    const tile = this.grid.get(tp.x, tp.y);
     if (tile) {
       let room =
         tile.room !== RoomType.None
@@ -1662,6 +1674,17 @@ export class Game {
     this.lastPaint = { ...tp };
   }
 
+  /** Click toggles a mark; a drag keeps the first tile's paint-or-erase choice. */
+  private applyMarkStroke(tile: { mark: MarkType }, mark: MarkType): void {
+    if (this.paint) {
+      if (!this.paintStroke) this.paintStroke = tile.mark === mark ? 'clear' : 'set';
+      tile.mark = this.paintStroke === 'clear' ? MarkType.None : mark;
+    } else {
+      tile.mark = mark;
+    }
+    this.marksDirty = true;
+  }
+
   private applyTool(x: number, y: number): void {
     const tile = this.grid.get(x, y);
     if (!tile) return;
@@ -1671,23 +1694,20 @@ export class Game {
     } else if (this.tool === 'dig') {
       if (isDiggableKind(tile.kind)) {
         if (tile.fortified) tile.fortified = false;
-        tile.mark = MarkType.Dig;
+        this.applyMarkStroke(tile, MarkType.Dig);
         if (tile.digProgress <= 0) tile.digProgress = 0;
-        this.marksDirty = true;
       } else if (!this.lastPaint && tile.kind === TileKind.Rock) {
         this.hud.sayNow(MENTOR_LINES.cannotDig);
       }
     } else if (this.tool === 'claim') {
       if (tile.kind === TileKind.Dirt) {
-        tile.mark = MarkType.Claim;
-        this.marksDirty = true;
+        this.applyMarkStroke(tile, MarkType.Claim);
       } else if (!this.lastPaint && tile.kind !== TileKind.Claimed && tile.kind !== TileKind.Heart) {
         this.hud.sayNow(MENTOR_LINES.cannotClaim);
       }
     } else if (this.tool === 'fortify') {
       if (tile.kind === TileKind.Earth && this.grid.hasAdjacentClaimed(x, y)) {
-        tile.mark = MarkType.Fortify;
-        this.marksDirty = true;
+        this.applyMarkStroke(tile, MarkType.Fortify);
       } else if (!this.lastPaint && (tile.kind === TileKind.Gold || tile.kind === TileKind.Gem || tile.kind === TileKind.Rock || tile.fortified)) {
         this.hud.sayNow(MENTOR_LINES.cannotFortify);
       }
@@ -2516,12 +2536,6 @@ export class Game {
       const tw = this.grid.tileToWorld(digTarget.x, digTarget.y);
       w.mesh.lookAt(tw.x, w.mesh.position.y, tw.z);
       w.syncMesh(this.time + 0.5);
-      if (w.pickaxe) {
-        const wave = Math.sin(w.digAnim * 11);
-        w.pickaxe.rotation.x = -0.9 + wave * 1.35;
-        w.pickaxe.rotation.z = 0.15 + wave * 0.55;
-        w.pickaxe.visible = true;
-      }
       if (w.selectRing) w.selectRing.visible = true;
     }
 

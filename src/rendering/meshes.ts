@@ -669,10 +669,11 @@ export function makeCreatureMesh(color: number, scale: number, kind: string): TH
     tip2.position.set(-0.22, 0.78, 0);
     pick.add(tip2);
     pick.position.set(0.05, 0.05, 0.05);
+    // Aim the pick spike at +Z — the wall the Scrabbler faces while digging
+    pick.rotation.y = -Math.PI / 2;
     digArm.add(pick);
-    digArm.position.set(0.42, 0.38, 0.22);
-    digArm.rotation.z = 0.2;
-    digArm.rotation.x = -0.45;
+    digArm.position.set(0.28, 0.42, 0.34);
+    digArm.rotation.set(-0.28, 0, 0.06);
     g.add(digArm);
     (g as THREE.Group & { pickaxe?: THREE.Object3D }).pickaxe = digArm;
 
@@ -2327,6 +2328,24 @@ export function makeGoldBag(): THREE.Group {
   return g;
 }
 
+/**
+ * Slow chop aimed at the wall face (+Z). `time` is seconds of dig work.
+ * One strike about every 0.85s — readable, not a blur.
+ */
+export function poseScrabblerPickaxe(pick: THREE.Object3D, time: number, striking: boolean): void {
+  pick.visible = true;
+  if (!striking) {
+    pick.rotation.set(-0.28, 0, 0.06);
+    return;
+  }
+  const period = 0.85;
+  const phase = ((time % period) / period) * Math.PI * 2;
+  const down = Math.pow(Math.max(0, Math.sin(phase)), 1.25);
+  pick.rotation.x = -0.22 + down * -1.08;
+  pick.rotation.y = 0;
+  pick.rotation.z = 0.05;
+}
+
 /** Original-IP keeper claw — follows the cursor in Hand mode. */
 export function makeKeeperHand(): THREE.Group {
   const g = new THREE.Group();
@@ -2365,6 +2384,17 @@ export function makeKeeperHand(): THREE.Group {
   thumb.rotation.y = 0.6;
   g.add(thumb);
   g.scale.setScalar(1.15);
+  g.traverse((o) => {
+    o.renderOrder = 12;
+    const mesh = o as THREE.Mesh;
+    if (mesh.isMesh && mesh.material) {
+      const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+      for (const m of mats) {
+        m.depthTest = false;
+        m.depthWrite = false;
+      }
+    }
+  });
   return g;
 }
 

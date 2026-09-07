@@ -287,6 +287,20 @@ export function fortifiedTex(): THREE.CanvasTexture {
   });
 }
 
+export function gemVeinTex(): THREE.CanvasTexture {
+  return paintNoise(64, {
+    seed: 71,
+    base: [28, 140, 128],
+    dark: [8, 48, 52],
+    light: [140, 255, 230],
+    scale: 3.4,
+    contrast: 1.55,
+    veins: { color: [180, 255, 240], scale: 1.05, thresh: 0.36, seed: 111 },
+    speck: 0.24,
+    speckColor: [220, 255, 250],
+  });
+}
+
 export function goldVeinTex(): THREE.CanvasTexture {
   // Bright yellow-gold veins — unmistakable vs earth at overview zoom
   return paintNoise(64, {

@@ -6,7 +6,7 @@
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="mobile-web-app-capable" content="yes" />
     <title>Underkeep</title>
-    <meta name="underkeep-build" content="pass9" />
+    <meta name="underkeep-build" content="pass10" />
     <link rel="stylesheet" href="/src/style.css" />
   </head>
   <body class="booting">
@@ -21,8 +21,10 @@
       <div id="select-marquee" class="hidden" aria-hidden="true"></div>
       <div id="hud">
         <div id="hud-top">
-          <div class="stat" id="stat-gold"><span class="label">Gold</span><span class="value" id="gold-value">0</span></div>
+          <div class="stat" id="stat-gold"><span class="label">Gold</span><span class="value"><span id="gold-value">0</span><span id="gold-cap" class="cap">/1000</span></span></div>
           <div class="stat" id="stat-mana"><span class="label">Mana</span><span class="value" id="mana-value">0</span><div class="bar"><div id="mana-bar"></div></div></div>
+          <div class="stat" id="stat-heart"><span class="label">Heart</span><span class="value" id="heart-value">500</span><div class="bar"><div id="heart-bar"></div></div></div>
+          <div class="stat" id="stat-payday"><span class="label">Payday</span><span class="value" id="payday-value">48s</span></div>
           <div class="stat" id="stat-workers"><span class="label">Scrabblers</span><span class="value" id="workers-value">0</span></div>
           <div class="stat" id="stat-creatures"><span class="label">Minions</span><span class="value" id="creatures-value">0</span></div>
           <div class="stat" id="stat-objective"><span class="label">Mission</span><span class="value" id="objective-value">—</span></div>
@@ -35,6 +37,7 @@
           <button class="tool" data-tool="dig" title="Mark Dig (2)">⛏ Dig</button>
           <button class="tool" data-tool="claim" title="Mark Claim (3)">⚑ Claim</button>
           <button class="tool" data-tool="fortify" title="Fortify (4)">🧱 Fortify</button>
+          <button class="tool" data-tool="sell" title="Sell room (X) — recover half the gold">💰 Sell</button>
           <button class="spell" data-spell="createWorker" id="btn-create-worker" title="Create Scrabbler (Q) — cost scales">✨ Worker</button>
           <button type="button" id="btn-build-desktop" class="sheet-toggle" title="Build rooms" aria-expanded="false">🏗 Build</button>
           <button type="button" id="btn-spells-desktop" class="sheet-toggle" title="Spells" aria-expanded="false">🪄 Spells</button>
@@ -46,6 +49,7 @@
           <button class="tool" data-tool="dig" title="Dig">⛏</button>
           <button class="tool" data-tool="claim" title="Claim">⚑</button>
           <button class="tool" data-tool="fortify" title="Fortify">🧱</button>
+          <button class="tool" data-tool="sell" title="Sell">💰</button>
           <button class="spell" data-spell="createWorker" title="Create Worker">✨</button>
           <button type="button" id="btn-build" class="sheet-toggle" title="Build rooms" aria-expanded="false">🏗</button>
           <button type="button" id="btn-spells" class="sheet-toggle" title="Spells" aria-expanded="false">🪄</button>
@@ -68,6 +72,8 @@
             <button class="tool room-tool" data-tool="graveyard" title="Graveyard — 250 gold (raise Bonewretches)">🪦 Graveyard<span class="cost">250g</span></button>
             <button class="tool room-tool" data-tool="temple" title="Temple — 300 gold (prayer mood buff / talisman)">🛕 Temple<span class="cost">300g</span></button>
             <button class="tool room-tool" data-tool="combatPit" title="Combat Pit — 350 gold (train past level 4)">⚔ Combat Pit<span class="cost">350g</span></button>
+            <button class="tool room-tool" data-tool="casino" title="Wagerden — 225 gold (idle minions gamble)">🎲 Wagerden<span class="cost">225g</span></button>
+            <button class="tool room-tool" data-tool="sell" title="Sell a room — recover half the gold">💰 Sell<span class="cost">50%</span></button>
             <button class="tool room-tool" data-tool="door" title="Wooden Door — 75 gold (or Workshop kit)">🚪 Door<span class="cost">75g</span></button>
             <button class="tool room-tool" data-tool="sentry" title="Sentry Trap — 150 gold">🏹 Sentry<span class="cost">150g</span></button>
             <button class="tool room-tool" data-tool="rally" title="Rally Flag — 40 gold (call to arms)">🚩 Rally<span class="cost">40g</span></button>
@@ -83,6 +89,8 @@
             <button class="spell" data-spell="lightning" title="Lightning">⚡ Lightning</button>
             <button class="spell" data-spell="heal" title="Heal (research unlock)">💚 Heal</button>
             <button class="spell" data-spell="possess" title="Possess (P) — ride a minion">👁 Possess</button>
+            <button class="spell" data-spell="sight" title="Sight of Evil (I) — reveal fog">👁‍🗨 Sight</button>
+            <button class="spell" data-spell="callToArms" title="Call to Arms (Z) — muster fighters">📯 Call</button>
           </div>
         </div>
 
@@ -107,8 +115,8 @@
           <div class="insp-row"><span>Job</span><span id="insp-job">—</span></div>
           <div class="insp-row"><span>HP</span><span id="insp-hp">—</span></div>
           <div class="insp-bar"><div id="insp-hp-bar"></div></div>
-          <div class="insp-row"><span>Hunger</span><span id="insp-hunger">—</span></div>
-          <div class="insp-row"><span>Tired</span><span id="insp-tired">—</span></div>
+          <div class="insp-row" id="insp-hunger-row"><span>Hunger</span><span id="insp-hunger">—</span></div>
+          <div class="insp-row" id="insp-tired-row"><span>Tired</span><span id="insp-tired">—</span></div>
           <div class="insp-row"><span>Mood</span><span id="insp-mood">—</span></div>
           <div class="insp-bar mood"><div id="insp-mood-bar"></div></div>
           <div class="insp-row"><span>Efficiency</span><span id="insp-efficiency">—</span></div>

@@ -6,6 +6,7 @@ import {
   dirtTex,
   earthTex,
   fortifiedTex,
+  gemVeinTex,
   goldVeinTex,
   hatcheryFloorTex,
   heartFloorTex,
@@ -116,6 +117,7 @@ export function makeClaimedFloorMesh(room: RoomType): THREE.Group {
     [RoomType.Graveyard]: 0x507060,
     [RoomType.Temple]: 0xc0a050,
     [RoomType.CombatPit]: 0xa05040,
+    [RoomType.Casino]: 0xc060a0,
   };
   const slabColor = roomTint[room] ?? 0xc2b5a0;
   const slabEmissive =
@@ -145,7 +147,9 @@ export function makeClaimedFloorMesh(room: RoomType): THREE.Group {
                             ? 0x403010
                             : room === RoomType.CombatPit
                               ? 0x401810
-                              : 0x301048;
+                              : room === RoomType.Casino
+                                ? 0x401028
+                                : 0x301048;
 
   const under = new THREE.Mesh(
     cachedGeo('claimed-under-v7', () => new THREE.BoxGeometry(TILE_SIZE * 0.98, 0.14, TILE_SIZE * 0.98)),
@@ -288,16 +292,25 @@ export function makeGoldVeinGeo(): THREE.BufferGeometry {
 export function makeWallFaceDetail(kind: TileKind, fortified = false): THREE.Group {
   const g = new THREE.Group();
   const isGold = kind === TileKind.Gold;
+  const isGem = kind === TileKind.Gem;
   const isRock = kind === TileKind.Rock;
   const faceMat = cachedMat(
-    fortified ? 'wall-face-fort-v8' : isGold ? 'wall-face-gold-v8' : isRock ? 'wall-face-rock-v8' : 'wall-face-earth-v8',
+    fortified
+      ? 'wall-face-fort-v8'
+      : isGem
+        ? 'wall-face-gem-v8'
+        : isGold
+          ? 'wall-face-gold-v8'
+          : isRock
+            ? 'wall-face-rock-v8'
+            : 'wall-face-earth-v8',
     () =>
       new THREE.MeshStandardMaterial({
-        color: fortified ? 0x918a82 : isGold ? 0xa66b24 : isRock ? 0x707784 : 0x9b6030,
-        metalness: fortified ? 0.32 : isGold ? 0.35 : 0.06,
-        roughness: fortified ? 0.58 : 0.88,
-        emissive: isGold ? 0x6a3908 : 0x080604,
-        emissiveIntensity: isGold ? 0.3 : 0.04,
+        color: fortified ? 0x918a82 : isGem ? 0x2aa090 : isGold ? 0xa66b24 : isRock ? 0x707784 : 0x9b6030,
+        metalness: fortified ? 0.32 : isGem ? 0.55 : isGold ? 0.35 : 0.06,
+        roughness: fortified ? 0.58 : isGem ? 0.22 : 0.88,
+        emissive: isGem ? 0x146858 : isGold ? 0x6a3908 : 0x080604,
+        emissiveIntensity: isGem ? 0.45 : isGold ? 0.3 : 0.04,
       })
   );
   const stoneGeo = cachedGeo('wall-face-stone-v8', () => new THREE.DodecahedronGeometry(0.24, 0));
@@ -1292,6 +1305,15 @@ export function floorMaterial(kind: TileKind, room: RoomType): THREE.MeshStandar
         bump: 0.12,
         color: 0xb05040,
       });
+    case RoomType.Casino:
+      return texturedMat('floor-training', trainingFloorTex(), {
+        metalness: 0.28,
+        roughness: 0.55,
+        emissive: 0x401028,
+        emissiveIntensity: 0.22,
+        bump: 0.1,
+        color: 0xc070a0,
+      });
     default:
       return texturedMat('floor-claimed-v2', claimedStoneTex(), {
         color: 0xb8a890,
@@ -1324,6 +1346,7 @@ export function makeRoomDecal(room: RoomType): THREE.Mesh | null {
     [RoomType.Graveyard]: { kind: 'runes', color: [70, 110, 90], emissive: 0x206040, ei: 0.3, size: 1.45 },
     [RoomType.Temple]: { kind: 'runes', color: [200, 170, 80], emissive: 0xc09030, ei: 0.45, size: 1.5 },
     [RoomType.CombatPit]: { kind: 'worn', color: [180, 70, 50], emissive: 0xa03020, ei: 0.3, size: 1.45 },
+    [RoomType.Casino]: { kind: 'goldRing', color: [210, 80, 160], emissive: 0xc04080, ei: 0.4, size: 1.45 },
   };
   const s = specs[room];
   if (!s) return null;
@@ -1384,6 +1407,15 @@ export function tileMaterial(kind: TileKind, fortified: boolean, _room: RoomType
         emissive: 0xe0a018,
         emissiveIntensity: 0.95,
         bump: 0.08,
+        vertexColors: true,
+      });
+    case TileKind.Gem:
+      return texturedMat('gem-v1', gemVeinTex(), {
+        metalness: 0.92,
+        roughness: 0.16,
+        emissive: 0x20c0a0,
+        emissiveIntensity: 1.05,
+        bump: 0.07,
         vertexColors: true,
       });
     case TileKind.Dirt:
@@ -1851,6 +1883,34 @@ export function makeRoomProps(room: RoomType, variant = 0): THREE.Group | null {
     blade.position.set(0.35, 0.55, 0.35);
     blade.rotation.z = 0.35;
     g.add(blade);
+  } else if (room === RoomType.Casino) {
+    const felt = new THREE.MeshStandardMaterial({
+      color: 0x6a2048,
+      roughness: 0.7,
+      metalness: 0.12,
+      emissive: 0x401020,
+      emissiveIntensity: 0.25,
+    });
+    const brass = new THREE.MeshStandardMaterial({
+      color: 0xd4a040,
+      metalness: 0.8,
+      roughness: 0.3,
+      emissive: 0x804010,
+      emissiveIntensity: 0.35,
+    });
+    const table = new THREE.Mesh(new THREE.CylinderGeometry(0.62, 0.66, 0.16, 12), felt);
+    table.position.set(0, 0.28, 0);
+    table.receiveShadow = true;
+    g.add(table);
+    const rim = new THREE.Mesh(new THREE.TorusGeometry(0.64, 0.04, 6, 16), brass);
+    rim.rotation.x = Math.PI / 2;
+    rim.position.set(0, 0.36, 0);
+    g.add(rim);
+    for (const [px, pz] of [[-0.22, 0.12], [0.18, -0.16], [0.08, 0.2]]) {
+      const coin = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.08, 0.03, 8), brass);
+      coin.position.set(px, 0.4, pz);
+      g.add(coin);
+    }
   } else {
     return null;
   }
@@ -1859,6 +1919,31 @@ export function makeRoomProps(room: RoomType, variant = 0): THREE.Group | null {
 
 
 /** Bright sparkle accents for gold seams (overview-readable). */
+export function makeGemGlitter(): THREE.Group {
+  const g = new THREE.Group();
+  const mat = new THREE.MeshStandardMaterial({
+    color: 0xc8fff4,
+    emissive: 0x40e0c0,
+    emissiveIntensity: 1.7,
+    metalness: 0.95,
+    roughness: 0.08,
+  });
+  const spots = [
+    [0.32, 1.75, 0.18],
+    [-0.38, 1.4, -0.28],
+    [0.08, 2.05, -0.4],
+    [-0.22, 1.95, 0.38],
+    [0.42, 1.15, 0.3],
+    [-0.48, 2.2, 0.08],
+  ];
+  for (const [x, y, z] of spots) {
+    const s = new THREE.Mesh(new THREE.OctahedronGeometry(0.12, 0), mat);
+    s.position.set(x, y, z);
+    g.add(s);
+  }
+  return g;
+}
+
 export function makeGoldGlitter(): THREE.Group {
   const g = new THREE.Group();
   const mat = new THREE.MeshStandardMaterial({

@@ -4,13 +4,14 @@ import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
 import { ShaderPass } from 'three/examples/jsm/postprocessing/ShaderPass.js';
 import { Grid } from '../game/Grid';
-import { DoorState, TILE_SIZE, TileKind, TrapType } from '../game/types';
+import { DoorState, TILE_SIZE, TileKind, TrapType, isDiggableKind } from '../game/types';
 import {
   floorMaterial,
   makeBlockEdgeGeo,
   makeClaimedFloorMesh,
   makeCreatureMesh,
   makeFloorGeo,
+  makeGemGlitter,
   makeGoldGlitter,
   makeGoldVeinGeo,
   makeHeartGeo,
@@ -416,8 +417,8 @@ export class DungeonRenderer {
         continue;
       }
 
-      if (tile.kind === TileKind.Earth || tile.kind === TileKind.Gold) {
-        const geo = tile.kind === TileKind.Gold ? makeGoldVeinGeo() : makeWallGeo();
+      if (isDiggableKind(tile.kind)) {
+        const geo = tile.kind === TileKind.Gold || tile.kind === TileKind.Gem ? makeGoldVeinGeo() : makeWallGeo();
         const mesh = new THREE.Mesh(geo, tileMaterial(tile.kind, false, tile.room));
         mesh.position.set(w.x, 0, w.z);
         mesh.rotation.y = this.tileRotation(tile.x, tile.y);
@@ -433,8 +434,8 @@ export class DungeonRenderer {
         mesh.userData.tileY = tile.y;
         this.addExposedWallFaces(grid, tile.x, tile.y, mesh, tile.kind, false);
         this.gridGroup.add(mesh);
-        if (tile.kind === TileKind.Gold && dig < 0.85) {
-          const glitter = makeGoldGlitter();
+        if ((tile.kind === TileKind.Gold || tile.kind === TileKind.Gem) && dig < 0.85) {
+          const glitter = tile.kind === TileKind.Gem ? makeGemGlitter() : makeGoldGlitter();
           glitter.position.set(w.x, mesh.position.y, w.z);
           glitter.scale.set(s, sy, s);
           glitter.userData.glitterFor = key;
@@ -446,7 +447,7 @@ export class DungeonRenderer {
           w.x,
           w.z,
           Math.max(0.4, edgeH),
-          tile.kind === TileKind.Gold ? this.goldEdgeMat : this.earthEdgeMat
+          tile.kind === TileKind.Gem ? this.goldEdgeMat : tile.kind === TileKind.Gold ? this.goldEdgeMat : this.earthEdgeMat
         );
         this.tileMeshes.set(key, mesh);
         // Marks drawn via markOverlay — avoid per-rebuild Plane/Edges allocations
@@ -543,13 +544,11 @@ export class DungeonRenderer {
         const solidX =
           (!!grid.get(tile.x + 1, tile.y) &&
             (grid.get(tile.x + 1, tile.y)!.fortified ||
-              grid.get(tile.x + 1, tile.y)!.kind === TileKind.Earth ||
-              grid.get(tile.x + 1, tile.y)!.kind === TileKind.Gold ||
+              isDiggableKind(grid.get(tile.x + 1, tile.y)!.kind) ||
               grid.get(tile.x + 1, tile.y)!.kind === TileKind.Rock)) ||
           (!!grid.get(tile.x - 1, tile.y) &&
             (grid.get(tile.x - 1, tile.y)!.fortified ||
-              grid.get(tile.x - 1, tile.y)!.kind === TileKind.Earth ||
-              grid.get(tile.x - 1, tile.y)!.kind === TileKind.Gold ||
+              isDiggableKind(grid.get(tile.x - 1, tile.y)!.kind) ||
               grid.get(tile.x - 1, tile.y)!.kind === TileKind.Rock));
         if (!solidX) door.rotation.y = Math.PI / 2;
         this.gridGroup.add(door);
@@ -584,7 +583,7 @@ export class DungeonRenderer {
         ];
         for (const [dx, dy, px, pz] of neighbors) {
           const n = grid.get(tile.x + dx, tile.y + dy);
-          if (n && (n.kind === TileKind.Earth || n.kind === TileKind.Gold || n.kind === TileKind.Rock || n.fortified)) {
+          if (n && (isDiggableKind(n.kind) || n.kind === TileKind.Rock || n.fortified)) {
             ox = px;
             oz = pz;
             break;
@@ -644,7 +643,7 @@ export class DungeonRenderer {
       const dig = Math.max(0, Math.min(0.95, tile.digProgress || 0));
       const sy = 1 - dig * 0.85;
       const yBase =
-        tile.kind === TileKind.Earth || tile.kind === TileKind.Gold
+        isDiggableKind(tile.kind)
           ? Math.max(0.5, 2.42 * sy - dig * 1.15)
           : 0.2;
       const markMat = new THREE.MeshBasicMaterial({
@@ -658,7 +657,7 @@ export class DungeonRenderer {
       mark.rotation.x = -Math.PI / 2;
       mark.position.set(w.x, yBase, w.z);
       this.markOverlay.add(mark);
-      if (tile.mark === 1 && (tile.kind === TileKind.Earth || tile.kind === TileKind.Gold)) {
+      if (tile.mark === 1 && isDiggableKind(tile.kind)) {
         const wireMat = new THREE.LineBasicMaterial({ color: 0xff4422, transparent: true, opacity: 0.85 });
         wireMat.userData.disposeMat = true;
         const wire = new THREE.LineSegments(this.digWireGeo, wireMat);
@@ -682,8 +681,7 @@ export class DungeonRenderer {
       if (!tile.explored) {
         // DK2 overview shows the earth mass; don't black-box solid cubes
         const solidMass =
-          tile.kind === TileKind.Earth ||
-          tile.kind === TileKind.Gold ||
+          isDiggableKind(tile.kind) ||
           tile.kind === TileKind.Rock ||
           tile.fortified;
         if (!solidMass) fogged.push(tile);
@@ -747,7 +745,7 @@ export class DungeonRenderer {
       if (child.userData?.glitterFor === key) {
         child.position.y = mesh.position.y;
         child.scale.set(s, sy, s);
-        child.visible = dig < 0.85 && kind === TileKind.Gold;
+        child.visible = dig < 0.85 && (kind === TileKind.Gold || kind === TileKind.Gem);
       }
     }
   }

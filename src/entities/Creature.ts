@@ -40,6 +40,8 @@ export class Creature {
   leaveWarned = false;
   /** Fired once while workEfficiency is below sluggish threshold. */
   efficiencyWarned = false;
+  /** Seconds of slap-driven work haste (workers keep their job). */
+  slapWorkBuff = 0;
   selected = false;
   trainNeed = 0;
   held = false;
@@ -117,8 +119,8 @@ export class Creature {
     const fin = (n: number, fallback = 0) => (Number.isFinite(n) ? n : fallback);
     this.maxHp = Math.max(1, fin(this.maxHp, 1));
     this.hp = Math.max(0, Math.min(this.maxHp, fin(this.hp, this.maxHp)));
-    this.hunger = Math.max(0, Math.min(100, fin(this.hunger)));
-    this.sleepNeed = Math.max(0, Math.min(100, fin(this.sleepNeed)));
+    this.hunger = this.isWorker ? 0 : Math.max(0, Math.min(100, fin(this.hunger)));
+    this.sleepNeed = this.isWorker ? 0 : Math.max(0, Math.min(100, fin(this.sleepNeed)));
     this.mood = Math.max(0, Math.min(100, fin(this.mood, 72)));
     this.wx = fin(this.wx);
     this.wz = fin(this.wz);
@@ -285,7 +287,8 @@ export class Creature {
     let eff = 0.5 + (mood / 100) * 0.7;
     if (this.prayerBuff > 0) eff += 0.05;
     if (this.hasTalisman) eff += 0.03;
-    return Number.isFinite(eff) ? Math.max(0.5, Math.min(1.25, eff)) : 0.85;
+    if (this.slapWorkBuff > 0) eff += 0.12;
+    return Number.isFinite(eff) ? Math.max(0.5, Math.min(1.35, eff)) : 0.85;
   }
 
   pulseTint(mode: 'heal' | 'feast', seconds = 0.85): void {

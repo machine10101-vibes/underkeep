@@ -150,7 +150,9 @@ if (
     params.get('shot') === '7.4-flee' ||
     params.get('shot') === '74-flee' ||
     params.get('shot') === '10' ||
-    params.get('shot') === 'pass10')
+    params.get('shot') === 'pass10' ||
+    params.get('shot') === '10.1' ||
+    params.get('shot') === '101')
 ) {
   // Auto-arrange evidence shots
   setTimeout(() => {
@@ -176,10 +178,12 @@ if (
       preparePass73Shot?: (focus?: 'prison' | 'torture' | 'graveyard' | 'efficiency' | 'both') => void;
       preparePass74Shot?: (focus?: 'temple' | 'combatPit' | 'roster' | 'flee' | 'both') => void;
       preparePass10Shot?: () => void;
+      preparePass101Shot?: () => void;
     };
     g.hud.hideOverlay();
     const shot = params.get('shot');
-    if (shot === '10' || shot === 'pass10') g.preparePass10Shot?.();
+    if (shot === '10.1' || shot === '101') g.preparePass101Shot?.();
+    else if (shot === '10' || shot === 'pass10') g.preparePass10Shot?.();
     else if (shot === '8' || shot === '8.0') g.preparePass8Shot?.();
     else if (shot === '7' || shot === '7.0') g.preparePass7Shot?.();
     else if (shot === '7.4-temple' || shot === '74-temple') g.preparePass74Shot?.('temple');

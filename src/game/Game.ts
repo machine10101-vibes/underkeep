@@ -4229,6 +4229,39 @@ export class Game {
     this.hud.sayNow('Scrabblers never rest. Sell rooms. Sight peels the fog. The Heart keeps score.');
   }
 
+  /** QA: Dig paint stays on tagged cubes; workers leave a full Heart vault. */
+  preparePass101Shot(): void {
+    this.hud.hideOverlay();
+    const hx = this.grid.heartPos.x;
+    const hy = this.grid.heartPos.y;
+    for (const t of this.grid.tiles) {
+      if (t.mark === MarkType.Dig) t.mark = MarkType.None;
+    }
+    this.tool = 'dig';
+    this.lastPaint = null;
+    for (let i = 0; i < 5; i++) this.applyTool(hx - 1 + i, hy + 3);
+    this.gold = this.vaultCap();
+    const heartW = this.grid.tileToWorld(hx, hy);
+    for (const w of this.creatures) {
+      if (!w.alive || !w.isWorker) continue;
+      w.goldCarried = 90;
+      w.job = JobType.Haul;
+      w.jobTarget = { x: hx, y: hy };
+      w.setPath(null);
+      w.x = hx;
+      w.y = hy;
+      w.wx = heartW.x;
+      w.wz = heartW.z;
+    }
+    for (let i = 0; i < 48; i++) this.update(0.05);
+    const focus = this.grid.tileToWorld(hx + 0.4, hy + 2.1);
+    this.camTarget.set(focus.x, 0, focus.z);
+    this.renderer.camera.position.set(focus.x + 4.2, 21, focus.z + 13.5);
+    this.renderer.camera.lookAt(this.camTarget);
+    this.hud.setTooltip('Dig marks stay on the cubes you tagged · full vault, still digging');
+    this.hud.sayNow('The vault is full. They keep the gold in their claws and return to the vein.');
+  }
+
   /**
    * Headless guide-loop smoke: mark starting gold, simulate time, sell a room, slap a worker.
    * Used by the QA harness — not player-facing.

@@ -1,6 +1,6 @@
 import { SpellId, ToolMode } from '../game/types';
 
-const ROOM_TOOLS: ToolMode[] = ['treasury', 'lair', 'hatchery', 'training', 'library', 'portal', 'guard', 'workshop', 'prison', 'torture', 'graveyard', 'temple', 'combatPit', 'casino', 'door', 'sentry', 'rally', 'bridgeWood', 'bridgeStone', 'sell'];
+const ROOM_TOOLS: ToolMode[] = ['treasury', 'lair', 'hatchery', 'training', 'library', 'guard', 'workshop', 'prison', 'torture', 'graveyard', 'temple', 'combatPit', 'casino', 'door', 'sentry', 'rally', 'bridgeWood', 'bridgeStone', 'sell'];
 
 export class HUD {
   private goldEl: HTMLElement;
@@ -224,7 +224,7 @@ export class HUD {
     if (!rows.length) {
       const empty = document.createElement('div');
       empty.className = 'roster-hint';
-      empty.textContent = 'No minions yet — dig, claim, and open a Portal.';
+      empty.textContent = 'No minions yet — dig to the Portal and claim it.';
       this.rosterList.appendChild(empty);
       return;
     }
@@ -429,15 +429,18 @@ export class HUD {
     void label;
   }
 
-  /** Draw explored/claimed overview with Heart marker. */
+  /** Draw explored/claimed overview with Heart + buried Portal markers. */
   drawMinimap(opts: {
     width: number;
     height: number;
     heartX: number;
     heartY: number;
+    portalX: number;
+    portalY: number;
     kindAt: (x: number, y: number) => number;
     exploredAt: (x: number, y: number) => boolean;
     roomAt: (x: number, y: number) => number;
+    claimedPortalAt?: (x: number, y: number) => boolean;
   }): void {
     const canvas = this.minimap;
     const ctx = this.minimapCtx;
@@ -477,8 +480,20 @@ export class HUD {
         if (kind === 4 && room === 12) color = '#c0a040'; // Temple
         if (kind === 4 && room === 13) color = '#a04030'; // Combat Pit
         if (kind === 4 && room === 14) color = '#c060a0'; // Wagerden
+        if (room === 6) color = kind === 4 ? '#c080ff' : '#4a2080'; // Portal
         ctx.fillStyle = color;
         ctx.fillRect(ox + x * cell, oy + y * cell, Math.max(1, cell), Math.max(1, cell));
+      }
+    }
+    // DK2 map shadow — the buried Portal reads even through fog
+    for (let dy = -1; dy <= 1; dy++) {
+      for (let dx = -1; dx <= 1; dx++) {
+        const px = opts.portalX + dx;
+        const py = opts.portalY + dy;
+        if (px < 0 || py < 0 || px >= gw || py >= gh) continue;
+        const claimed = opts.claimedPortalAt?.(px, py);
+        ctx.fillStyle = claimed ? '#c080ff' : '#2a1048';
+        ctx.fillRect(ox + px * cell, oy + py * cell, Math.max(1, cell), Math.max(1, cell));
       }
     }
     // Heart marker (pulsing ring)
@@ -493,6 +508,15 @@ export class HUD {
     ctx.beginPath();
     ctx.arc(hx, hy, Math.max(1.5, cell * 0.45), 0, Math.PI * 2);
     ctx.fill();
+    if (opts.portalX > 0 || opts.portalY > 0) {
+      const px = ox + (opts.portalX + 0.5) * cell;
+      const py = oy + (opts.portalY + 0.5) * cell;
+      ctx.strokeStyle = '#a060ff';
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.arc(px, py, Math.max(2.5, cell * 1.35), 0, Math.PI * 2);
+      ctx.stroke();
+    }
   }
 
   showOverlay(title: string, msg: string, btn = 'Continue', secondaryBtn?: string): void {
@@ -517,7 +541,13 @@ export class HUD {
 }
 
 export const MENTOR_LINES = {
-  start: "The earth awaits your cruelty, Keeper. Dig. Claim. Thrive.",
+  start: "A Portal sleeps in the rock. Dig to it. Claim it. Then the hungry things will come.",
+  portalCannotBuild: "Portals cannot be built. Dig to the gateway buried in the earth and claim it.",
+  portalCannotSell: "The Portal cannot be sold or destroyed. It is a wound in the world, not a floor tile.",
+  portalClaimed: "The Portal is yours. Beds and chickens decide who crosses. No Lair, and the veil stays shut.",
+  portalSack: "Back through the veil. Wasteful — but the Portal does not argue.",
+  needLair: "They will not come without a bed. Raise a Lair.",
+  biggerLair: "Your creatures need a bigger Lair. The Portal waits.",
   resume: "Welcome back, Keeper. Your dungeon endures — dig on.",
   newGame: "A fresh Underkeep. The old one is dust.",
   firstGold: "Ah, glittering greed. Stockpile it — Scrabblers don't dig for free forever.",
@@ -626,7 +656,7 @@ export const MENTOR_LINES = {
   gemSeam: "A gem seam! It never runs dry — haul until the vault groans.",
   treasuryFull: "The vault is full. Build more Treasury, or gold stays in their claws.",
   trainGold: "Training costs gold. Empty coffers mean idle claws.",
-  portalFull: "The Portal is crowded. Expand it — or the veil stays shut.",
+  portalFull: "The Portal is crowded. Sack a minion, or find another gateway.",
   casinoBuilt: "Wagerden opens. Idle minions will gamble their moods into shape.",
   gambling: "Dice clatter in the Wagerden. Fortune is a cheap friend.",
   heartDefend: "Scrabblers defend the Heart! Even workers have teeth when home burns.",

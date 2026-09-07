@@ -5,6 +5,8 @@ export class Grid {
   readonly height: number;
   readonly tiles: Tile[];
   heartPos: Vec2 = { x: 0, y: 0 };
+  /** Center of the map-placed Portal chamber (DK2: found, not built). */
+  portalPos: Vec2 = { x: 0, y: 0 };
 
   constructor(width = 48, height = 48) {
     this.width = width;
@@ -210,9 +212,81 @@ export class Grid {
       }
     }
 
+    // Neutral Portal chamber — buried in the earth; the Keeper must dig to it
+    this.placeMapPortal();
+
     // Place a few torches on claimed tiles near walls
     this.refreshTorches();
     this.seedExploration();
+  }
+
+  /**
+   * DK2 Portal: a 3×3 gateway found on the map, never built.
+   * Picked at random among legal chambers, then buried until the Keeper digs in.
+   */
+  private placeMapPortal(): void {
+    const hx = this.heartPos.x;
+    const hy = this.heartPos.y;
+    const candidates: Vec2[] = [];
+    for (let y = 4; y < this.height - 4; y++) {
+      for (let x = 4; x < this.width - 4; x++) {
+        if (Math.max(Math.abs(x - hx), Math.abs(y - hy)) < 8) continue;
+        if (this.portalChamberFits(x, y)) candidates.push({ x, y });
+      }
+    }
+    if (candidates.length) {
+      const pick = candidates[Math.floor(Math.random() * candidates.length)];
+      this.carvePortalChamber(pick.x, pick.y);
+      this.portalPos = pick;
+      return;
+    }
+    const fallback = { x: Math.max(5, hx - 10), y: Math.max(5, Math.min(this.height - 6, hy)) };
+    this.carvePortalChamber(fallback.x, fallback.y);
+    this.portalPos = fallback;
+  }
+
+  private portalChamberFits(cx: number, cy: number): boolean {
+    const hx = this.heartPos.x;
+    const hy = this.heartPos.y;
+    if (Math.max(Math.abs(cx - hx), Math.abs(cy - hy)) < 8) return false;
+    for (let dy = -1; dy <= 1; dy++) {
+      for (let dx = -1; dx <= 1; dx++) {
+        const t = this.get(cx + dx, cy + dy);
+        if (!t) return false;
+        if (t.kind === TileKind.Heart || t.kind === TileKind.Rock || t.kind === TileKind.Gem) return false;
+        if (t.kind === TileKind.Claimed) return false;
+        if (t.kind === TileKind.Lava || t.kind === TileKind.Water) return false;
+        if (t.room !== RoomType.None) return false;
+      }
+    }
+    return true;
+  }
+
+  private carvePortalChamber(cx: number, cy: number): boolean {
+    const cells: Tile[] = [];
+    for (let dy = -1; dy <= 1; dy++) {
+      for (let dx = -1; dx <= 1; dx++) {
+        const t = this.get(cx + dx, cy + dy);
+        if (!t) return false;
+        if (t.kind === TileKind.Heart || t.kind === TileKind.Rock || t.kind === TileKind.Gem) return false;
+        if (t.kind === TileKind.Claimed) return false;
+        cells.push(t);
+      }
+    }
+    for (const t of cells) {
+      t.kind = TileKind.Dirt;
+      t.room = RoomType.Portal;
+      t.goldAmount = 0;
+      t.fortified = false;
+      t.digProgress = 0;
+      t.claimedProgress = 0;
+      t.mark = MarkType.None;
+      t.explored = false;
+      t.door = DoorState.None;
+      t.trap = TrapType.None;
+      t.rally = false;
+    }
+    return true;
   }
 
   /** Carve a soft blob of lava/water into diggable earth (keeps clear of heart). */
@@ -339,6 +413,30 @@ export class Grid {
     let n = 0;
     for (const t of this.tiles) if (t.room === room) n++;
     return n;
+  }
+
+  /** Claimed tiles of a room — unclaimed map Portals do not count. */
+  countClaimedRoom(room: RoomType): number {
+    let n = 0;
+    for (const t of this.tiles) {
+      if (t.room === room && t.kind === TileKind.Claimed) n++;
+    }
+    return n;
+  }
+
+  hasClaimedPortal(): boolean {
+    return this.countClaimedRoom(RoomType.Portal) > 0;
+  }
+
+  /** Recompute the gateway center from Portal tiles (save restore / extra chambers). */
+  restorePortalPos(): void {
+    const pts = this.tiles.filter((t) => t.room === RoomType.Portal);
+    if (!pts.length) return;
+    const minX = Math.min(...pts.map((t) => t.x));
+    const maxX = Math.max(...pts.map((t) => t.x));
+    const minY = Math.min(...pts.map((t) => t.y));
+    const maxY = Math.max(...pts.map((t) => t.y));
+    this.portalPos = { x: Math.round((minX + maxX) / 2), y: Math.round((minY + maxY) / 2) };
   }
 
   /** Largest 4-connected contiguous block of a room type. */
@@ -479,6 +577,8 @@ export class Grid {
   seedExploration(): void {
     for (const t of this.tiles) t.explored = false;
     for (const t of this.tiles) {
+      // Buried map Portals stay fogged — the Keeper must dig to the wound.
+      if (t.room === RoomType.Portal) continue;
       if (
         t.kind === TileKind.Claimed ||
         t.kind === TileKind.Heart ||
@@ -490,6 +590,7 @@ export class Grid {
     // LOS: solids adjacent to claimed/heart are visible wall faces
     for (const t of this.tiles) {
       if (!t.explored) continue;
+      if (t.room === RoomType.Portal) continue;
       if (
         t.kind !== TileKind.Claimed &&
         t.kind !== TileKind.Heart &&

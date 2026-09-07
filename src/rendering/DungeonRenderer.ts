@@ -4,7 +4,7 @@ import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
 import { ShaderPass } from 'three/examples/jsm/postprocessing/ShaderPass.js';
 import { Grid } from '../game/Grid';
-import { DoorState, TILE_SIZE, TileKind, TrapType, isDiggableKind } from '../game/types';
+import { DoorState, RoomType, TILE_SIZE, TileKind, TrapType, isDiggableKind } from '../game/types';
 import {
   floorMaterial,
   makeBlockEdgeGeo,
@@ -534,7 +534,11 @@ export class DungeonRenderer {
         this.gridGroup.add(decal);
       }
 
-      const props = makeRoomProps(tile.room, Math.abs(tile.x * 3 + tile.y * 5));
+      const portalHub =
+        tile.room === RoomType.Portal &&
+        tile.x === grid.portalPos.x &&
+        tile.y === grid.portalPos.y;
+      const props = makeRoomProps(tile.room, portalHub ? 0 : 1);
       if (props) {
         props.position.set(w.x, 0.14, w.z);
         this.gridGroup.add(props);

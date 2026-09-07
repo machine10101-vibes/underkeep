@@ -167,7 +167,7 @@ export function makeClaimedFloorMesh(room: RoomType): THREE.Group {
       metalness: room === RoomType.Treasury ? 0.48 : room === RoomType.Portal ? 0.35 : 0.16,
       roughness: room === RoomType.Treasury ? 0.38 : 0.62,
       emissive: slabEmissive,
-      emissiveIntensity: room === RoomType.None ? 0.2 : 0.2,
+      emissiveIntensity: room === RoomType.None ? 0.08 : 0.1,
       map: room === RoomType.None ? claimedStoneTex() : null,
     })
   );
@@ -491,7 +491,7 @@ export function makeHeartGeo(): THREE.Group {
     group.add(ember);
   }
 
-  const light = new THREE.PointLight(0xff4058, 2.2, 12, 2);
+  const light = new THREE.PointLight(0xff4058, 3.4, 16, 1.8);
   light.position.y = 1.8;
   light.castShadow = false;
   group.add(light);
@@ -537,7 +537,7 @@ export function makeTorchMesh(withLight = true): THREE.Group {
   g.add(glow);
 
   if (withLight) {
-    const light = new THREE.PointLight(0xff9944, 3.2, 14, 1.6);
+    const light = new THREE.PointLight(0xff9944, 4.4, 18, 1.5);
     light.position.y = 1.9;
     light.castShadow = false;
     g.add(light);

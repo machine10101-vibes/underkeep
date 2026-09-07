@@ -164,15 +164,15 @@ export const CREATURE_STATS: Record<
   CreatureKind,
   { hp: number; speed: number; damage: number; goldWage: number; color: number; scale: number }
 > = {
-  [CreatureKind.Scrabbler]: { hp: 40, speed: 3.8, damage: 4, goldWage: 0, color: 0x6a8a40, scale: 1.55 },
-  [CreatureKind.Skitterwing]: { hp: 50, speed: 4.0, damage: 6, goldWage: 8, color: 0x40c0a0, scale: 0.6 },
-  [CreatureKind.Rattlekin]: { hp: 80, speed: 2.6, damage: 12, goldWage: 15, color: 0x8a7050, scale: 0.75 },
-  [CreatureKind.Emberling]: { hp: 90, speed: 2.4, damage: 16, goldWage: 25, color: 0xe05020, scale: 0.8 },
-  [CreatureKind.Gravemage]: { hp: 70, speed: 2.2, damage: 10, goldWage: 20, color: 0x7050c0, scale: 0.78 },
-  [CreatureKind.Thornwitch]: { hp: 85, speed: 2.5, damage: 15, goldWage: 22, color: 0xa03060, scale: 0.78 },
-  [CreatureKind.Bonewretch]: { hp: 55, speed: 2.8, damage: 11, goldWage: 0, color: 0xd8d0b8, scale: 0.72 },
-  [CreatureKind.HeroKnight]: { hp: 120, speed: 2.2, damage: 18, goldWage: 0, color: 0xc0c8d8, scale: 0.85 },
-  [CreatureKind.HeroArcher]: { hp: 70, speed: 2.5, damage: 14, goldWage: 0, color: 0x5080a0, scale: 0.7 },
+  [CreatureKind.Scrabbler]: { hp: 40, speed: 4.6, damage: 4, goldWage: 0, color: 0x6a8a40, scale: 1.55 },
+  [CreatureKind.Skitterwing]: { hp: 50, speed: 4.6, damage: 6, goldWage: 8, color: 0x40c0a0, scale: 0.6 },
+  [CreatureKind.Rattlekin]: { hp: 80, speed: 3.1, damage: 12, goldWage: 15, color: 0x8a7050, scale: 0.75 },
+  [CreatureKind.Emberling]: { hp: 90, speed: 2.9, damage: 16, goldWage: 25, color: 0xe05020, scale: 0.8 },
+  [CreatureKind.Gravemage]: { hp: 70, speed: 2.6, damage: 10, goldWage: 20, color: 0x7050c0, scale: 0.78 },
+  [CreatureKind.Thornwitch]: { hp: 85, speed: 2.9, damage: 15, goldWage: 22, color: 0xa03060, scale: 0.78 },
+  [CreatureKind.Bonewretch]: { hp: 55, speed: 3.2, damage: 11, goldWage: 0, color: 0xd8d0b8, scale: 0.72 },
+  [CreatureKind.HeroKnight]: { hp: 120, speed: 2.55, damage: 18, goldWage: 0, color: 0xc0c8d8, scale: 0.85 },
+  [CreatureKind.HeroArcher]: { hp: 70, speed: 2.9, damage: 14, goldWage: 0, color: 0x5080a0, scale: 0.7 },
 };
 
 export type ToolMode =

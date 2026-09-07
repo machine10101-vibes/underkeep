@@ -216,17 +216,18 @@ function bumpFromAlbedo(albedo: THREE.CanvasTexture, strength = 1): THREE.Canvas
 }
 
 export function earthTex(): THREE.CanvasTexture {
-  // Warm diggable brown — clearly separate from cool gray rock
+  // Warm orange-brown dirt cubes — DK2-readable vs cool gray rock
   return paintNoise(64, {
     seed: 11,
-    base: [168, 108, 52],
-    dark: [92, 52, 22],
-    light: [210, 150, 88],
-    scale: 5.5,
-    contrast: 1.45,
-    speck: 0.05,
-    speckColor: [140, 90, 40],
+    base: [186, 118, 48],
+    dark: [98, 48, 18],
+    light: [228, 162, 82],
+    scale: 5.8,
+    contrast: 1.55,
+    speck: 0.06,
+    speckColor: [150, 86, 32],
     cracks: true,
+    borderDark: 0.07,
   });
 }
 
@@ -246,28 +247,30 @@ export function rockTex(): THREE.CanvasTexture {
 }
 
 export function dirtTex(): THREE.CanvasTexture {
+  // Unclaimed packed earth — darker, no gold, reads as "not yours yet"
   return paintNoise(64, {
     seed: 33,
-    base: [88, 58, 36],
-    dark: [42, 28, 16],
-    light: [118, 84, 52],
-    scale: 6,
-    contrast: 1.25,
-    speck: 0.07,
-    speckColor: [70, 50, 30],
+    base: [78, 50, 30],
+    dark: [36, 22, 12],
+    light: [112, 76, 46],
+    scale: 6.4,
+    contrast: 1.3,
+    speck: 0.08,
+    speckColor: [62, 42, 24],
+    cracks: true,
   });
 }
 
 export function claimedStoneTex(): THREE.CanvasTexture {
-  // Bright fitted flagstones — obvious seams, clearly brighter than dirt
+  // Cool gray flagstones — gold trim is applied in mesh, not baked here
   return paintNoise(64, {
     seed: 44,
-    base: [168, 158, 142],
-    dark: [110, 100, 88],
-    light: [210, 200, 185],
-    scale: 2.8,
-    contrast: 1.25,
-    bricks: { bw: 20, bh: 14, mortar: [52, 44, 38], mortarW: 2 },
+    base: [152, 146, 138],
+    dark: [88, 82, 76],
+    light: [198, 192, 182],
+    scale: 2.6,
+    contrast: 1.3,
+    bricks: { bw: 18, bh: 12, mortar: [42, 36, 32], mortarW: 2 },
   });
 }
 
@@ -288,14 +291,14 @@ export function goldVeinTex(): THREE.CanvasTexture {
   // Bright yellow-gold veins — unmistakable vs earth at overview zoom
   return paintNoise(64, {
     seed: 66,
-    base: [180, 120, 28],
-    dark: [90, 50, 10],
-    light: [255, 220, 90],
-    scale: 4.0,
-    contrast: 1.5,
-    veins: { color: [255, 240, 110], scale: 1.25, thresh: 0.42, seed: 99 },
-    speck: 0.18,
-    speckColor: [255, 250, 180],
+    base: [196, 128, 22],
+    dark: [96, 48, 8],
+    light: [255, 228, 96],
+    scale: 3.8,
+    contrast: 1.62,
+    veins: { color: [255, 244, 120], scale: 1.15, thresh: 0.38, seed: 99 },
+    speck: 0.22,
+    speckColor: [255, 252, 190],
   });
 }
 

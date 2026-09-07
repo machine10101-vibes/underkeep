@@ -55,11 +55,53 @@ function applyBaseAo(geo: THREE.BufferGeometry, baseY: number, height: number, s
 }
 
 
-/** Claimed floor: 2×2 fitted stone slabs + dark mortar (no canvas map required). */
+/** Shared gold/brass trim — the DK2-style ownership frame on claimed land. */
+function claimedGoldMat(): THREE.MeshStandardMaterial {
+  return cachedMat('claimed-gold-trim-v8', () =>
+    new THREE.MeshStandardMaterial({
+      color: 0xd8aa48,
+      metalness: 0.82,
+      roughness: 0.32,
+      emissive: 0x6a3c0c,
+      emissiveIntensity: 0.28,
+    })
+  );
+}
+
+function addClaimedGoldFrame(g: THREE.Group, y = 0.17): void {
+  const gold = claimedGoldMat();
+  const w = TILE_SIZE * 0.97;
+  const t = 0.09;
+  const h = 0.13;
+  const half = w * 0.5 - t * 0.35;
+  const barNS = cachedGeo('gold-bar-ns-v7', () => new THREE.BoxGeometry(w, h, t));
+  const barEW = cachedGeo('gold-bar-ew-v7', () => new THREE.BoxGeometry(t, h, w));
+  const n = new THREE.Mesh(barNS, gold);
+  n.position.set(0, y, half);
+  g.add(n);
+  const s = new THREE.Mesh(barNS, gold);
+  s.position.set(0, y, -half);
+  g.add(s);
+  const e = new THREE.Mesh(barEW, gold);
+  e.position.set(half, y, 0);
+  g.add(e);
+  const we = new THREE.Mesh(barEW, gold);
+  we.position.set(-half, y, 0);
+  g.add(we);
+  const corner = cachedGeo('gold-corner-v7', () => new THREE.BoxGeometry(0.16, 0.18, 0.16));
+  for (const ox of [-1, 1] as const) {
+    for (const oz of [-1, 1] as const) {
+      const c = new THREE.Mesh(corner, gold);
+      c.position.set(ox * half, y + 0.02, oz * half);
+      g.add(c);
+    }
+  }
+}
+
+/** Claimed floor: paved stone + gold/brass border (DK2 ownership read). */
 export function makeClaimedFloorMesh(room: RoomType): THREE.Group {
   const g = new THREE.Group();
 
-  // Room tint overrides for slab color
   const roomTint: Partial<Record<RoomType, number>> = {
     [RoomType.Treasury]: 0xd4b040,
     [RoomType.Lair]: 0xb070a0,
@@ -75,10 +117,10 @@ export function makeClaimedFloorMesh(room: RoomType): THREE.Group {
     [RoomType.Temple]: 0xc0a050,
     [RoomType.CombatPit]: 0xa05040,
   };
-  const slabColor = roomTint[room] ?? 0xb8a888;
+  const slabColor = roomTint[room] ?? 0xc2b5a0;
   const slabEmissive =
     room === RoomType.None
-      ? 0x2a2418
+      ? 0x222018
       : room === RoomType.Treasury
         ? 0x4a3010
         : room === RoomType.Lair
@@ -105,56 +147,54 @@ export function makeClaimedFloorMesh(room: RoomType): THREE.Group {
                               ? 0x401810
                               : 0x301048;
 
-  const mortar = new THREE.MeshStandardMaterial({
-    color: 0x2a2218,
-    metalness: 0.04,
-    roughness: 0.95,
-  });
   const under = new THREE.Mesh(
-    new THREE.BoxGeometry(TILE_SIZE * 0.98, 0.18, TILE_SIZE * 0.98),
-    mortar
+    cachedGeo('claimed-under-v7', () => new THREE.BoxGeometry(TILE_SIZE * 0.98, 0.14, TILE_SIZE * 0.98)),
+    cachedMat('claimed-under-mat-v7', () =>
+      new THREE.MeshStandardMaterial({ color: 0x1c1612, metalness: 0.04, roughness: 0.96 })
+    )
   );
   under.position.y = 0.02;
   under.receiveShadow = true;
   g.add(under);
 
-  const slabMat = new THREE.MeshStandardMaterial({
-    color: slabColor,
-    metalness: room === RoomType.Treasury ? 0.45 : room === RoomType.Portal ? 0.35 : 0.18,
-    roughness: room === RoomType.Treasury ? 0.4 : 0.62,
-    emissive: slabEmissive,
-    emissiveIntensity: room === RoomType.None ? 0.14 : 0.28,
-  });
-
-  const slab = TILE_SIZE * 0.44;
-  const gap = 0.06;
-  const offsets = [-0.5, 0.5];
-  for (const ox of offsets) {
-    for (const oz of offsets) {
-      const s = new THREE.Mesh(
-        new THREE.BoxGeometry(slab, 0.12, slab),
-        slabMat
-      );
-      s.position.set(ox * (slab / 2 + gap), 0.16, oz * (slab / 2 + gap));
-      s.receiveShadow = true;
-      s.castShadow = false;
-      g.add(s);
-    }
-  }
-
-  // Subtle bevel lip
-  const lip = new THREE.Mesh(
-    new THREE.BoxGeometry(TILE_SIZE * 0.99, 0.025, TILE_SIZE * 0.99),
+  const slabMat = cachedMat(`claimed-slab-v7-${room}`, () =>
     new THREE.MeshStandardMaterial({
-      color: 0xd0c0a8,
-      metalness: 0.12,
-      roughness: 0.55,
-      emissive: 0x3a3020,
-      emissiveIntensity: 0.1,
+      color: slabColor,
+      metalness: room === RoomType.Treasury ? 0.48 : room === RoomType.Portal ? 0.35 : 0.16,
+      roughness: room === RoomType.Treasury ? 0.38 : 0.62,
+      emissive: slabEmissive,
+      emissiveIntensity: room === RoomType.None ? 0.2 : 0.2,
+      map: room === RoomType.None ? claimedStoneTex() : null,
     })
   );
-  lip.position.y = 0.11;
-  g.add(lip);
+
+  const inner = TILE_SIZE * 0.72;
+  const slab = new THREE.Mesh(
+    cachedGeo('claimed-inner-v7', () => new THREE.BoxGeometry(inner, 0.1, inner)),
+    slabMat
+  );
+  slab.position.y = 0.13;
+  slab.receiveShadow = true;
+  g.add(slab);
+
+  // 2×2 inner flagstone seams (readable grid without hiding the gold frame)
+  const seamMat = cachedMat('claimed-seam-v7', () =>
+    new THREE.MeshStandardMaterial({ color: 0x2a241c, roughness: 0.9, metalness: 0.05 })
+  );
+  const seamH = new THREE.Mesh(
+    cachedGeo('claimed-seam-h-v7', () => new THREE.BoxGeometry(inner, 0.04, 0.04)),
+    seamMat
+  );
+  seamH.position.y = 0.19;
+  g.add(seamH);
+  const seamV = new THREE.Mesh(
+    cachedGeo('claimed-seam-v-v7', () => new THREE.BoxGeometry(0.04, 0.04, inner)),
+    seamMat
+  );
+  seamV.position.y = 0.19;
+  g.add(seamV);
+
+  addClaimedGoldFrame(g, 0.16);
   return g;
 }
 
@@ -167,47 +207,46 @@ export function makeFloorGeo(): THREE.BufferGeometry {
 }
 
 export function makeWallGeo(fortified = false): THREE.BufferGeometry {
-  return cachedGeo(fortified ? 'wall-fort' : 'wall', () => {
-    const g = new THREE.BoxGeometry(TILE_SIZE * 0.96, 2.35, TILE_SIZE * 0.96, 3, 4, 3);
+  return cachedGeo(fortified ? 'wall-fort-v7' : 'wall-v7', () => {
+    // Slightly smaller than TILE_SIZE so neighboring cubes show a DK2-style seam
+    const g = new THREE.BoxGeometry(TILE_SIZE * 0.9, 2.42, TILE_SIZE * 0.9, 3, 4, 3);
     const pos = g.attributes.position as THREE.BufferAttribute;
     for (let i = 0; i < pos.count; i++) {
       let x = pos.getX(i);
       let y = pos.getY(i);
       let z = pos.getZ(i);
       if (fortified) {
-        // flatter dressed stone, slight bevel at top
         if (y > 0.95) {
-          x *= 0.94;
-          z *= 0.94;
+          x *= 0.9;
+          z *= 0.9;
         }
-        x += Math.sin(i * 0.7) * 0.012;
-        z += Math.cos(i * 0.9) * 0.012;
+        x += Math.sin(i * 0.7) * 0.01;
+        z += Math.cos(i * 0.9) * 0.01;
       } else {
-        // diggable earth — more irregular silhouette
         if (y > 0.85) {
-          x *= 0.88;
-          z *= 0.88;
+          x *= 0.86;
+          z *= 0.86;
         }
-        x += Math.sin(i * 1.7) * 0.04;
-        z += Math.cos(i * 2.1) * 0.04;
+        x += Math.sin(i * 1.7) * 0.038;
+        z += Math.cos(i * 2.1) * 0.038;
         if (y > -0.3 && y < 0.5) {
-          y += Math.sin(i * 0.9) * 0.06;
+          y += Math.sin(i * 0.9) * 0.05;
         }
       }
       pos.setXYZ(i, x, y, z);
     }
     pos.needsUpdate = true;
-    applyBaseAo(g, -1.175, 2.35, fortified ? 0.35 : 0.5);
+    applyBaseAo(g, -1.21, 2.42, fortified ? 0.32 : 0.52);
     g.computeVertexNormals();
-    g.translate(0, 1.175, 0);
+    g.translate(0, 1.21, 0);
     return g;
   });
 }
 
 export function makeRockGeo(): THREE.BufferGeometry {
-  return cachedGeo('rock-v2', () => {
+  return cachedGeo('rock-v7', () => {
     // Taller + denser than diggable earth so Rock reads as impassable
-    const g = new THREE.BoxGeometry(TILE_SIZE * 0.99, 3.55, TILE_SIZE * 0.99, 3, 5, 3);
+    const g = new THREE.BoxGeometry(TILE_SIZE * 0.94, 3.7, TILE_SIZE * 0.94, 3, 5, 3);
     const pos = g.attributes.position as THREE.BufferAttribute;
     for (let i = 0; i < pos.count; i++) {
       pos.setX(i, pos.getX(i) + Math.sin(i * 3.1) * 0.045);
@@ -215,16 +254,16 @@ export function makeRockGeo(): THREE.BufferGeometry {
       pos.setZ(i, pos.getZ(i) + Math.sin(i * 4.7) * 0.045);
     }
     pos.needsUpdate = true;
-    applyBaseAo(g, -1.775, 3.55, 0.62);
+    applyBaseAo(g, -1.85, 3.7, 0.62);
     g.computeVertexNormals();
-    g.translate(0, 1.775, 0);
+    g.translate(0, 1.85, 0);
     return g;
   });
 }
 
 export function makeGoldVeinGeo(): THREE.BufferGeometry {
-  return cachedGeo('gold', () => {
-    const g = new THREE.BoxGeometry(TILE_SIZE * 0.96, 2.35, TILE_SIZE * 0.96, 3, 4, 3);
+  return cachedGeo('gold-v7', () => {
+    const g = new THREE.BoxGeometry(TILE_SIZE * 0.9, 2.42, TILE_SIZE * 0.9, 3, 4, 3);
     const pos = g.attributes.position as THREE.BufferAttribute;
     for (let i = 0; i < pos.count; i++) {
       pos.setX(i, pos.getX(i) + Math.sin(i * 5.1) * 0.05);
@@ -235,11 +274,96 @@ export function makeGoldVeinGeo(): THREE.BufferGeometry {
       }
     }
     pos.needsUpdate = true;
-    applyBaseAo(g, -1.175, 2.35, 0.4);
+    applyBaseAo(g, -1.21, 2.42, 0.4);
     g.computeVertexNormals();
-    g.translate(0, 1.175, 0);
+    g.translate(0, 1.21, 0);
     return g;
   });
+}
+
+/**
+ * Low-relief dressing for the exposed side of a solid tile.
+ * Shared geometry/materials keep the richer wall silhouette cheap.
+ */
+export function makeWallFaceDetail(kind: TileKind, fortified = false): THREE.Group {
+  const g = new THREE.Group();
+  const isGold = kind === TileKind.Gold;
+  const isRock = kind === TileKind.Rock;
+  const faceMat = cachedMat(
+    fortified ? 'wall-face-fort-v8' : isGold ? 'wall-face-gold-v8' : isRock ? 'wall-face-rock-v8' : 'wall-face-earth-v8',
+    () =>
+      new THREE.MeshStandardMaterial({
+        color: fortified ? 0x918a82 : isGold ? 0xa66b24 : isRock ? 0x707784 : 0x9b6030,
+        metalness: fortified ? 0.32 : isGold ? 0.35 : 0.06,
+        roughness: fortified ? 0.58 : 0.88,
+        emissive: isGold ? 0x6a3908 : 0x080604,
+        emissiveIntensity: isGold ? 0.3 : 0.04,
+      })
+  );
+  const stoneGeo = cachedGeo('wall-face-stone-v8', () => new THREE.DodecahedronGeometry(0.24, 0));
+  const ledgeGeo = cachedGeo('wall-face-ledge-v8', () => new THREE.BoxGeometry(1.58, 0.13, 0.18));
+
+  // Horizontal strata immediately makes a cube read as a carved cavern face.
+  for (let i = 0; i < 3; i++) {
+    const ledge = new THREE.Mesh(ledgeGeo, faceMat);
+    ledge.position.set((i % 2 ? -1 : 1) * 0.06, 0.48 + i * 0.58, 0.87);
+    ledge.scale.x = 0.78 + i * 0.08;
+    ledge.rotation.z = (i - 1) * 0.025;
+    ledge.castShadow = true;
+    g.add(ledge);
+  }
+
+  for (let i = 0; i < 5; i++) {
+    const stone = new THREE.Mesh(stoneGeo, faceMat);
+    stone.position.set(-0.66 + i * 0.33, 0.25 + (i % 2) * 0.25, 0.91);
+    const s = 0.72 + (i % 3) * 0.13;
+    stone.scale.set(s, s * 0.58, 0.42);
+    stone.rotation.set(i * 0.17, i * 0.31, i * 0.11);
+    stone.castShadow = true;
+    g.add(stone);
+  }
+
+  // Broken crown stones catch the key light and break the repeated cube skyline.
+  const topY = isRock ? 3.52 : 2.28;
+  for (let i = 0; i < 3; i++) {
+    const crownStone = new THREE.Mesh(stoneGeo, faceMat);
+    crownStone.position.set(-0.58 + i * 0.58, topY + (i % 2) * 0.08, 0.58 + (i % 2) * 0.16);
+    crownStone.scale.set(1.2, 0.55 + i * 0.08, 1.0);
+    crownStone.rotation.set(i * 0.2, i * 0.55, i * 0.16);
+    crownStone.castShadow = true;
+    g.add(crownStone);
+  }
+
+  if (isGold) {
+    const crystalMat = cachedMat('wall-face-crystal-v8', () =>
+      new THREE.MeshStandardMaterial({
+        color: 0xffd54a,
+        emissive: 0xffa510,
+        emissiveIntensity: 1.1,
+        metalness: 0.82,
+        roughness: 0.18,
+      })
+    );
+    const crystalGeo = cachedGeo('wall-face-crystal-v8', () => new THREE.OctahedronGeometry(0.14, 0));
+    for (let i = 0; i < 4; i++) {
+      const crystal = new THREE.Mesh(crystalGeo, crystalMat);
+      crystal.position.set(-0.48 + i * 0.31, 0.72 + (i % 2) * 0.48, 1.0);
+      crystal.scale.set(0.75, 1.8 + i * 0.15, 0.55);
+      crystal.rotation.z = (i - 1.5) * 0.2;
+      g.add(crystal);
+    }
+  }
+
+  if (fortified) {
+    const gold = claimedGoldMat();
+    const braceGeo = cachedGeo('wall-face-brace-v8', () => new THREE.BoxGeometry(0.1, 2.05, 0.12));
+    for (const x of [-0.72, 0.72]) {
+      const brace = new THREE.Mesh(braceGeo, gold);
+      brace.position.set(x, 1.08, 0.98);
+      g.add(brace);
+    }
+  }
+  return g;
 }
 
 /** Thin top-edge outline so diggable blocks read on mobile */
@@ -262,35 +386,29 @@ export function makeBlockEdgeGeo(height: number): THREE.BufferGeometry {
 
 export function makeHeartGeo(): THREE.Group {
   const group = new THREE.Group();
-  const core = new THREE.Mesh(
-    new THREE.IcosahedronGeometry(0.75, 2),
-    new THREE.MeshStandardMaterial({
-      color: 0x6a1820,
-      emissive: 0xff3048,
-      emissiveIntensity: 0.55,
-      metalness: 0.35,
-      roughness: 0.4,
-    })
-  );
-  core.position.y = 1.05;
-  group.add(core);
+  const darkMetal = new THREE.MeshStandardMaterial({
+    color: 0x30262a,
+    metalness: 0.72,
+    roughness: 0.35,
+    emissive: 0x24080c,
+    emissiveIntensity: 0.25,
+  });
+  const redCrystal = new THREE.MeshStandardMaterial({
+    color: 0x8a1828,
+    emissive: 0xff2038,
+    emissiveIntensity: 1.15,
+    metalness: 0.38,
+    roughness: 0.26,
+  });
 
-  const ring = new THREE.Mesh(
-    new THREE.TorusGeometry(1.05, 0.1, 10, 32),
-    new THREE.MeshStandardMaterial({
-      color: 0x3a1820,
-      emissive: 0xaa2030,
-      emissiveIntensity: 0.45,
-      metalness: 0.55,
-      roughness: 0.35,
-    })
-  );
-  ring.rotation.x = Math.PI / 2;
-  ring.position.y = 1.05;
-  group.add(ring);
-
-  const pedestal = new THREE.Mesh(
-    new THREE.CylinderGeometry(1.05, 1.25, 0.45, 12),
+  // Layered ritual dais gives the Heart a dominant architectural footprint.
+  const lowerDais = new THREE.Mesh(new THREE.CylinderGeometry(1.6, 1.82, 0.26, 12), darkMetal);
+  lowerDais.position.y = 0.18;
+  lowerDais.castShadow = true;
+  lowerDais.receiveShadow = true;
+  group.add(lowerDais);
+  const upperDais = new THREE.Mesh(
+    new THREE.CylinderGeometry(1.15, 1.42, 0.42, 12),
     new THREE.MeshStandardMaterial({
       color: 0x5a4538,
       metalness: 0.35,
@@ -298,16 +416,47 @@ export function makeHeartGeo(): THREE.Group {
       map: claimedStoneTex(),
     })
   );
-  pedestal.position.y = 0.25;
-  group.add(pedestal);
+  upperDais.position.y = 0.48;
+  upperDais.castShadow = true;
+  group.add(upperDais);
 
-  // Subtle lava pool / embers around the heart
+  const core = new THREE.Mesh(
+    new THREE.IcosahedronGeometry(0.82, 2),
+    redCrystal
+  );
+  core.scale.set(0.92, 1.2, 0.92);
+  core.position.y = 1.48;
+  core.castShadow = true;
+  group.add(core);
+
+  const ring = new THREE.Mesh(new THREE.TorusGeometry(1.18, 0.075, 8, 36), redCrystal);
+  ring.rotation.x = Math.PI / 2;
+  ring.position.y = 1.48;
+  group.add(ring);
+
+  const crown = new THREE.Group();
+  for (let i = 0; i < 4; i++) {
+    const angle = i * Math.PI * 0.5 + Math.PI * 0.25;
+    const claw = new THREE.Mesh(new THREE.ConeGeometry(0.18, 1.25, 5), darkMetal);
+    claw.position.set(Math.cos(angle) * 1.12, 1.22, Math.sin(angle) * 1.12);
+    claw.rotation.z = Math.cos(angle) * -0.5;
+    claw.rotation.x = Math.sin(angle) * 0.5;
+    claw.castShadow = true;
+    crown.add(claw);
+    const gem = new THREE.Mesh(new THREE.OctahedronGeometry(0.12, 0), redCrystal);
+    gem.position.set(Math.cos(angle) * 1.24, 0.78, Math.sin(angle) * 1.24);
+    crown.add(gem);
+  }
+  group.add(crown);
+  (group as THREE.Group & { heartCrown?: THREE.Group }).heartCrown = crown;
+
+  // Molten ritual pool and segmented rune ring.
   const lava = new THREE.Mesh(
-    new THREE.CircleGeometry(1.55, 24),
+    new THREE.RingGeometry(1.38, 1.72, 32),
     new THREE.MeshStandardMaterial({
       color: 0x4a1010,
       emissive: 0xff3018,
-      emissiveIntensity: 0.55,
+      emissiveIntensity: 0.9,
       metalness: 0.2,
       roughness: 0.7,
       transparent: true,
@@ -318,23 +467,19 @@ export function makeHeartGeo(): THREE.Group {
   lava.position.y = 0.13;
   group.add(lava);
 
-  for (let i = 0; i < 6; i++) {
-    const ang = (i / 6) * Math.PI * 2;
+  for (let i = 0; i < 10; i++) {
+    const ang = (i / 10) * Math.PI * 2;
     const ember = new THREE.Mesh(
-      new THREE.SphereGeometry(0.06 + (i % 3) * 0.02, 6, 6),
-      new THREE.MeshStandardMaterial({
-        color: 0xff6020,
-        emissive: 0xff4010,
-        emissiveIntensity: 1.2,
-        roughness: 1,
-      })
+      new THREE.BoxGeometry(0.2, 0.045, 0.06),
+      redCrystal
     );
-    ember.position.set(Math.cos(ang) * 1.15, 0.22, Math.sin(ang) * 1.15);
+    ember.position.set(Math.cos(ang) * 1.53, 0.34, Math.sin(ang) * 1.53);
+    ember.rotation.y = -ang;
     group.add(ember);
   }
 
-  const light = new THREE.PointLight(0xff4058, 1.15, 8, 2);
-  light.position.y = 1.35;
+  const light = new THREE.PointLight(0xff4058, 2.2, 12, 2);
+  light.position.y = 1.8;
   light.castShadow = false;
   group.add(light);
 
@@ -398,12 +543,15 @@ function limb(
   z: number,
   rx = 0,
   ry = 0,
-  rz = 0
+  rz = 0,
+  walkLimb?: 'legL' | 'legR' | 'armL' | 'armR'
 ): THREE.Mesh {
   const m = new THREE.Mesh(geo, mat);
   m.position.set(x, y, z);
   m.rotation.set(rx, ry, rz);
   m.castShadow = true;
+  m.userData.baseRot = { x: rx, y: ry, z: rz };
+  if (walkLimb) m.userData.walkLimb = walkLimb;
   return m;
 }
 
@@ -630,8 +778,8 @@ export function makeCreatureMesh(color: number, scale: number, kind: string): TH
     }
 
     for (const sx of [-1, 1]) {
-      g.add(limb(new THREE.CylinderGeometry(0.045, 0.035, 0.45, 5), bone, sx * 0.3, 0.75, 0, 0, 0, sx * 0.25));
-      g.add(limb(new THREE.CylinderGeometry(0.05, 0.04, 0.4, 5), bone, sx * 0.12, 0.28, 0, 0.15, 0, sx * 0.1));
+      g.add(limb(new THREE.CylinderGeometry(0.045, 0.035, 0.45, 5), bone, sx * 0.3, 0.75, 0, 0, 0, sx * 0.25, sx < 0 ? 'armL' : 'armR'));
+      g.add(limb(new THREE.CylinderGeometry(0.05, 0.04, 0.4, 5), bone, sx * 0.12, 0.28, 0, 0.15, 0, sx * 0.1, sx < 0 ? 'legL' : 'legR'));
     }
 
     const blade = new THREE.Mesh(
@@ -677,7 +825,7 @@ export function makeCreatureMesh(color: number, scale: number, kind: string): TH
     }
 
     for (const sx of [-1, 1]) {
-      g.add(limb(new THREE.CylinderGeometry(0.06, 0.04, 0.4, 6), fireMat, sx * 0.32, 0.75, 0, 0, 0, sx * 0.45));
+      g.add(limb(new THREE.CylinderGeometry(0.06, 0.04, 0.4, 6), fireMat, sx * 0.32, 0.75, 0, 0, 0, sx * 0.45, sx < 0 ? 'armL' : 'armR'));
       const hand = new THREE.Mesh(
         new THREE.SphereGeometry(0.08, 6, 6),
         new THREE.MeshStandardMaterial({ color: 0xffaa40, emissive: 0xff6010, emissiveIntensity: 1.0 })
@@ -731,8 +879,8 @@ export function makeCreatureMesh(color: number, scale: number, kind: string): TH
       g.add(eye);
     }
     for (const sx of [-1, 1]) {
-      g.add(limb(new THREE.CylinderGeometry(0.045, 0.035, 0.4, 5), robe, sx * 0.28, 0.7, 0, 0, 0, sx * 0.2));
-      g.add(limb(new THREE.CylinderGeometry(0.05, 0.04, 0.38, 5), robe, sx * 0.1, 0.28, 0));
+      g.add(limb(new THREE.CylinderGeometry(0.045, 0.035, 0.4, 5), robe, sx * 0.28, 0.7, 0, 0, 0, sx * 0.2, sx < 0 ? 'armL' : 'armR'));
+      g.add(limb(new THREE.CylinderGeometry(0.05, 0.04, 0.38, 5), robe, sx * 0.1, 0.28, 0, 0, 0, 0, sx < 0 ? 'legL' : 'legR'));
     }
     const staff = new THREE.Mesh(
       new THREE.CylinderGeometry(0.03, 0.04, 1.3, 6),
@@ -846,7 +994,7 @@ export function makeCreatureMesh(color: number, scale: number, kind: string): TH
       p.scale.set(1.1, 0.7, 1);
       p.position.set(sx * 0.28, 1.0, 0);
       g.add(p);
-      g.add(limb(new THREE.CylinderGeometry(0.07, 0.055, 0.4, 6), armor, sx * 0.34, 0.7, 0, 0, 0, sx * 0.2));
+      g.add(limb(new THREE.CylinderGeometry(0.07, 0.055, 0.4, 6), armor, sx * 0.34, 0.7, 0, 0, 0, sx * 0.2, sx < 0 ? 'armL' : 'armR'));
     }
 
     const helm = new THREE.Mesh(new THREE.SphereGeometry(0.2, 10, 8), armor);
@@ -868,7 +1016,7 @@ export function makeCreatureMesh(color: number, scale: number, kind: string): TH
     g.add(crest);
 
     for (const sx of [-1, 1]) {
-      g.add(limb(new THREE.CylinderGeometry(0.08, 0.06, 0.4, 6), armor, sx * 0.1, 0.28, 0));
+      g.add(limb(new THREE.CylinderGeometry(0.08, 0.06, 0.4, 6), armor, sx * 0.1, 0.28, 0, 0, 0, 0, sx < 0 ? 'legL' : 'legR'));
     }
 
     const sword = new THREE.Mesh(
@@ -911,8 +1059,8 @@ export function makeCreatureMesh(color: number, scale: number, kind: string): TH
     g.add(face);
 
     for (const sx of [-1, 1]) {
-      g.add(limb(new THREE.CylinderGeometry(0.05, 0.04, 0.35, 5), cloth, sx * 0.26, 0.7, 0, 0, 0, sx * 0.3));
-      g.add(limb(new THREE.CylinderGeometry(0.055, 0.045, 0.38, 5), cloth, sx * 0.09, 0.28, 0));
+      g.add(limb(new THREE.CylinderGeometry(0.05, 0.04, 0.35, 5), cloth, sx * 0.26, 0.7, 0, 0, 0, sx * 0.3, sx < 0 ? 'armL' : 'armR'));
+      g.add(limb(new THREE.CylinderGeometry(0.055, 0.045, 0.38, 5), cloth, sx * 0.09, 0.28, 0, 0, 0, 0, sx < 0 ? 'legL' : 'legR'));
     }
 
     // Bow silhouette
@@ -942,9 +1090,24 @@ export function makeCreatureMesh(color: number, scale: number, kind: string): TH
     head.position.y = 1.1;
     g.add(head);
     for (const sx of [-1, 1]) {
-      g.add(limb(new THREE.CylinderGeometry(0.05, 0.04, 0.35, 5), bodyMat, sx * 0.28, 0.6, 0, 0, 0, sx * 0.4));
-      g.add(limb(new THREE.CylinderGeometry(0.055, 0.045, 0.35, 5), bodyMat, sx * 0.1, 0.25, 0));
+      g.add(limb(new THREE.CylinderGeometry(0.05, 0.04, 0.35, 5), bodyMat, sx * 0.28, 0.6, 0, 0, 0, sx * 0.4, sx < 0 ? 'armL' : 'armR'));
+      g.add(limb(new THREE.CylinderGeometry(0.055, 0.045, 0.35, 5), bodyMat, sx * 0.1, 0.25, 0, 0, 0, 0, sx < 0 ? 'legL' : 'legR'));
     }
+  }
+
+  const flower = makeHealthFlower(kind === 'hero_knight' || kind === 'hero_archer' || kind === 'hero');
+  // Counter-scale so flowers stay readable at overview regardless of body scale
+  flower.scale.setScalar(1 / Math.max(0.35, scale));
+  flower.position.y = 2.05 / Math.max(0.35, scale);
+  g.add(flower);
+  (g as THREE.Group & { healthFlower?: THREE.Object3D }).healthFlower = flower;
+
+  if (kind === 'scrabbler') {
+    const bag = makeGoldBag();
+    bag.position.set(-0.22, 0.28, -0.32);
+    bag.visible = false;
+    g.add(bag);
+    (g as THREE.Group & { goldBag?: THREE.Object3D }).goldBag = bag;
   }
 
   g.scale.setScalar(scale);
@@ -1244,7 +1407,7 @@ export function tileMaterial(kind: TileKind, fortified: boolean, _room: RoomType
 
 
 /** 1–2 readable 3D props per room tile (Treasury chests/gold, Lair bedrolls, etc.). */
-export function makeRoomProps(room: RoomType): THREE.Group | null {
+export function makeRoomProps(room: RoomType, variant = 0): THREE.Group | null {
   if (room === RoomType.None) return null;
   const g = new THREE.Group();
 
@@ -1363,29 +1526,84 @@ export function makeRoomProps(room: RoomType): THREE.Group | null {
     candle.position.set(-0.22, 0.68, 0.08);
     g.add(candle);
   } else if (room === RoomType.Portal) {
-    const swirlMat = new THREE.MeshStandardMaterial({
-      color: 0x8030c0,
-      emissive: 0xa040ff,
-      emissiveIntensity: 0.7,
-      metalness: 0.4,
-      roughness: 0.35,
-      transparent: true,
-      opacity: 0.85,
+    const portalStone = new THREE.MeshStandardMaterial({
+      color: 0x343843,
+      emissive: 0x10182c,
+      emissiveIntensity: 0.3,
+      metalness: 0.35,
+      roughness: 0.48,
     });
-    const pillar = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.28, 1.4, 10), swirlMat);
-    pillar.position.y = 0.75;
-    pillar.castShadow = true;
-    g.add(pillar);
-    const ring = new THREE.Mesh(new THREE.TorusGeometry(0.42, 0.06, 8, 20), swirlMat);
-    ring.position.y = 1.15;
-    ring.rotation.x = Math.PI / 2;
+    const crystal = new THREE.MeshStandardMaterial({
+      color: 0x79e6ff,
+      emissive: 0x20aaff,
+      emissiveIntensity: 1.35,
+      metalness: 0.25,
+      roughness: 0.18,
+      transparent: true,
+      opacity: 0.9,
+    });
+    const energy = new THREE.MeshStandardMaterial({
+      color: 0xff6a24,
+      emissive: 0xff3208,
+      emissiveIntensity: 1.35,
+      transparent: true,
+      opacity: 0.68,
+      side: THREE.DoubleSide,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending,
+    });
+    // Only one in four Portal tiles carries the full gateway; neighboring tiles
+    // become a crystal field instead of duplicating the same large prop.
+    if (variant % 4 !== 0) {
+      const shardGeo = new THREE.OctahedronGeometry(0.13, 0);
+      const count = 2 + (variant % 2);
+      for (let i = 0; i < count; i++) {
+        const shard = new THREE.Mesh(shardGeo, crystal);
+        shard.scale.set(0.7, 1.8 + i * 0.35, 0.7);
+        shard.position.set(-0.35 + i * 0.34, 0.26 + i * 0.08, (i % 2 ? -1 : 1) * 0.25);
+        shard.rotation.z = (i - 1) * 0.25;
+        g.add(shard);
+      }
+      return g;
+    }
+    const base = new THREE.Mesh(new THREE.CylinderGeometry(0.67, 0.82, 0.28, 10), portalStone);
+    base.position.y = 0.2;
+    base.castShadow = true;
+    g.add(base);
+    for (const sx of [-1, 1]) {
+      const pillar = new THREE.Mesh(new THREE.BoxGeometry(0.3, 2.5, 0.34), crystal);
+      pillar.position.set(sx * 0.82, 1.48, 0);
+      pillar.rotation.z = sx * -0.06;
+      pillar.castShadow = true;
+      g.add(pillar);
+      const cap = new THREE.Mesh(new THREE.OctahedronGeometry(0.27, 0), crystal);
+      cap.scale.set(0.8, 1.7, 0.8);
+      cap.position.set(sx * 0.9, 2.83, 0);
+      cap.rotation.z = sx * -0.1;
+      g.add(cap);
+    }
+    const lintel = new THREE.Mesh(new THREE.BoxGeometry(1.72, 0.2, 0.3), crystal);
+    lintel.position.y = 2.68;
+    lintel.castShadow = true;
+    g.add(lintel);
+    const crownCrystal = new THREE.Mesh(new THREE.OctahedronGeometry(0.22, 0), crystal);
+    crownCrystal.scale.set(1, 1.45, 0.8);
+    crownCrystal.position.y = 2.93;
+    g.add(crownCrystal);
+    const ring = new THREE.Mesh(new THREE.TorusGeometry(0.55, 0.07, 8, 28), crystal);
+    ring.position.y = 1.57;
+    ring.scale.set(1.0, 1.72, 1);
     g.add(ring);
-    const core = new THREE.Mesh(
-      new THREE.SphereGeometry(0.18, 10, 8),
-      new THREE.MeshStandardMaterial({ color: 0xe0a0ff, emissive: 0xc060ff, emissiveIntensity: 1.1, roughness: 0.3 })
-    );
-    core.position.y = 1.15;
+    const core = new THREE.Mesh(new THREE.PlaneGeometry(1.12, 2.08), energy);
+    core.position.set(0, 1.48, 0.04);
     g.add(core);
+    const light = new THREE.PointLight(0x55c8ff, 1.8, 7, 2);
+    light.position.y = 1.85;
+    g.add(light);
+    g.userData.portalAnimated = true;
+    g.userData.portalRing = ring;
+    g.userData.portalCore = core;
+    g.scale.setScalar(1.18);
   } else if (room === RoomType.Guard) {
     const wood = new THREE.MeshStandardMaterial({ color: 0x5a4030, roughness: 0.8 });
     const steel = new THREE.MeshStandardMaterial({
@@ -1936,6 +2154,132 @@ export function makeRallyFlagMesh(): THREE.Group {
   );
   tip.position.y = 1.68;
   g.add(tip);
+  return g;
+}
+
+/** Fortified earth: dressed stone + gold corner posts (claimed-wall read). */
+export function makeFortifiedWallMesh(): THREE.Group {
+  const g = new THREE.Group();
+  const stone = new THREE.Mesh(makeWallGeo(true), tileMaterial(TileKind.Earth, true, RoomType.None));
+  stone.castShadow = true;
+  stone.receiveShadow = true;
+  g.add(stone);
+  const gold = claimedGoldMat();
+  const post = cachedGeo('fort-gold-post-v7', () => new THREE.BoxGeometry(0.12, 2.2, 0.12));
+  const cap = cachedGeo('fort-gold-cap-v7', () => new THREE.BoxGeometry(0.18, 0.1, 0.18));
+  const s = TILE_SIZE * 0.42;
+  for (const ox of [-1, 1] as const) {
+    for (const oz of [-1, 1] as const) {
+      const p = new THREE.Mesh(post, gold);
+      p.position.set(ox * s, 1.15, oz * s);
+      g.add(p);
+      const c = new THREE.Mesh(cap, gold);
+      c.position.set(ox * s, 2.28, oz * s);
+      g.add(c);
+    }
+  }
+  return g;
+}
+
+/** DK2-inspired health flower (5 petals). Red for minions, pale for heroes. */
+export function makeHealthFlower(hero = false): THREE.Group {
+  const g = new THREE.Group();
+  const petalMat = new THREE.MeshBasicMaterial({
+    color: hero ? 0xf6f0dc : 0xe02828,
+    side: THREE.DoubleSide,
+    depthWrite: false,
+    transparent: true,
+    opacity: 0.95,
+  });
+  const petals: THREE.Mesh[] = [];
+  const petalGeo = cachedGeo('flower-petal-v7', () => new THREE.CircleGeometry(0.18, 8));
+  for (let i = 0; i < 5; i++) {
+    const petal = new THREE.Mesh(petalGeo, petalMat);
+    const ang = (i / 5) * Math.PI * 2 - Math.PI / 2;
+    petal.position.set(Math.cos(ang) * 0.18, 0.01, Math.sin(ang) * 0.18);
+    petal.rotation.x = -Math.PI / 2;
+    petal.rotation.z = ang;
+    g.add(petal);
+    petals.push(petal);
+  }
+  const center = new THREE.Mesh(
+    cachedGeo('flower-center-v7', () => new THREE.CircleGeometry(0.08, 8)),
+    new THREE.MeshBasicMaterial({
+      color: hero ? 0xffe080 : 0x4a1808,
+      side: THREE.DoubleSide,
+      depthWrite: false,
+    })
+  );
+  center.rotation.x = -Math.PI / 2;
+  g.add(center);
+  (g as THREE.Group & { petals?: THREE.Mesh[] }).petals = petals;
+  return g;
+}
+
+/** Small gold sack workers carry while mining. */
+export function makeGoldBag(): THREE.Group {
+  const g = new THREE.Group();
+  const mat = cachedMat('gold-bag-v7', () =>
+    new THREE.MeshStandardMaterial({
+      color: 0xe8b028,
+      metalness: 0.85,
+      roughness: 0.28,
+      emissive: 0xa07010,
+      emissiveIntensity: 0.55,
+    })
+  );
+  const sack = new THREE.Mesh(cachedGeo('gold-bag-body-v7', () => new THREE.SphereGeometry(0.16, 8, 6)), mat);
+  sack.scale.set(1.1, 0.75, 1.0);
+  sack.position.y = 0.12;
+  sack.castShadow = true;
+  g.add(sack);
+  const nugget = new THREE.Mesh(
+    cachedGeo('gold-bag-nugget-v7', () => new THREE.OctahedronGeometry(0.07, 0)),
+    mat
+  );
+  nugget.position.set(0.04, 0.22, 0.02);
+  g.add(nugget);
+  return g;
+}
+
+/** Original-IP keeper claw — follows the cursor in Hand mode. */
+export function makeKeeperHand(): THREE.Group {
+  const g = new THREE.Group();
+  const flesh = cachedMat('hand-flesh-v7', () =>
+    new THREE.MeshStandardMaterial({
+      color: 0x8a5040,
+      metalness: 0.12,
+      roughness: 0.62,
+      emissive: 0x401010,
+      emissiveIntensity: 0.18,
+    })
+  );
+  const claw = cachedMat('hand-claw-v7', () =>
+    new THREE.MeshStandardMaterial({
+      color: 0xe8d8a0,
+      metalness: 0.55,
+      roughness: 0.35,
+      emissive: 0x403010,
+      emissiveIntensity: 0.2,
+    })
+  );
+  const palm = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.12, 0.5), flesh);
+  palm.position.y = 0.06;
+  g.add(palm);
+  for (let i = 0; i < 4; i++) {
+    const finger = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.08, 0.32), flesh);
+    finger.position.set((i - 1.5) * 0.1, 0.08, -0.34);
+    g.add(finger);
+    const tip = new THREE.Mesh(new THREE.ConeGeometry(0.04, 0.14, 5), claw);
+    tip.rotation.x = Math.PI / 2;
+    tip.position.set((i - 1.5) * 0.1, 0.08, -0.52);
+    g.add(tip);
+  }
+  const thumb = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.08, 0.22), flesh);
+  thumb.position.set(0.28, 0.06, -0.08);
+  thumb.rotation.y = 0.6;
+  g.add(thumb);
+  g.scale.setScalar(1.15);
   return g;
 }
 

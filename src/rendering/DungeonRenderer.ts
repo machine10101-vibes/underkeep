@@ -25,6 +25,9 @@ import {
   makeSentryTrapMesh,
   makeTorchMesh,
   makeWallGeo,
+  makeFortifiedWallMesh,
+  makeWallFaceDetail,
+  makeKeeperHand,
   tileMaterial,
 } from './meshes';
 
@@ -75,7 +78,13 @@ export class DungeonRenderer {
   private fxGroup = new THREE.Group();
   private tileMeshes = new Map<string, THREE.Object3D>();
   private torches: Array<THREE.Group & { flame?: THREE.Mesh; torchLight?: THREE.PointLight }> = [];
-  private heartGroup: (THREE.Group & { heartCore?: THREE.Mesh; heartLight?: THREE.PointLight }) | null = null;
+  private portals: THREE.Group[] = [];
+  private heartGroup: (THREE.Group & {
+    heartCore?: THREE.Mesh;
+    heartLight?: THREE.PointLight;
+    heartCrown?: THREE.Group;
+  }) | null = null;
+  private dust: THREE.Points;
   private markerMesh: THREE.Mesh;
   private selectRing: THREE.Mesh;
   private clock = 0;
@@ -105,20 +114,25 @@ export class DungeonRenderer {
   private fogOverlay = new THREE.Group();
   private fogBoxGeo = new THREE.BoxGeometry(TILE_SIZE * 1.05, 4.4, TILE_SIZE * 1.05);
   private fogMat = new THREE.MeshBasicMaterial({
-    color: 0x08060a,
-    depthWrite: true,
+    color: 0x0a080c,
+    transparent: true,
+    opacity: 0.38,
+    depthWrite: false,
   });
   private fogInstanced: THREE.InstancedMesh | null = null;
   private fogCapacity = 0;
   private fogDummy = new THREE.Object3D();
+  private keeperHand: THREE.Group;
+  private goldHoard = new THREE.Group();
+  private goldHoardScale = 0;
 
   constructor(canvas: HTMLCanvasElement) {
     this.scene = new THREE.Scene();
-    this.scene.background = new THREE.Color(0x221c24);
-    this.scene.fog = new THREE.FogExp2(0x1e1820, 0.0055);
+    this.scene.background = new THREE.Color(0x2a2228);
+    this.scene.fog = new THREE.FogExp2(0x241c22, 0.0038);
 
-    this.camera = new THREE.PerspectiveCamera(52, 1, 0.1, 220);
-    this.camera.position.set(0, 32, 24);
+    this.camera = new THREE.PerspectiveCamera(46, 1, 0.1, 240);
+    this.camera.position.set(0, 34, 22);
     this.camera.lookAt(0, 0, 0);
 
     this.renderer = new THREE.WebGLRenderer({
@@ -134,21 +148,21 @@ export class DungeonRenderer {
     this.basePixelRatio = Math.min(window.devicePixelRatio || 1, coarse ? 1.15 : 1.5);
     this.renderer.setPixelRatio(this.basePixelRatio);
     // Never clear to white if something fails mid-frame
-    this.renderer.setClearColor(0x221c24, 1);
+    this.renderer.setClearColor(0x2a2228, 1);
     this.renderer.shadowMap.enabled = true;
-    this.renderer.shadowMap.type = THREE.BasicShadowMap;
+    this.renderer.shadowMap.type = coarse ? THREE.BasicShadowMap : THREE.PCFSoftShadowMap;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    this.renderer.toneMappingExposure = 1.6;
+    this.renderer.toneMappingExposure = 1.28;
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
 
-    // Bright enough ambient + hemisphere so PBR tiles read on mobile GPUs
-    const amb = new THREE.AmbientLight(0xe0d4c0, 1.0);
+    // Warm dungeon lighting — still bright enough that PBR tiles read on mobile
+    const amb = new THREE.AmbientLight(0xe0d4c0, 0.8);
     this.scene.add(amb);
-    const hemi = new THREE.HemisphereLight(0xfff2e4, 0x4a3848, 0.85);
+    const hemi = new THREE.HemisphereLight(0xffe8cc, 0x3a2838, 0.72);
     hemi.position.set(0, 40, 0);
     this.scene.add(hemi);
 
-    const dir = new THREE.DirectionalLight(0xfff2e0, 1.25);
+    const dir = new THREE.DirectionalLight(0xfff0d8, 1.45);
     dir.position.set(22, 48, 14);
     dir.castShadow = true;
     dir.shadow.mapSize.set(512, 512);
@@ -160,12 +174,34 @@ export class DungeonRenderer {
     dir.shadow.camera.top = 55;
     dir.shadow.camera.bottom = -55;
     dir.shadow.bias = -0.0006;
-    dir.shadow.intensity = 0.55;
+    dir.shadow.intensity = 0.62;
     this.scene.add(dir);
 
-    const fill = new THREE.DirectionalLight(0x90a8d0, 0.45);
+    const fill = new THREE.DirectionalLight(0x8098c8, 0.38);
     fill.position.set(-18, 28, -14);
     this.scene.add(fill);
+
+    // Slow airborne ash/dust gives the empty cavern volume visible depth.
+    const dustPos = new Float32Array(260 * 3);
+    for (let i = 0; i < dustPos.length; i += 3) {
+      dustPos[i] = (Math.random() - 0.5) * 90;
+      dustPos[i + 1] = 0.5 + Math.random() * 13;
+      dustPos[i + 2] = (Math.random() - 0.5) * 90;
+    }
+    const dustGeo = new THREE.BufferGeometry();
+    dustGeo.setAttribute('position', new THREE.BufferAttribute(dustPos, 3));
+    this.dust = new THREE.Points(
+      dustGeo,
+      new THREE.PointsMaterial({
+        color: 0xd49a55,
+        size: 0.07,
+        transparent: true,
+        opacity: 0.38,
+        depthWrite: false,
+        sizeAttenuation: true,
+      })
+    );
+    this.scene.add(this.dust);
 
     // Subtle ground plane under the grid for depth / silhouette
     const ground = new THREE.Mesh(
@@ -231,6 +267,13 @@ export class DungeonRenderer {
     this.selectRing.visible = false;
     this.scene.add(this.selectRing);
 
+    this.keeperHand = makeKeeperHand();
+    this.keeperHand.visible = false;
+    this.scene.add(this.keeperHand);
+
+    this.goldHoard.visible = false;
+    this.scene.add(this.goldHoard);
+
     this.composer = new EffectComposer(this.renderer);
     this.composer.addPass(new RenderPass(this.scene, this.camera));
     // Cap bloom so non-emissive earth/floors stay visible
@@ -275,7 +318,7 @@ export class DungeonRenderer {
   reinitPipeline(): void {
     const size = new THREE.Vector2();
     this.renderer.getSize(size);
-    this.renderer.setClearColor(0x221c24, 1);
+    this.renderer.setClearColor(0x2a2228, 1);
     this.composer = new EffectComposer(this.renderer);
     this.composer.addPass(new RenderPass(this.scene, this.camera));
     const isCoarse = typeof window !== 'undefined' && window.matchMedia?.('(pointer: coarse)').matches;
@@ -333,6 +376,7 @@ export class DungeonRenderer {
     }
     this.tileMeshes.clear();
     this.torches = [];
+    this.portals = [];
     this.heartGroup = null;
 
     for (const tile of grid.tiles) {
@@ -342,10 +386,12 @@ export class DungeonRenderer {
       if (tile.kind === TileKind.Rock) {
         const mesh = new THREE.Mesh(makeRockGeo(), tileMaterial(TileKind.Rock, false, tile.room));
         mesh.position.set(w.x, 0, w.z);
+        mesh.rotation.y = this.tileRotation(tile.x, tile.y);
         mesh.castShadow = true;
         mesh.receiveShadow = true;
         mesh.userData.tileX = tile.x;
         mesh.userData.tileY = tile.y;
+        this.addExposedWallFaces(grid, tile.x, tile.y, mesh, TileKind.Rock, false);
         this.gridGroup.add(mesh);
         this.addEdge(w.x, w.z, 3.5, this.rockEdgeMat);
         this.tileMeshes.set(key, mesh);
@@ -354,14 +400,18 @@ export class DungeonRenderer {
 
       // Fortified walls first (kind may still be Earth/Gold)
       if (tile.fortified) {
-        const mesh = new THREE.Mesh(makeWallGeo(true), tileMaterial(TileKind.Earth, true, tile.room));
+        const mesh = makeFortifiedWallMesh();
         mesh.position.set(w.x, 0, w.z);
-        mesh.castShadow = true;
-        mesh.receiveShadow = true;
+        mesh.rotation.y = this.tileRotation(tile.x, tile.y);
         mesh.userData.tileX = tile.x;
         mesh.userData.tileY = tile.y;
+        mesh.traverse((o) => {
+          o.userData.tileX = tile.x;
+          o.userData.tileY = tile.y;
+        });
+        this.addExposedWallFaces(grid, tile.x, tile.y, mesh, tile.kind, true);
         this.gridGroup.add(mesh);
-        this.addEdge(w.x, w.z, 2.45, this.edgeMat);
+        this.addEdge(w.x, w.z, 2.5, this.edgeMat);
         this.tileMeshes.set(key, mesh);
         continue;
       }
@@ -370,6 +420,7 @@ export class DungeonRenderer {
         const geo = tile.kind === TileKind.Gold ? makeGoldVeinGeo() : makeWallGeo();
         const mesh = new THREE.Mesh(geo, tileMaterial(tile.kind, false, tile.room));
         mesh.position.set(w.x, 0, w.z);
+        mesh.rotation.y = this.tileRotation(tile.x, tile.y);
         // Visual chip/shrink while diggers work (digProgress 0→1)
         const dig = Math.max(0, Math.min(0.95, tile.digProgress || 0));
         const s = 1 - dig * 0.7;
@@ -380,12 +431,14 @@ export class DungeonRenderer {
         mesh.receiveShadow = true;
         mesh.userData.tileX = tile.x;
         mesh.userData.tileY = tile.y;
+        this.addExposedWallFaces(grid, tile.x, tile.y, mesh, tile.kind, false);
         this.gridGroup.add(mesh);
         if (tile.kind === TileKind.Gold && dig < 0.85) {
           const glitter = makeGoldGlitter();
           glitter.position.set(w.x, mesh.position.y, w.z);
           glitter.scale.set(s, sy, s);
           glitter.userData.glitterFor = key;
+          glitter.userData.glitterSpin = true;
           this.gridGroup.add(glitter);
         }
         const edgeH = 2.35 * sy + mesh.position.y;
@@ -476,10 +529,11 @@ export class DungeonRenderer {
         this.gridGroup.add(decal);
       }
 
-      const props = makeRoomProps(tile.room);
+      const props = makeRoomProps(tile.room, Math.abs(tile.x * 3 + tile.y * 5));
       if (props) {
         props.position.set(w.x, 0.14, w.z);
         this.gridGroup.add(props);
+        if (props.userData.portalAnimated) this.portals.push(props);
       }
 
       if (tile.door === DoorState.Closed || tile.door === DoorState.Open) {
@@ -545,6 +599,35 @@ export class DungeonRenderer {
     this.syncFogOverlay(grid);
   }
 
+  private addExposedWallFaces(
+    grid: Grid,
+    x: number,
+    y: number,
+    parent: THREE.Object3D,
+    kind: TileKind,
+    fortified: boolean
+  ): void {
+    const faces: Array<[number, number, number]> = [
+      [0, 1, 0],
+      [1, 0, Math.PI / 2],
+      [0, -1, Math.PI],
+      [-1, 0, -Math.PI / 2],
+    ];
+    for (const [dx, dy, ry] of faces) {
+      const neighbor = grid.get(x + dx, y + dy);
+      if (!neighbor || grid.isSolid(neighbor.x, neighbor.y)) continue;
+      const detail = makeWallFaceDetail(kind, fortified);
+      // Compensate for per-tile quarter turns used to break texture repetition.
+      detail.rotation.y = ry - parent.rotation.y;
+      parent.add(detail);
+    }
+  }
+
+  private tileRotation(x: number, y: number): number {
+    const quarter = Math.abs(x * 7 + y * 13) % 4;
+    return quarter * Math.PI * 0.5;
+  }
+
   /** Lightweight dig/claim/fortify tags — no terrain rebuild required. */
   syncMarkOverlay(grid: Grid): void {
     while (this.markOverlay.children.length) {
@@ -597,8 +680,14 @@ export class DungeonRenderer {
       const key = `${tile.x},${tile.y}`;
       const under = this.tileMeshes.get(key);
       if (!tile.explored) {
-        fogged.push(tile);
-        if (under) under.visible = false;
+        // DK2 overview shows the earth mass; don't black-box solid cubes
+        const solidMass =
+          tile.kind === TileKind.Earth ||
+          tile.kind === TileKind.Gold ||
+          tile.kind === TileKind.Rock ||
+          tile.fortified;
+        if (!solidMass) fogged.push(tile);
+        if (under) under.visible = true;
       } else if (under && !under.visible) {
         under.visible = true;
       }
@@ -680,6 +769,49 @@ export class DungeonRenderer {
     }
   }
 
+  /** 3D keeper claw follows the pointer in Hand mode. */
+  setKeeperHand(wx: number, wz: number, visible: boolean, grabbing = false): void {
+    this.keeperHand.visible = visible;
+    if (!visible) return;
+    this.keeperHand.position.set(wx, grabbing ? 1.55 : 1.15, wz);
+    this.keeperHand.rotation.x = grabbing ? 0.55 : 0.18;
+    this.keeperHand.rotation.z = grabbing ? -0.25 : Math.sin(this.clock * 3) * 0.06;
+    this.keeperHand.rotation.y = grabbing ? 0.35 : 0.15;
+  }
+
+  /** Gold piles around the Heart grow with stored gold — no terrain rebuild. */
+  setHeartGold(amount: number, hx: number, hz: number): void {
+    if (this.goldHoard.children.length === 0) {
+      const mat = new THREE.MeshStandardMaterial({
+        color: 0xe8b028,
+        metalness: 0.88,
+        roughness: 0.28,
+        emissive: 0xa07010,
+        emissiveIntensity: 0.5,
+      });
+      const spots = [
+        [1.35, 0.18, 0.55],
+        [1.55, 0.12, -0.35],
+        [-1.4, 0.16, 0.4],
+        [-1.15, 0.1, -0.7],
+        [0.4, 0.14, 1.45],
+      ];
+      for (const [x, y, z] of spots) {
+        const pile = new THREE.Mesh(new THREE.SphereGeometry(0.32, 8, 6), mat);
+        pile.scale.set(1.25, 0.55, 1.1);
+        pile.position.set(x, y, z);
+        pile.castShadow = true;
+        this.goldHoard.add(pile);
+      }
+    }
+    this.goldHoard.position.set(hx, 0, hz);
+    const t = Math.max(0, Math.min(1, amount / 2800));
+    this.goldHoardScale = t;
+    const s = 0.35 + t * 1.15;
+    this.goldHoard.scale.setScalar(s);
+    this.goldHoard.visible = amount >= 80;
+  }
+
   clearEntities(): void {
     while (this.entityGroup.children.length) {
       this.entityGroup.remove(this.entityGroup.children[0]);
@@ -734,6 +866,7 @@ export class DungeonRenderer {
     if (active) {
       this.useComposer = false;
       this.bloomPass.enabled = false;
+      this.renderer.toneMappingExposure = 1.08;
       this.renderer.setPixelRatio(Math.min(this.basePixelRatio, 1.0));
       this.renderer.shadowMap.enabled = false;
       if (this.dirLight) this.dirLight.castShadow = false;
@@ -741,6 +874,7 @@ export class DungeonRenderer {
     } else {
       this.bloomPass.enabled = true;
       this.useComposer = !this.contextLost;
+      this.renderer.toneMappingExposure = 1.28;
       this.renderer.setPixelRatio(this.basePixelRatio);
       this.renderer.shadowMap.enabled = true;
       if (this.dirLight) this.dirLight.castShadow = true;
@@ -906,6 +1040,23 @@ export class DungeonRenderer {
         this.heartGroup.heartLight.intensity = 1.1 + Math.sin(this.clock * 3) * 0.25;
       }
       this.heartGroup.rotation.y += dt * 0.3;
+      if (this.heartGroup.heartCrown) {
+        this.heartGroup.heartCrown.rotation.y -= dt * 0.45;
+      }
+    }
+    this.dust.rotation.y += dt * 0.012;
+    this.dust.position.y = Math.sin(this.clock * 0.18) * 0.3;
+    for (const portal of this.portals) {
+      const ring = portal.userData.portalRing as THREE.Object3D | undefined;
+      const core = portal.userData.portalCore as THREE.Object3D | undefined;
+      if (ring) {
+        ring.rotation.z += dt * 0.85;
+        ring.rotation.y = Math.sin(this.clock * 0.7 + portal.position.x) * 0.18;
+      }
+      if (core) {
+        const pulse = 0.94 + Math.sin(this.clock * 4 + portal.position.z) * 0.08;
+        core.scale.setScalar(pulse);
+      }
     }
     for (const t of this.torches) {
       if (t.torchLight) {
@@ -914,6 +1065,15 @@ export class DungeonRenderer {
       if (t.flame) {
         t.flame.scale.setScalar(0.9 + Math.random() * 0.25);
       }
+    }
+    // Sparkle gold seams without allocating new meshes
+    for (const child of this.gridGroup.children) {
+      if (child.userData?.glitterSpin) {
+        child.rotation.y += dt * 1.1;
+      }
+    }
+    if (this.goldHoard.visible) {
+      this.goldHoard.rotation.y += dt * 0.15;
     }
     for (let i = this.fxGroup.children.length - 1; i >= 0; i--) {
       const c = this.fxGroup.children[i] as THREE.Object3D & {

@@ -64,10 +64,18 @@ Playable Vite + TypeScript + Three.js slice at `/workspace/underkeep/game`.
 
 Implemented: grid dig/claim/fortify/mine, Dungeon Heart lose condition, Scrabblers + Create Worker, mana from claimed tiles, Speed + Lightning, hand pick/drop/slap (combat stun on drop), rooms (Treasury/Lair/Hatchery/Training/Library stub/Portal), Portal attraction (Skitterwing/Rattlekin/Emberling), sleep/eat/train/fight jobs, one hero wave, HUD + mentor lines, PBR + shadows + fog + bloom/color grade + emissive heart/torches.
 
+Pass 7: Gold-border claimed flagstones (DK2 ownership read), health flowers above units, 3D keeper hand, gold haul bags, walk cycles, isometric camera damping, auto-claim dirt adjacent to owned land, plant-at-face digging, melee lunge/knockback.
+
+Pass 8: DK2-reference visual depth pass — exposed cavern walls gain strata ledges, rubble crowns, gold crystals, and fortified braces; Heart becomes a layered ritual monument; Portal becomes an animated cyan-crystal/orange-energy gateway; low-cost airborne dust, softer desktop shadows, varied portal dressing, and more gothic HUD framing.
+
 Pass 5: WebGL context-loss recovery + incremental dig visuals (no full rebuild per chip), smoother creature facing/path follow, Dig/Mine plant-at-face + pickaxe cycle + gold haul to Treasury, Lair bed capacity/rest/heal, Hatchery food regen + hunger eat loop (workers + minions), mentor feedback.
 
 Pass 7.3: Prison capture, Torture→Thornwitch, Graveyard→Bonewretch, room-size efficiency.
-Pass 7.4: Temple prayer/mood/talisman, Combat Pit leveling, creature roster, flee/drag wounded to Lair. Gaps / later: richer pathing, audio, GLTF art upgrades.
+Pass 7.4: Temple prayer/mood/talisman, Combat Pit leveling, creature roster, flee/drag wounded to Lair.
+
+Pass 9 (play): Keeper marks beat chores — workers stay on tagged dig/claim, needs accrue over a real session instead of a demo spike, gold cannot be fortified, rooms/tools explain why they failed, first fighters arrive from a small Lair+Hatchery, heroes keep marching on the Heart.
+
+Gaps / later: richer pathing, audio, GLTF art upgrades.
 
 ## Visual north star (YT X35cKEjvgrc from 2:20)
 Feel targets only — original IP art:
@@ -78,3 +86,6 @@ Feel targets only — original IP art:
 - Creatures: readable silhouettes at overview zoom
 - Warm torch pools; heart glow secondary to terrain readability
 - Angled elevated camera; clear tile seams; FoW optional later
+- Gold/brass frame on every claimed tile (the signature ownership read)
+- Health flowers above creatures (red minions / pale heroes); petals drop with HP
+- Workers plant at the dig face and hop while claiming

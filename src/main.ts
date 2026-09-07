@@ -105,6 +105,10 @@ if (
     params.get('shot') === '65' ||
     params.get('shot') === '6.5-fow' ||
     params.get('shot') === '6.5-fortify' ||
+    params.get('shot') === '7' ||
+    params.get('shot') === '7.0' ||
+    params.get('shot') === '8' ||
+    params.get('shot') === '8.0' ||
     params.get('shot') === '7.1' ||
     params.get('shot') === '71' ||
     params.get('shot') === '7.1-lava' ||
@@ -163,6 +167,8 @@ if (
       preparePass64Shot?: () => void;
       preparePass64bShot?: () => void;
       preparePass65Shot?: (focus?: 'fow' | 'fortify' | 'both') => void;
+      preparePass7Shot?: () => void;
+      preparePass8Shot?: () => void;
       preparePass71Shot?: (focus?: 'lava' | 'bridge' | 'possess' | 'payday' | 'both') => void;
       preparePass72Shot?: (focus?: 'minimap' | 'mission' | 'workshop' | 'worker' | 'both') => void;
       preparePass73Shot?: (focus?: 'prison' | 'torture' | 'graveyard' | 'efficiency' | 'both') => void;
@@ -170,7 +176,9 @@ if (
     };
     g.hud.hideOverlay();
     const shot = params.get('shot');
-    if (shot === '7.4-temple' || shot === '74-temple') g.preparePass74Shot?.('temple');
+    if (shot === '8' || shot === '8.0') g.preparePass8Shot?.();
+    else if (shot === '7' || shot === '7.0') g.preparePass7Shot?.();
+    else if (shot === '7.4-temple' || shot === '74-temple') g.preparePass74Shot?.('temple');
     else if (shot === '7.4-combat' || shot === '74-combat') g.preparePass74Shot?.('combatPit');
     else if (shot === '7.4-roster' || shot === '74-roster') g.preparePass74Shot?.('roster');
     else if (shot === '7.4-flee' || shot === '74-flee') g.preparePass74Shot?.('flee');

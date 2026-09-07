@@ -104,6 +104,10 @@ export class Game {
   private paint = false;
   private lastPaint: Vec2 | null = null;
   private camTarget = new THREE.Vector3(0, 0, 0);
+  private camVel = new THREE.Vector3();
+  private zoomPending = 0;
+  private canvas: HTMLCanvasElement;
+  private lastHand: { x: number; z: number } | null = null;
   private keys = new Set<string>();
   private mentored = new Set<string>();
   // touch / mobile
@@ -138,6 +142,7 @@ export class Game {
   private healUnlocked = false;
 
   constructor(canvas: HTMLCanvasElement) {
+    this.canvas = canvas;
     // HUD first so New Game / sheets stay wired even if boot later fails
     this.hud = new HUD();
     this.marqueeEl = document.getElementById('select-marquee');
@@ -146,6 +151,8 @@ export class Game {
       if (t !== 'select') {
         this.cancelBoxSelect();
       }
+      this.canvas.style.cursor = t === 'select' ? 'none' : 'crosshair';
+      if (t !== 'select') this.renderer.setKeeperHand(0, 0, false);
     };
     this.hud.onSpell = (s) => this.castSpell(s);
     this.hud.onOverlayContinue = () => {
@@ -175,6 +182,8 @@ export class Game {
     }
 
     this.bindInput(canvas);
+    this.canvas.style.cursor = this.tool === 'select' ? 'none' : 'crosshair';
+    canvas.addEventListener('mouseleave', () => this.renderer.setKeeperHand(0, 0, false));
     this.rebuild();
     this.syncAllEntityMeshes();
 
@@ -357,7 +366,7 @@ export class Game {
 
     const hw = this.grid.tileToWorld(this.grid.heartPos.x, this.grid.heartPos.y);
     this.camTarget.set(hw.x, 0, hw.z);
-    this.renderer.camera.position.set(hw.x + 4, 28, hw.z + 18);
+    this.renderer.camera.position.set(hw.x + 6, 34, hw.z + 22);
     this.renderer.camera.lookAt(this.camTarget);
 
     this.hud.say(MENTOR_LINES.start);
@@ -553,7 +562,7 @@ export class Game {
       this.renderer.camera.lookAt(this.camTarget);
     } else {
       this.camTarget.set(hw.x, 0, hw.z);
-      this.renderer.camera.position.set(hw.x + 4, 28, hw.z + 18);
+      this.renderer.camera.position.set(hw.x + 6, 34, hw.z + 22);
       this.renderer.camera.lookAt(this.camTarget);
     }
 
@@ -569,9 +578,16 @@ export class Game {
       stats.scale
     );
     c.setMesh(mesh);
-    const extras = mesh as THREE.Group & { pickaxe?: THREE.Object3D; selectRing?: THREE.Object3D };
+    const extras = mesh as THREE.Group & {
+      pickaxe?: THREE.Object3D;
+      selectRing?: THREE.Object3D;
+      healthFlower?: THREE.Object3D;
+      goldBag?: THREE.Object3D;
+    };
     c.pickaxe = extras.pickaxe ?? null;
     c.selectRing = extras.selectRing ?? null;
+    c.healthFlower = extras.healthFlower ?? null;
+    c.goldBag = extras.goldBag ?? null;
     this.renderer.addEntityMesh(mesh);
     this.creatures.push(c);
     return c;
@@ -794,8 +810,8 @@ export class Game {
         try {
           const hit = this.pointerToWorld(e, canvas);
           if (hit && Number.isFinite(hit.x) && Number.isFinite(hit.z)) {
-            this.held.wx = hit.x;
-            this.held.wz = hit.z;
+            this.held.wx += (hit.x - this.held.wx) * 0.42;
+            this.held.wz += (hit.z - this.held.wz) * 0.42;
           }
         } catch (err) {
           console.warn('[underkeep] held follow failed', err);
@@ -805,7 +821,7 @@ export class Game {
 
     canvas.addEventListener('wheel', (e) => {
       e.preventDefault();
-      this.zoomBy(-Math.sign(e.deltaY) * 1.5);
+      this.zoomPending += -Math.sign(e.deltaY) * 1.8;
     }, { passive: false });
 
     // --- Touch controls ---
@@ -881,7 +897,7 @@ export class Game {
             const ratio = dist / this.pinchStartDist;
             // pinch out = zoom in (lower cam Y toward ground along look dir)
             const cam = this.renderer.camera;
-            const targetY = THREE.MathUtils.clamp(this.pinchStartCamY / ratio, 12, 45);
+            const targetY = THREE.MathUtils.clamp(this.pinchStartCamY / ratio, 10, 48);
             const dy = targetY - cam.position.y;
             if (Math.abs(dy) > 0.01) {
               const dir = new THREE.Vector3();
@@ -945,8 +961,8 @@ export class Game {
         try {
           const hit = this.pointerToWorld(p, canvas);
           if (hit && Number.isFinite(hit.x) && Number.isFinite(hit.z)) {
-            this.held.wx = hit.x;
-            this.held.wz = hit.z;
+            this.held.wx += (hit.x - this.held.wx) * 0.42;
+            this.held.wz += (hit.z - this.held.wz) * 0.42;
           }
         } catch { /* ignore held follow */ }
         this.updatePointerHover(p, canvas);
@@ -1138,10 +1154,18 @@ export class Game {
     const tp = this.pointerToTile(e, canvas);
     if (!tp || !this.grid.inBounds(tp.x, tp.y)) {
       this.renderer.setHover(0, 0, false);
+      this.renderer.setKeeperHand(0, 0, false);
       return;
     }
     const w = this.grid.tileToWorld(tp.x, tp.y);
     this.renderer.setHover(w.x, w.z, true, this.toolColor());
+    const hit = this.pointerToWorld(e, canvas);
+    if (hit && this.tool === 'select') {
+      this.lastHand = { x: hit.x, z: hit.z };
+      this.renderer.setKeeperHand(hit.x, hit.z, true, !!this.held);
+    } else {
+      this.renderer.setKeeperHand(0, 0, false);
+    }
     const tile = this.grid.get(tp.x, tp.y);
     if (tile) {
       let room =
@@ -1231,11 +1255,15 @@ export class Game {
   }
 
   private zoomBy(amount: number): void {
+    this.zoomPending += amount;
+  }
+
+  private applyZoom(amount: number): void {
     const cam = this.renderer.camera;
     const dir = new THREE.Vector3();
     cam.getWorldDirection(dir);
     cam.position.addScaledVector(dir, amount);
-    cam.position.y = THREE.MathUtils.clamp(cam.position.y, 12, 45);
+    cam.position.y = THREE.MathUtils.clamp(cam.position.y, 10, 48);
     cam.lookAt(this.camTarget.x, 0, this.camTarget.z);
   }
 
@@ -1556,23 +1584,35 @@ export class Game {
     if (!tile) return;
 
     if (this.tool === 'dig') {
-      if (this.grid.isDiggable(x, y)) {
+      if (tile.kind === TileKind.Earth || tile.kind === TileKind.Gold) {
+        if (tile.fortified) tile.fortified = false;
         tile.mark = MarkType.Dig;
         if (tile.digProgress <= 0) tile.digProgress = 0;
+        const face = this.grid.findDiggableFace(x, y);
+        if (face && (face.x !== x || face.y !== y)) {
+          const ft = this.grid.get(face.x, face.y);
+          if (ft && (ft.kind === TileKind.Earth || ft.kind === TileKind.Gold)) {
+            if (ft.fortified) ft.fortified = false;
+            ft.mark = MarkType.Dig;
+          }
+        }
         this.marksDirty = true;
+      } else if (!this.lastPaint && tile.kind === TileKind.Rock) {
+        this.hud.sayNow(MENTOR_LINES.cannotDig);
       }
     } else if (this.tool === 'claim') {
       if (tile.kind === TileKind.Dirt) {
         tile.mark = MarkType.Claim;
         this.marksDirty = true;
+      } else if (!this.lastPaint && tile.kind !== TileKind.Claimed && tile.kind !== TileKind.Heart) {
+        this.hud.sayNow(MENTOR_LINES.cannotClaim);
       }
     } else if (this.tool === 'fortify') {
-      if (
-        (tile.kind === TileKind.Earth || tile.kind === TileKind.Gold) &&
-        this.grid.hasAdjacentClaimed(x, y)
-      ) {
+      if (tile.kind === TileKind.Earth && this.grid.hasAdjacentClaimed(x, y)) {
         tile.mark = MarkType.Fortify;
         this.marksDirty = true;
+      } else if (!this.lastPaint && (tile.kind === TileKind.Gold || tile.kind === TileKind.Rock || tile.fortified)) {
+        this.hud.sayNow(MENTOR_LINES.cannotFortify);
       }
     } else if (this.tool === 'bridgeWood' || this.tool === 'bridgeStone') {
       this.placeBridge(x, y, this.tool === 'bridgeStone');
@@ -1653,8 +1693,16 @@ export class Game {
         combatPit: RoomType.CombatPit,
       };
       const room = roomMap[this.tool];
-      if (room && tile.kind === TileKind.Claimed && tile.room === RoomType.None) {
+      if (room) {
+        if (tile.kind !== TileKind.Claimed || tile.room !== RoomType.None) {
+          if (!this.lastPaint) this.hud.sayNow(MENTOR_LINES.cannotRoom);
+          return;
+        }
         const cost = ROOM_COST[room];
+        if (this.gold < cost) {
+          if (!this.lastPaint) this.hud.sayNow(MENTOR_LINES.needGold.replace('%g', String(cost)));
+          return;
+        }
         if (this.gold >= cost) {
           this.gold -= cost;
           tile.room = room;
@@ -1663,13 +1711,10 @@ export class Game {
           if (room === RoomType.Portal) this.mentioneOnce('portal', MENTOR_LINES.portal);
           if (room === RoomType.Lair) {
             this.mentioneOnce('lairBuilt', MENTOR_LINES.lairBuilt);
-            // Demo spike: weary + lightly hurt so beds fill within ~60s
-            this.spikeNeedsForRoom(RoomType.Lair);
           }
           if (room === RoomType.Hatchery) {
             this.mentioneOnce('hatcheryBuilt', MENTOR_LINES.hatcheryBuilt);
-            this.hatcheryFood = Math.max(this.hatcheryFood, 4);
-            this.spikeNeedsForRoom(RoomType.Hatchery);
+            this.hatcheryFood = Math.max(this.hatcheryFood, 6);
           }
           if (room === RoomType.Guard) {
             this.mentioneOnce('guardBuilt', MENTOR_LINES.guardBuilt);
@@ -3815,6 +3860,91 @@ export class Game {
     this.renderer.camera.lookAt(this.camTarget);
   }
 
+  /** QA/screenshot: Pass 7 gold-border claimed land, health flowers, gold haul, isometric camera. */
+  preparePass7Shot(): void {
+    this.hud.hideOverlay();
+    this.preparePass4Shot();
+    const hx = this.grid.heartPos.x;
+    const hy = this.grid.heartPos.y;
+    this.gold = 2200;
+    // Fresh dirt next to claimed — auto-claim / gold-border contrast
+    const dirt = this.grid.get(hx + 1, hy + 3);
+    if (dirt && dirt.kind !== TileKind.Heart) {
+      dirt.kind = TileKind.Dirt;
+      dirt.room = RoomType.None;
+      dirt.mark = MarkType.Claim;
+      dirt.fortified = false;
+    }
+    for (const c of this.creatures) {
+      if (!c.alive) continue;
+      c.clampStats();
+      if (c.isWorker) {
+        c.goldCarried = 90;
+        c.job = JobType.Idle;
+        c.hp = c.maxHp * 0.55;
+      } else if (!c.isHero) {
+        c.hp = c.maxHp * 0.7;
+      }
+      c.syncMesh(this.time, 0.016);
+    }
+    const extra = this.spawnCreature(CreatureKind.Rattlekin, hx - 1, hy + 1);
+    extra.hp = extra.maxHp * 0.4;
+    extra.syncMesh(this.time, 0.016);
+    this.rebuild();
+    const focus = this.grid.tileToWorld(hx + 1, hy + 1);
+    this.camTarget.set(focus.x, 0, focus.z);
+    this.renderer.camera.position.set(focus.x + 5, 28, focus.z + 18);
+    this.renderer.camera.lookAt(this.camTarget);
+    this.hud.setTooltip('Gold-border claimed tiles · health flowers · gold haul');
+    this.hud.sayNow('Claimed land wears gold. Flowers measure health. Scrabblers haul the glitter home.');
+  }
+
+  /** QA/screenshot: Pass 8 layered wall faces, monumental Heart/Portal, cavern atmosphere. */
+  preparePass8Shot(): void {
+    this.preparePass7Shot();
+    const hx = this.grid.heartPos.x;
+    const hy = this.grid.heartPos.y;
+    const claim = (x: number, y: number, room = RoomType.None) => {
+      const tile = this.grid.get(x, y);
+      if (!tile || tile.kind === TileKind.Heart) return;
+      tile.kind = TileKind.Claimed;
+      tile.room = room;
+      tile.mark = MarkType.None;
+      tile.digProgress = 0;
+      tile.claimedProgress = 1;
+      tile.fortified = false;
+      tile.explored = true;
+    };
+
+    // A compact crystal gateway chamber in the south-east of the plaza.
+    for (let y = hy + 2; y <= hy + 3; y++) {
+      for (let x = hx + 3; x <= hx + 4; x++) claim(x, y, RoomType.Portal);
+    }
+    // Exposed wall showcase: dressed fortification beside earth and gold strata.
+    const fort = this.grid.get(hx - 2, hy + 2);
+    if (fort) {
+      fort.kind = TileKind.Earth;
+      fort.fortified = true;
+      fort.room = RoomType.None;
+      fort.explored = true;
+    }
+    const goldFace = this.grid.get(hx - 1, hy + 3);
+    if (goldFace) {
+      goldFace.kind = TileKind.Gold;
+      goldFace.goldAmount = 900;
+      goldFace.fortified = false;
+      goldFace.explored = true;
+    }
+
+    this.rebuild();
+    const focus = this.grid.tileToWorld(hx + 1.5, hy + 1.5);
+    this.camTarget.set(focus.x, 0, focus.z);
+    this.renderer.camera.position.set(focus.x + 4.5, 19.5, focus.z + 15.5);
+    this.renderer.camera.lookAt(this.camTarget);
+    this.hud.setTooltip('Layered cavern walls · ritual Heart · crystal Portal · airborne ash');
+    this.hud.sayNow('The Underkeep gains depth: carved strata, ritual iron, crystal fire.');
+  }
+
 
   /** QA/screenshot: Pass 6.4b Hand pick + shift multi-select + attack-move, no blackout. */
   preparePass64bShot(): void {
@@ -4061,7 +4191,7 @@ export class Game {
         try {
           if (c.alive) {
             c.clampStats();
-            c.syncMesh(this.time);
+            c.syncMesh(this.time, dt);
             // FoW: hide units on unexplored tiles (explored stays visible). Never throw.
             try {
               if (c.mesh) {
@@ -4085,6 +4215,8 @@ export class Game {
       }
 
       this.renderer.update(dt);
+      const hw = this.grid.tileToWorld(this.grid.heartPos.x, this.grid.heartPos.y);
+      this.renderer.setHeartGold(this.gold, hw.x, hw.z);
       this.hud.update(dt);
       // Pass 7.4 — prayer buff decay + temple pray count
       this.templePrayCount = 0;
@@ -4361,23 +4493,36 @@ export class Game {
       }
       return;
     }
-    const speed = 18;
+    const accel = 36;
     const forward = new THREE.Vector3();
     cam.getWorldDirection(forward);
     forward.y = 0;
     forward.normalize();
     const right = new THREE.Vector3().crossVectors(forward, new THREE.Vector3(0, 1, 0)).normalize();
-    const move = new THREE.Vector3();
-    if (this.keys.has('w') || this.keys.has('arrowup')) move.add(forward);
-    if (this.keys.has('s') || this.keys.has('arrowdown')) move.sub(forward);
-    if (this.keys.has('a') || this.keys.has('arrowleft')) move.sub(right);
-    if (this.keys.has('d') || this.keys.has('arrowright')) move.add(right);
-    if (move.lengthSq() > 0) {
-      move.normalize().multiplyScalar(speed * dt);
-      cam.position.add(move);
-      this.camTarget.add(move);
-      cam.lookAt(this.camTarget.x, 0, this.camTarget.z);
+    const wish = new THREE.Vector3();
+    if (this.keys.has('w') || this.keys.has('arrowup')) wish.add(forward);
+    if (this.keys.has('s') || this.keys.has('arrowdown')) wish.sub(forward);
+    if (this.keys.has('a') || this.keys.has('arrowleft')) wish.sub(right);
+    if (this.keys.has('d') || this.keys.has('arrowright')) wish.add(right);
+    if (wish.lengthSq() > 0) {
+      wish.normalize().multiplyScalar(accel);
+      this.camVel.lerp(wish, 1 - Math.exp(-10 * dt));
+    } else {
+      this.camVel.multiplyScalar(Math.exp(-8 * dt));
     }
+    if (this.camVel.lengthSq() > 1e-6) {
+      const step = this.camVel.clone().multiplyScalar(dt);
+      cam.position.add(step);
+      this.camTarget.add(step);
+    }
+    if (Math.abs(this.zoomPending) > 0.002) {
+      const z = this.zoomPending * (1 - Math.exp(-14 * dt));
+      this.zoomPending -= z;
+      this.applyZoom(z);
+    } else {
+      this.zoomPending = 0;
+    }
+    cam.lookAt(this.camTarget.x, 0, this.camTarget.z);
   }
 
   private regenMana(dt: number): void {
@@ -4465,6 +4610,30 @@ export class Game {
       }
     }
 
+    // Player marks steal workers off chores (DK2: tagged earth is the order)
+    if (digMarks.length + claimMarks.length > 0) {
+      let stolen = false;
+      for (const w of workers) {
+        if (w.job === JobType.Flee || w.job === JobType.DragPrisoner || w.job === JobType.DragWounded) continue;
+        if (w.job === JobType.Dig || w.job === JobType.Mine || w.job === JobType.Claim || w.job === JobType.Haul) continue;
+        const desperate = w.hunger > 78 || w.sleepNeed > 82 || w.hp < w.maxHp * 0.4;
+        if ((w.job === JobType.Eat || w.job === JobType.Sleep) && desperate) continue;
+        if (
+          w.job === JobType.Fortify ||
+          w.job === JobType.Craft ||
+          w.job === JobType.Idle ||
+          w.job === JobType.Eat ||
+          w.job === JobType.Sleep
+        ) {
+          w.job = JobType.Idle;
+          w.jobTarget = null;
+          w.setPath(null);
+          stolen = true;
+        }
+      }
+      if (stolen) this.mentioneOnce('marksFirst', MENTOR_LINES.marksFirst);
+    }
+
     const idle = workers.filter(
       (w) => w.job === JobType.Idle || (w.job === JobType.Flee && w.fleeTimer <= 0)
     );
@@ -4472,20 +4641,6 @@ export class Game {
       w.job = JobType.Idle;
       w.jobTarget = null;
       let assigned = false;
-
-      // Needs beat new dig jobs when rooms exist
-      {
-        const hasHatch = this.grid.countRoom(RoomType.Hatchery) > 0;
-        const hasLair = this.grid.countRoom(RoomType.Lair) > 0;
-        const hungry = w.hunger > (hasHatch ? 26 : 55);
-        const tired = w.sleepNeed > (hasLair ? 30 : 70) || w.hp < w.maxHp * 0.65;
-        if (hungry && hasHatch && (this.hatcheryFood > 0 || w.hunger > 50)) {
-          if (this.assignEat(w)) continue;
-        }
-        if (tired && hasLair) {
-          if (this.assignSleep(w)) continue;
-        }
-      }
 
       // Haul gold to Treasury first when carrying a load
       if (w.goldCarried >= 40) {
@@ -4566,8 +4721,10 @@ export class Game {
       }
       if (assigned) continue;
 
-      // Workshop craft — idle Scrabblers manufacture door/sentry kits when under cap
+      // Workshop craft — only when the Keeper has no tagged earth/dirt waiting
       if (
+        digMarks.length === 0 &&
+        claimMarks.length === 0 &&
         this.grid.countRoom(RoomType.Workshop) > 0 &&
         (this.doorKits < KIT_CAP || this.sentryKits < KIT_CAP)
       ) {
@@ -4594,14 +4751,19 @@ export class Game {
         .map((m) => ({ m, d: Math.abs(m.x - w.x) + Math.abs(m.y - w.y) }))
         .sort((a, b) => a.d - b.d);
       for (const { m } of digSorted) {
-        const key = `${m.x},${m.y}`;
+        const face = this.grid.findDiggableFace(m.x, m.y) ?? (this.grid.isReachableSolid(m.x, m.y) ? m : null);
+        if (!face) continue;
+        const key = `${face.x},${face.y}`;
         if (claimedTargets.has(key)) continue;
-        if (!this.grid.isReachableSolid(m.x, m.y)) continue;
-        const tile = this.grid.get(m.x, m.y)!;
-        const path = this.grid.findPathAdjacent(w.x, w.y, m.x, m.y);
+        const tile = this.grid.get(face.x, face.y)!;
+        if (tile.mark !== MarkType.Dig) {
+          tile.mark = MarkType.Dig;
+          this.marksDirty = true;
+        }
+        const path = this.grid.findPathAdjacent(w.x, w.y, face.x, face.y);
         if (!path) continue;
         w.job = tile.kind === TileKind.Gold ? JobType.Mine : JobType.Dig;
-        w.jobTarget = m;
+        w.jobTarget = face;
         w.setPath(path);
         w.workTimer = 0;
         claimedTargets.add(key);
@@ -4628,6 +4790,42 @@ export class Game {
       }
       if (assigned) continue;
 
+      // Auto-claim unmarked dirt next to owned land (DK2 imps claim without a tag)
+      if (!assigned) {
+        let best: Vec2 | null = null;
+        let bestD = 999;
+        for (const tile of this.grid.tiles) {
+          if (tile.kind !== TileKind.Dirt) continue;
+          if (!tile.explored) continue;
+          if (!this.grid.hasAdjacentClaimed(tile.x, tile.y)) continue;
+          const key = `${tile.x},${tile.y}`;
+          if (claimedTargets.has(key)) continue;
+          const d = Math.abs(tile.x - w.x) + Math.abs(tile.y - w.y);
+          if (d < bestD && d <= 18) {
+            bestD = d;
+            best = { x: tile.x, y: tile.y };
+          }
+        }
+        if (best) {
+          const path = this.grid.findPath(w.x, w.y, best.x, best.y);
+          if (path) {
+            const ct = this.grid.get(best.x, best.y)!;
+            if (ct.mark !== MarkType.Claim) {
+              ct.mark = MarkType.Claim;
+              this.marksDirty = true;
+            }
+            w.job = JobType.Claim;
+            w.jobTarget = best;
+            w.setPath(path);
+            w.workTimer = 0;
+            claimedTargets.add(`${best.x},${best.y}`);
+            assigned = true;
+            this.mentioneOnce('autoClaim', MENTOR_LINES.autoClaim);
+          }
+        }
+      }
+      if (assigned) continue;
+
       for (const m of fortMarks) {
         const key = `${m.x},${m.y}`;
         if (claimedTargets.has(key)) continue;
@@ -4642,8 +4840,8 @@ export class Game {
         assigned = true;
         break;
       }
-      // Pass 6.5: idle Scrabblers auto-fortify soft earth walls next to claimed land (rock stays impassable)
-      if (!assigned) {
+      // Auto-fortify only after the opening excavate — never brick the starting gold
+      if (!assigned && this.time >= 40 && digMarks.length === 0 && claimMarks.length === 0) {
         let best: Vec2 | null = null;
         let bestD = 999;
         // Scan claimed/heart neighbors only — O(frontier) instead of full map
@@ -4694,26 +4892,30 @@ export class Game {
       }
     }
 
-    // Scrabblers: always accrue needs (even while digging) so dig marks cannot starve rest/eat
+    // Scrabblers accrue needs slowly — they are workers first, guests second.
     for (const w of workers) {
       if (w.job === JobType.Flee || w.held) continue;
       const hasHatch = this.grid.countRoom(RoomType.Hatchery) > 0;
       const hasLair = this.grid.countRoom(RoomType.Lair) > 0;
-      // Faster when rooms exist so beta sees eat/rest within ~60–90s; milder otherwise
-      w.hunger = Math.min(100, w.hunger + (hasHatch ? 7.5 : 2.8) * dt);
-      w.sleepNeed = Math.min(100, w.sleepNeed + (hasLair ? 6.5 : 1.5) * dt);
+      w.hunger = Math.min(100, w.hunger + (hasHatch ? 0.85 : 0.45) * dt);
+      w.sleepNeed = Math.min(100, w.sleepNeed + (hasLair ? 0.7 : 0.35) * dt);
       if (w.job === JobType.Eat || w.job === JobType.Sleep) continue;
 
-      const hungry = w.hunger > (hasHatch ? 26 : 55);
-      const tired = w.sleepNeed > (hasLair ? 30 : 70) || w.hp < w.maxHp * 0.65;
-      if (!hungry && !tired) continue;
+      const onPlayerWork =
+        w.job === JobType.Dig ||
+        w.job === JobType.Mine ||
+        w.job === JobType.Claim ||
+        w.job === JobType.Haul ||
+        w.job === JobType.Fortify ||
+        w.job === JobType.DragPrisoner ||
+        w.job === JobType.DragWounded;
+      const desperate = w.hunger > 78 || w.sleepNeed > 82 || w.hp < w.maxHp * 0.4;
+      if (onPlayerWork && !desperate) continue;
 
-      // Prefer Hatchery / Lair over dig/claim/mine/haul until satisfied
-      if (
-        hungry &&
-        hasHatch &&
-        (this.hatcheryFood > 0 || w.hunger > 50)
-      ) {
+      const hungry = w.hunger > (hasHatch ? 62 : 80);
+      const tired = w.sleepNeed > (hasLair ? 68 : 85) || w.hp < w.maxHp * 0.4;
+      if (!hungry && !tired) continue;
+      if (hungry && hasHatch && (this.hatcheryFood > 0 || w.hunger > 70)) {
         this.assignEat(w);
       } else if (tired && hasLair) {
         this.assignSleep(w);
@@ -4765,12 +4967,12 @@ export class Game {
         continue;
       }
 
-      // Needs accumulate in real time; faster when Hatchery/Lair exist (demo-provable)
+      // Needs accumulate over a real session, not a screenshot window
       const hasHatch = this.grid.countRoom(RoomType.Hatchery) > 0;
       const hasLair = this.grid.countRoom(RoomType.Lair) > 0;
-      c.hunger = Math.min(100, c.hunger + (hasHatch ? 8.0 : 4.5) * dt);
-      c.sleepNeed = Math.min(100, c.sleepNeed + (hasLair ? 7.0 : 3.0) * dt);
-      c.trainNeed = Math.min(100, c.trainNeed + 2.2 * dt);
+      c.hunger = Math.min(100, c.hunger + (hasHatch ? 1.15 : 0.7) * dt);
+      c.sleepNeed = Math.min(100, c.sleepNeed + (hasLair ? 0.95 : 0.55) * dt);
+      c.trainNeed = Math.min(100, c.trainNeed + 1.1 * dt);
 
       // Already committed to eat/sleep/train/research — keep path
       // (Guard is re-asserted below so hunger/sleep can interrupt)
@@ -4817,10 +5019,10 @@ export class Game {
           continue;
         }
       }
-      if (c.hunger > (hasHatch ? 24 : 40) && hasHatch) {
+      if (c.hunger > (hasHatch ? 55 : 70) && hasHatch) {
         if (this.assignEat(c)) continue;
       }
-      if ((c.sleepNeed > (hasLair ? 28 : 50) || hurt) && hasLair) {
+      if ((c.sleepNeed > (hasLair ? 58 : 75) || hurt) && hasLair) {
         if (this.assignSleep(c)) continue;
       }
 
@@ -5107,21 +5309,12 @@ export class Game {
     return n;
   }
 
-  /** After placing Lair/Hatchery, spike needs so Scrabblers/minions seek rooms quickly (beta). */
+  /** Light tutorial nudge — one idle body visits a new room, the rest keep working. */
   private spikeNeedsForRoom(room: RoomType): void {
-    for (const c of this.creatures) {
-      if (!c.alive || c.isHero) continue;
-      if (room === RoomType.Hatchery) {
-        c.hunger = Math.max(c.hunger, 70);
-      }
-      if (room === RoomType.Lair) {
-        c.sleepNeed = Math.max(c.sleepNeed, 75);
-        // Light wound so HP regen is visible while resting
-        if (c.hp > c.maxHp * 0.55) {
-          c.hp = Math.min(c.hp, c.maxHp * 0.5);
-        }
-      }
-    }
+    const idle = this.creatures.find((c) => c.alive && !c.isHero && !c.held && c.job === JobType.Idle);
+    if (!idle) return;
+    if (room === RoomType.Hatchery) idle.hunger = Math.max(idle.hunger, 55);
+    if (room === RoomType.Lair) idle.sleepNeed = Math.max(idle.sleepNeed, 55);
   }
 
 
@@ -5453,9 +5646,16 @@ export class Game {
       // Face the block — pickaxe swing synced via digAnim in Creature.syncMesh
       const tw = this.grid.tileToWorld(t.x, t.y);
       c.faceToward(tw.x, tw.z);
+      const stand = this.grid.tileToWorld(c.x, c.y);
+      const hug = 0.36;
+      const txw = stand.x + (tw.x - stand.x) * hug;
+      const tzw = stand.z + (tw.z - stand.z) * hug;
+      c.wx += (txw - c.wx) * Math.min(1, 10 * dt);
+      c.wz += (tzw - c.wz) * Math.min(1, 10 * dt);
+      c.moving = false;
       c.workTimer += dt;
-      // Chip cadence ~0.38s at full efficiency; low mood digs visibly slower
-      const digCadence = 0.38 / Math.max(0.5, Math.min(1.25, c.workEfficiency()));
+      // Chip cadence ~0.32s at full efficiency; low mood digs visibly slower
+      const digCadence = 0.32 / Math.max(0.5, Math.min(1.25, c.workEfficiency()));
       if (c.workTimer >= digCadence) {
         c.workTimer = 0;
         const wpos = this.grid.tileToWorld(t.x, t.y);
@@ -5531,8 +5731,8 @@ export class Game {
         return;
       }
       c.workTimer += dt;
-      // Fast claim — stone floor appears almost instantly
-      if (c.workTimer >= 0.35) {
+      // Fast claim — stone floor appears almost instantly (imps hop on the tile)
+      if (c.workTimer >= 0.28) {
         t.kind = TileKind.Claimed;
         t.claimedProgress = 1;
         t.mark = MarkType.None;
@@ -5549,7 +5749,7 @@ export class Game {
     } else if (c.job === JobType.Fortify) {
       if (Math.hypot(c.x - t.x, c.y - t.y) > 1.6) return;
       c.workTimer += dt;
-      if (c.workTimer >= 1.5) {
+      if (c.workTimer >= 1.15) {
         t.fortified = true;
         t.mark = MarkType.None;
         // keep kind as earth visually via fortified flag
@@ -5829,6 +6029,25 @@ export class Game {
   }
 
   private updateHeroJob(c: Creature, dt: number): void {
+    // Keep marching if assignJobs missed a frame
+    if (c.path.length === 0 || c.pathIndex >= c.path.length) {
+      const hx0 = this.grid.heartPos.x;
+      const hy0 = this.grid.heartPos.y;
+      const foe = this.creatures.find(
+        (o) =>
+          o.alive &&
+          !o.isHero &&
+          !o.isWorker &&
+          !o.held &&
+          Math.hypot(o.x - c.x, o.y - c.y) < 8
+      );
+      const gx = foe ? foe.x : hx0;
+      const gy = foe ? foe.y : hy0;
+      if (Math.hypot(c.x - gx, c.y - gy) > 1.2) {
+        const path = this.grid.findPath(c.x, c.y, gx, gy, { forHero: true, allowHazard: true });
+        if (path) c.setPath(path);
+      }
+    }
     // damage heart if adjacent
     const hx = this.grid.heartPos.x;
     const hy = this.grid.heartPos.y;
@@ -5890,6 +6109,13 @@ export class Game {
     const beforeAlive = target.alive;
     const dmg = c.damage * (0.95 + Math.random() * 0.25) * levelBonus * prayerMul * taliMul;
     target.takeDamage(dmg);
+    c.attackPulse = 1;
+    c.faceToward(target.wx, target.wz);
+    const kdx = target.wx - c.wx;
+    const kdz = target.wz - c.wz;
+    const klen = Math.hypot(kdx, kdz) || 1;
+    target.wx += (kdx / klen) * 0.12;
+    target.wz += (kdz / klen) * 0.12;
     this.renderer.spawnFx(new THREE.Vector3(target.wx, 0.85, target.wz), c.isHero ? 0x88aaff : 0xff4040, 0.32);
     this.renderer.spawnFx(new THREE.Vector3(target.wx, 1.15, target.wz), 0xffddaa, 0.18);
     if (beforeAlive && !target.alive) {
@@ -5982,8 +6208,8 @@ export class Game {
       this.announceSpecies(CreatureKind.Skitterwing, MENTOR_LINES.skitterwing);
       return;
     }
-    // Rattlekin — Lair + Hatchery composition
-    if (!this.attracted.rattlekin && lair >= 4 && hatch >= 2) {
+    // Rattlekin — a small Lair + Hatchery is enough for the first fighter
+    if (!this.attracted.rattlekin && lair >= 2 && hatch >= 1) {
       this.spawnCreature(CreatureKind.Rattlekin, sx, sy);
       this.attracted.rattlekin = true;
       this.portalCooldown = 10;
@@ -5991,7 +6217,7 @@ export class Game {
       return;
     }
     // Emberling — Training + Lair + gold reserves
-    if (!this.attracted.emberling && train >= 4 && lair >= 6 && this.gold >= 200) {
+    if (!this.attracted.emberling && train >= 2 && lair >= 3 && this.gold >= 200) {
       this.spawnCreature(CreatureKind.Emberling, sx, sy);
       this.attracted.emberling = true;
       this.portalCooldown = 12;
@@ -5999,7 +6225,7 @@ export class Game {
       return;
     }
     // Gravemage — Library + Lair (researchers)
-    if (!this.attracted.gravemage && library >= 4 && lair >= 4) {
+    if (!this.attracted.gravemage && library >= 2 && lair >= 2) {
       this.spawnCreature(CreatureKind.Gravemage, sx, sy);
       this.attracted.gravemage = true;
       this.portalCooldown = 12;
@@ -6008,7 +6234,7 @@ export class Game {
     }
 
     // Periodic extras while composition remains attractive
-    if (this.attracted.rattlekin && lair >= 4 && hatch >= 2 && Math.random() < 0.12) {
+    if (this.attracted.rattlekin && lair >= 2 && hatch >= 1 && Math.random() < 0.12) {
       const count = this.creatures.filter((c) => c.alive && c.kind === CreatureKind.Rattlekin).length;
       if (count < 4) {
         this.spawnCreature(CreatureKind.Rattlekin, sx, sy);

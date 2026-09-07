@@ -6,9 +6,9 @@
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="mobile-web-app-capable" content="yes" />
     <title>Underkeep</title>
-    <meta name="underkeep-build" content="pass7.2" />
-    <script type="module" crossorigin src="/underkeep/assets/index-4TiOnVRm.js"></script>
-    <link rel="stylesheet" crossorigin href="/underkeep/assets/index-Dtxd_2zm.css">
+    <meta name="underkeep-build" content="pass7.4" />
+    <script type="module" crossorigin src="/underkeep/assets/index-CKfuDXe_.js"></script>
+    <link rel="stylesheet" crossorigin href="/underkeep/assets/index-B6ECCFW_.css">
   </head>
   <body class="booting">
     <div id="boot-splash" aria-live="polite">
@@ -39,6 +39,7 @@
           <button class="spell" data-spell="createWorker" id="btn-create-worker" title="Create Scrabbler (Q) — cost scales">✨ Worker</button>
           <button type="button" id="btn-build-desktop" class="sheet-toggle" title="Build rooms" aria-expanded="false">🏗 Build</button>
           <button type="button" id="btn-spells-desktop" class="sheet-toggle" title="Spells" aria-expanded="false">🪄 Spells</button>
+          <button type="button" id="btn-roster-desktop" class="sheet-toggle" title="Creature roster" aria-expanded="false">📋 Roster</button>
         </div>
 
         <div id="mobile-bar" class="mobile-only-ui" aria-label="Primary tools">
@@ -49,6 +50,7 @@
           <button class="spell" data-spell="createWorker" title="Create Worker">✨</button>
           <button type="button" id="btn-build" class="sheet-toggle" title="Build rooms" aria-expanded="false">🏗</button>
           <button type="button" id="btn-spells" class="sheet-toggle" title="Spells" aria-expanded="false">🪄</button>
+          <button type="button" id="btn-roster" class="sheet-toggle" title="Roster" aria-expanded="false">📋</button>
         </div>
 
         <div id="build-sheet" class="sheet" hidden>
@@ -65,6 +67,8 @@
             <button class="tool room-tool" data-tool="prison" title="Prison — 225 gold (hold knocked-out heroes)">⛓ Prison<span class="cost">225g</span></button>
             <button class="tool room-tool" data-tool="torture" title="Torture Chamber — 275 gold (convert prisoners)">🩸 Torture<span class="cost">275g</span></button>
             <button class="tool room-tool" data-tool="graveyard" title="Graveyard — 250 gold (raise Bonewretches)">🪦 Graveyard<span class="cost">250g</span></button>
+            <button class="tool room-tool" data-tool="temple" title="Temple — 300 gold (prayer mood buff / talisman)">🛕 Temple<span class="cost">300g</span></button>
+            <button class="tool room-tool" data-tool="combatPit" title="Combat Pit — 350 gold (train past level 4)">⚔ Combat Pit<span class="cost">350g</span></button>
             <button class="tool room-tool" data-tool="door" title="Wooden Door — 75 gold (or Workshop kit)">🚪 Door<span class="cost">75g</span></button>
             <button class="tool room-tool" data-tool="sentry" title="Sentry Trap — 150 gold">🏹 Sentry<span class="cost">150g</span></button>
             <button class="tool room-tool" data-tool="rally" title="Rally Flag — 40 gold (call to arms)">🚩 Rally<span class="cost">40g</span></button>
@@ -81,6 +85,12 @@
             <button class="spell" data-spell="heal" title="Heal (research unlock)">💚 Heal</button>
             <button class="spell" data-spell="possess" title="Possess (P) — ride a minion">👁 Possess</button>
           </div>
+        </div>
+
+        <div id="roster-sheet" class="sheet roster-sheet" hidden>
+          <div class="sheet-head"><span>Creature Roster</span><button type="button" class="sheet-close" data-close="roster" aria-label="Close">✕</button></div>
+          <div id="roster-list" class="roster-list" role="list"></div>
+          <div class="roster-hint">Click a minion to select &amp; focus camera</div>
         </div>
 
         <canvas id="minimap" width="148" height="148" title="Minimap — explored / claimed / Heart" aria-label="Dungeon minimap"></canvas>

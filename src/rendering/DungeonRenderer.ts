@@ -39,10 +39,10 @@ const CAVERN_FOG = 0x0a0709;
 const ColorGradeShader = {
   uniforms: {
     tDiffuse: { value: null as THREE.Texture | null },
-    uContrast: { value: 1.14 },
-    uSaturation: { value: 0.94 },
-    uVignette: { value: 0.38 },
-    uTint: { value: new THREE.Color(1.08, 0.86, 0.68) },
+    uContrast: { value: 1.06 },
+    uSaturation: { value: 0.98 },
+    uVignette: { value: 0.26 },
+    uTint: { value: new THREE.Color(1.05, 0.92, 0.78) },
   },
   vertexShader: /* glsl */ `
     varying vec2 vUv;
@@ -134,7 +134,7 @@ export class DungeonRenderer {
   constructor(canvas: HTMLCanvasElement) {
     this.scene = new THREE.Scene();
     this.scene.background = new THREE.Color(CAVERN_VOID);
-    this.scene.fog = new THREE.FogExp2(CAVERN_FOG, 0.0072);
+    this.scene.fog = new THREE.FogExp2(CAVERN_FOG, 0.0052);
 
     this.camera = new THREE.PerspectiveCamera(46, 1, 0.1, 240);
     this.camera.position.set(0, 34, 22);
@@ -157,17 +157,17 @@ export class DungeonRenderer {
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = coarse ? THREE.BasicShadowMap : THREE.PCFSoftShadowMap;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    this.renderer.toneMappingExposure = 0.92;
+    this.renderer.toneMappingExposure = 0.98;
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
 
     // Dim global fill so Heart / torch / gold lights own the scene
-    const amb = new THREE.AmbientLight(0x6a5040, 0.18);
+    const amb = new THREE.AmbientLight(0x8a6a50, 0.32);
     this.scene.add(amb);
-    const hemi = new THREE.HemisphereLight(0xffb070, 0x100810, 0.16);
+    const hemi = new THREE.HemisphereLight(0xffc898, 0x181018, 0.28);
     hemi.position.set(0, 40, 0);
     this.scene.add(hemi);
 
-    const dir = new THREE.DirectionalLight(0xffc888, 0.38);
+    const dir = new THREE.DirectionalLight(0xffd8a8, 0.72);
     dir.position.set(22, 48, 14);
     dir.castShadow = true;
     dir.shadow.mapSize.set(512, 512);
@@ -179,10 +179,10 @@ export class DungeonRenderer {
     dir.shadow.camera.top = 55;
     dir.shadow.camera.bottom = -55;
     dir.shadow.bias = -0.0006;
-    dir.shadow.intensity = 0.82;
+    dir.shadow.intensity = 0.7;
     this.scene.add(dir);
 
-    const fill = new THREE.DirectionalLight(0x203040, 0.06);
+    const fill = new THREE.DirectionalLight(0x243040, 0.12);
     fill.position.set(-18, 28, -14);
     this.scene.add(fill);
 

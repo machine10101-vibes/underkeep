@@ -1368,9 +1368,10 @@ export function makeRoomProps(room: RoomType, variant = 0): THREE.Group | null {
       emissive: 0xff3208,
       emissiveIntensity: 1.35,
       transparent: true,
-      opacity: 0.82,
+      opacity: 0.68,
       side: THREE.DoubleSide,
       depthWrite: false,
+      blending: THREE.AdditiveBlending,
     });
     // Only one in four Portal tiles carries the full gateway; neighboring tiles
     // become a crystal field instead of duplicating the same large prop.
@@ -1391,17 +1392,18 @@ export function makeRoomProps(room: RoomType, variant = 0): THREE.Group | null {
     base.castShadow = true;
     g.add(base);
     for (const sx of [-1, 1]) {
-      const pillar = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.24, 2.45, 7), portalStone);
-      pillar.position.set(sx * 0.78, 1.42, 0);
-      pillar.rotation.z = sx * -0.08;
+      const pillar = new THREE.Mesh(new THREE.BoxGeometry(0.3, 2.5, 0.34), crystal);
+      pillar.position.set(sx * 0.82, 1.48, 0);
+      pillar.rotation.z = sx * -0.06;
       pillar.castShadow = true;
       g.add(pillar);
-      const shard = new THREE.Mesh(new THREE.ConeGeometry(0.22, 2.55, 6), crystal);
-      shard.position.set(sx * 0.82, 1.72, 0.02);
-      shard.rotation.z = sx * -0.08;
-      g.add(shard);
+      const cap = new THREE.Mesh(new THREE.OctahedronGeometry(0.27, 0), crystal);
+      cap.scale.set(0.8, 1.7, 0.8);
+      cap.position.set(sx * 0.9, 2.83, 0);
+      cap.rotation.z = sx * -0.1;
+      g.add(cap);
     }
-    const lintel = new THREE.Mesh(new THREE.BoxGeometry(1.72, 0.18, 0.24), portalStone);
+    const lintel = new THREE.Mesh(new THREE.BoxGeometry(1.72, 0.2, 0.3), crystal);
     lintel.position.y = 2.68;
     lintel.castShadow = true;
     g.add(lintel);
@@ -1413,10 +1415,8 @@ export function makeRoomProps(room: RoomType, variant = 0): THREE.Group | null {
     ring.position.y = 1.57;
     ring.scale.set(1.0, 1.72, 1);
     g.add(ring);
-    const portalShape = new THREE.Shape();
-    portalShape.absellipse(0, 0, 0.49, 0.94, 0, Math.PI * 2, false, 0);
-    const core = new THREE.Mesh(new THREE.ShapeGeometry(portalShape, 24), energy);
-    core.position.set(0, 1.56, 0.015);
+    const core = new THREE.Mesh(new THREE.PlaneGeometry(1.12, 2.08), energy);
+    core.position.set(0, 1.48, 0.04);
     g.add(core);
     const light = new THREE.PointLight(0x55c8ff, 1.8, 7, 2);
     light.position.y = 1.85;

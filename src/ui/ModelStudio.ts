@@ -30,6 +30,7 @@ import {
   makeTorchMesh,
   makeWallGeo,
   makeWaterMesh,
+  poseScrabblerPickaxe,
   tileMaterial,
 } from '../rendering/meshes';
 
@@ -222,6 +223,7 @@ export class ModelStudio {
   private openFlag = false;
   private stage!: THREE.Group;
   private prevClear = new THREE.Color();
+  private digWall: THREE.Object3D | null = null;
 
   constructor(
     private canvas: HTMLCanvasElement,
@@ -546,18 +548,18 @@ export class ModelStudio {
     });
     const pick = (mesh as THREE.Group & { pickaxe?: THREE.Object3D }).pickaxe;
     if (pick) {
-      if (dig) {
-        const wave = Math.sin(t * 11);
-        pick.rotation.x = -0.9 + wave * 1.35;
-        pick.rotation.z = 0.15 + wave * 0.55;
-        pick.rotation.y = wave * 0.25;
-        pick.visible = true;
-      } else {
-        pick.rotation.x = -0.45;
-        pick.rotation.z = 0.2;
-        pick.rotation.y = 0;
-        pick.visible = this.entry?.id === 'scrabbler';
+      poseScrabblerPickaxe(pick, t, dig);
+      if (!dig) pick.visible = this.entry?.id === 'scrabbler';
+    }
+    if (dig && this.entry?.id === 'scrabbler') {
+      if (!this.digWall) {
+        this.digWall = solidTile(TileKind.Gold);
+        this.digWall.position.set(0, 0, 2.05);
+        this.stage.add(this.digWall);
       }
+    } else if (this.digWall) {
+      this.stage.remove(this.digWall);
+      this.digWall = null;
     }
     if (walk) {
       mesh.position.y = Math.abs(Math.sin(t * 8)) * 0.06;

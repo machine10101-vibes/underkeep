@@ -629,50 +629,49 @@ export function makeCreatureMesh(color: number, scale: number, kind: string): TH
       g.add(claw);
     }
 
-    // Dig arm + oversized pickaxe — readable swing at overview zoom
+    // Dig arm + pick pointed at the wall face (+Z, the tile they work)
     const digArm = new THREE.Group();
     const upper = new THREE.Mesh(
       new THREE.CapsuleGeometry(0.07, 0.28, 3, 6),
       new THREE.MeshStandardMaterial({ color: 0x5a7030, roughness: 0.65 })
     );
-    upper.position.set(0, 0.18, 0);
-    upper.rotation.z = 0.35;
+    upper.position.set(0.02, 0.08, 0.12);
+    upper.rotation.x = 0.85;
+    upper.rotation.z = 0.18;
     digArm.add(upper);
     const pick = new THREE.Group();
-    const haft = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.04, 0.05, 0.85, 6),
-      new THREE.MeshStandardMaterial({ color: 0x7a5028, roughness: 0.85 })
-    );
-    haft.position.y = 0.35;
+    const haftMat = new THREE.MeshStandardMaterial({ color: 0x7a5028, roughness: 0.85 });
+    const steelMat = new THREE.MeshStandardMaterial({
+      color: 0xd0d8e8,
+      metalness: 0.9,
+      roughness: 0.22,
+      emissive: 0x405060,
+      emissiveIntensity: 0.25,
+    });
+    const haft = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.05, 0.72, 6), haftMat);
+    haft.rotation.x = Math.PI / 2;
+    haft.position.set(0, 0.02, 0.3);
     pick.add(haft);
-    const headPick = new THREE.Mesh(
-      new THREE.BoxGeometry(0.48, 0.12, 0.12),
-      new THREE.MeshStandardMaterial({
-        color: 0xd0d8e8,
-        metalness: 0.9,
-        roughness: 0.22,
-        emissive: 0x405060,
-        emissiveIntensity: 0.25,
-      })
-    );
-    headPick.position.set(0.08, 0.78, 0);
+    const headPick = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.16, 0.2), steelMat);
+    headPick.position.set(0, 0.02, 0.66);
     pick.add(headPick);
     const tip = new THREE.Mesh(
-      new THREE.ConeGeometry(0.08, 0.28, 6),
+      new THREE.ConeGeometry(0.09, 0.36, 6),
       new THREE.MeshStandardMaterial({ color: 0xe8f0ff, metalness: 0.85, roughness: 0.2 })
     );
-    tip.rotation.z = Math.PI / 2;
-    tip.position.set(0.38, 0.78, 0);
+    tip.rotation.x = Math.PI / 2;
+    tip.position.set(0, 0.02, 0.9);
     pick.add(tip);
-    const tip2 = tip.clone();
-    tip2.rotation.z = -Math.PI / 2;
-    tip2.position.set(-0.22, 0.78, 0);
-    pick.add(tip2);
-    pick.position.set(0.05, 0.05, 0.05);
+    const butt = new THREE.Mesh(new THREE.ConeGeometry(0.07, 0.2, 6), steelMat);
+    butt.rotation.x = -Math.PI / 2;
+    butt.position.set(0, 0.02, 0.54);
+    pick.add(butt);
+    pick.position.set(0.02, 0.02, 0.08);
+    pick.rotation.x = 0.12;
     digArm.add(pick);
-    digArm.position.set(0.42, 0.38, 0.22);
-    digArm.rotation.z = 0.2;
-    digArm.rotation.x = -0.45;
+    // Shoulder height so the spike meets a 2.4-tall wall face, not the floor
+    digArm.position.set(0.28, 1.02, 0.36);
+    digArm.rotation.set(-0.28, 0, 0.04);
     g.add(digArm);
     (g as THREE.Group & { pickaxe?: THREE.Object3D }).pickaxe = digArm;
 
@@ -2327,6 +2326,33 @@ export function makeGoldBag(): THREE.Group {
   return g;
 }
 
+/**
+ * Slow chop with the spike aimed at the wall face (+Z).
+ * `time` is seconds of dig work. One readable strike about every 1.25s.
+ */
+export function poseScrabblerPickaxe(pick: THREE.Object3D, time: number, striking: boolean): void {
+  pick.visible = true;
+  if (!striking) {
+    pick.rotation.set(-0.16, 0, 0.04);
+    return;
+  }
+  const period = 1.25;
+  const u = (time % period) / period;
+  let impact = 0;
+  if (u < 0.58) {
+    impact = 0;
+  } else if (u < 0.74) {
+    const t = (u - 0.58) / 0.16;
+    impact = t * t;
+  } else {
+    impact = 1 - (u - 0.74) / 0.26;
+  }
+  // Stay aimed at the wall face: raised at the upper third, impact mid-face.
+  pick.rotation.x = -0.32 + impact * 0.4;
+  pick.rotation.y = 0;
+  pick.rotation.z = 0.04;
+}
+
 /** Original-IP keeper claw — follows the cursor in Hand mode. */
 export function makeKeeperHand(): THREE.Group {
   const g = new THREE.Group();
@@ -2364,7 +2390,18 @@ export function makeKeeperHand(): THREE.Group {
   thumb.position.set(0.28, 0.06, -0.08);
   thumb.rotation.y = 0.6;
   g.add(thumb);
-  g.scale.setScalar(1.15);
+  g.scale.setScalar(1.32);
+  g.traverse((o) => {
+    o.renderOrder = 12;
+    const mesh = o as THREE.Mesh;
+    if (mesh.isMesh && mesh.material) {
+      const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+      for (const m of mats) {
+        m.depthTest = false;
+        m.depthWrite = false;
+      }
+    }
+  });
   return g;
 }
 

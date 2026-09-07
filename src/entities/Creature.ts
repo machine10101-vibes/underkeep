@@ -7,6 +7,7 @@ import {
   TILE_SIZE,
   Vec2,
 } from '../game/types';
+import { poseScrabblerPickaxe } from '../rendering/meshes';
 
 let nextId = 1;
 
@@ -174,7 +175,7 @@ export class Creature {
       this.kind === CreatureKind.Skitterwing
         ? Math.sin(time * 6 + this.bobPhase) * 0.25 + 0.4
         : digging && !claiming
-          ? Math.sin(time * 14 + this.bobPhase) * 0.06
+          ? Math.sin(time * 4.2 + this.bobPhase) * 0.04
           : claiming
             ? Math.abs(Math.sin(time * 11 + this.bobPhase)) * 0.38
             : sleeping
@@ -213,24 +214,13 @@ export class Creature {
     if (this.pickaxe) {
       const swinging = this.job === JobType.Dig || this.job === JobType.Mine;
       if (swinging) {
-        // Large arm+tool arc — readable from overview camera
-        this.digAnim += dt * 27;
-        const wave = Math.sin(this.digAnim * 11);
-        this.pickaxe.rotation.x = -0.9 + wave * 1.35;
-        this.pickaxe.rotation.z = 0.15 + wave * 0.55;
-        this.pickaxe.rotation.y = wave * 0.25;
-        this.pickaxe.visible = true;
+        this.digAnim += dt;
+        poseScrabblerPickaxe(this.pickaxe, this.digAnim, true);
       } else if (digging) {
-        this.digAnim += dt * 12;
-        const wave = Math.sin(this.digAnim * 8);
-        this.pickaxe.rotation.x = -0.55 + wave * 0.5;
-        this.pickaxe.rotation.z = 0.15 + wave * 0.2;
-        this.pickaxe.rotation.y = 0;
-        this.pickaxe.visible = true;
+        this.digAnim += dt * 0.35;
+        poseScrabblerPickaxe(this.pickaxe, this.digAnim, true);
       } else {
-        this.pickaxe.rotation.x = -0.45;
-        this.pickaxe.rotation.z = 0.2;
-        this.pickaxe.rotation.y = 0;
+        poseScrabblerPickaxe(this.pickaxe, 0, false);
         this.pickaxe.visible = this.isWorker;
       }
     }

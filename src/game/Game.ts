@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { Creature } from '../entities/Creature';
 import { DungeonRenderer } from '../rendering/DungeonRenderer';
 import { HUD, MENTOR_LINES } from '../ui/HUD';
+import { ModelStudio } from '../ui/ModelStudio';
 import { Grid } from './Grid';
 import {
   BRIDGE_STONE_COST,
@@ -153,6 +154,7 @@ export class Game {
   private researchProgress = 0;
   private researchRank = 0;
   private healUnlocked = false;
+  private studio: ModelStudio | null = null;
 
   constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas;
@@ -182,6 +184,7 @@ export class Game {
     this.renderer = new DungeonRenderer(canvas);
     this.renderer.onContextLost = () => this.handleContextLost();
     this.renderer.onContextRestored = () => this.handleContextRestored();
+    this.studio = new ModelStudio(canvas, this.renderer.renderer);
 
     let restored = false;
     try {
@@ -684,6 +687,7 @@ export class Game {
 
   private bindInput(canvas: HTMLCanvasElement): void {
     window.addEventListener('keydown', (e) => {
+      if (this.studio?.isOpen()) return;
       this.keys.add(e.key.toLowerCase());
       const key = e.key.toLowerCase();
       if (e.shiftKey && !e.metaKey && !e.ctrlKey) {
@@ -775,6 +779,7 @@ export class Game {
     canvas.addEventListener('gesturechange', blockGesture as EventListener, { passive: false });
 
     canvas.addEventListener('mousedown', (e) => {
+      if (this.studio?.isOpen()) return;
       if (performance.now() < this.ignoreMouseUntil) return;
       if (this.gameOver) return;
       const tp = this.pointerToTile(e, canvas);
@@ -835,6 +840,7 @@ export class Game {
     });
 
     canvas.addEventListener('mousemove', (e) => {
+      if (this.studio?.isOpen()) return;
       if (performance.now() < this.ignoreMouseUntil) return;
       this.updatePointerHover(e, canvas);
       if (this.boxSelecting && this.boxStartClient && this.tool === 'select') {
@@ -864,12 +870,14 @@ export class Game {
     });
 
     canvas.addEventListener('wheel', (e) => {
+      if (this.studio?.isOpen()) return;
       e.preventDefault();
       this.zoomPending += -Math.sign(e.deltaY) * 1.8;
     }, { passive: false });
 
     // --- Touch controls ---
     canvas.addEventListener('touchstart', (e) => {
+      if (this.studio?.isOpen()) return;
       e.preventDefault();
       this.ignoreMouseUntil = performance.now() + 600;
       for (let i = 0; i < e.changedTouches.length; i++) {
@@ -923,6 +931,7 @@ export class Game {
     }, { passive: false });
 
     canvas.addEventListener('touchmove', (e) => {
+      if (this.studio?.isOpen()) return;
       e.preventDefault();
       this.ignoreMouseUntil = performance.now() + 600;
       for (let i = 0; i < e.changedTouches.length; i++) {
@@ -4618,6 +4627,11 @@ export class Game {
   }
 
   update(dt: number): void {
+    if (this.studio?.isOpen()) {
+      this.studio.tick(dt);
+      try { this.hud.update(dt); } catch { /* ignore */ }
+      return;
+    }
     if (this.renderer.contextLost) {
       // Still tick HUD so reload overlay stays usable
       try { this.hud.update(dt); } catch { /* ignore */ }
@@ -7078,6 +7092,15 @@ export class Game {
   }
 
   render(): void {
+    if (this.studio?.isOpen()) {
+      this.studio.render();
+      return;
+    }
     this.renderer.render();
+  }
+
+  /** QA: open the model studio overlay. */
+  openStudio(): void {
+    this.studio?.open();
   }
 }

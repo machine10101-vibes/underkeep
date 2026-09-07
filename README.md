@@ -4,9 +4,9 @@ Original-IP dungeon management game inspired by **Dungeon Keeper 2** (3D). Dark-
 
 ## Play online
 
-**https://machine10101-vibes.github.io/underkeep/?v=pass10.1**
+**https://machine10101-vibes.github.io/underkeep/?v=pass10.2**
 
-Pass 10 play: the keeper loop follows the classic dungeon-keeper playthrough — dig, claim, fortify, rooms, Portal, payday, Heart defense — with Underkeep names and unique gold-cost workers. Pass 10.1: Scrabblers keep digging when the vault is full, and Dig paint marks only the tiles you sweep.
+Pass 10 play: the keeper loop follows the classic dungeon-keeper playthrough — dig, claim, fortify, rooms, Portal, payday, Heart defense — with Underkeep names and unique gold-cost workers. Pass 10.1: Scrabblers keep digging when the vault is full, and Dig paint marks only the tiles you sweep. Pass 10.2: **Studio (V)** inspects every creature, item, enemy, and room mesh.
 
 Works on desktop and phones (touch controls).
 
@@ -57,6 +57,7 @@ npm run preview
 | **J** / **K** / **H** | Prison / Torture Chamber / Graveyard |
 | **M** / **C** | Temple / Combat Pit |
 | **L** | Creature roster sheet |
+| **V** | Model Studio — orbit every 3D mesh (Esc closes) |
 
 ## Mobile / touch controls
 

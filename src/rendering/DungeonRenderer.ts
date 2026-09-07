@@ -1012,7 +1012,7 @@ export class DungeonRenderer {
       }
       if (core) {
         const pulse = 0.94 + Math.sin(this.clock * 4 + portal.position.z) * 0.08;
-        core.scale.set(pulse, pulse * 1.5, pulse);
+        core.scale.setScalar(pulse);
       }
     }
     for (const t of this.torches) {

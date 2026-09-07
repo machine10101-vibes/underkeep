@@ -1,6 +1,6 @@
 import { SpellId, ToolMode } from '../game/types';
 
-const ROOM_TOOLS: ToolMode[] = ['treasury', 'lair', 'hatchery', 'training', 'library', 'portal', 'guard', 'workshop', 'prison', 'torture', 'graveyard', 'temple', 'combatPit', 'door', 'sentry', 'rally', 'bridgeWood', 'bridgeStone'];
+const ROOM_TOOLS: ToolMode[] = ['treasury', 'lair', 'hatchery', 'training', 'library', 'portal', 'guard', 'workshop', 'prison', 'torture', 'graveyard', 'temple', 'combatPit', 'casino', 'door', 'sentry', 'rally', 'bridgeWood', 'bridgeStone', 'sell'];
 
 export class HUD {
   private goldEl: HTMLElement;
@@ -38,6 +38,12 @@ export class HUD {
   private rosterSheet: HTMLElement | null;
   private rosterList: HTMLElement | null;
   private btnRoster: HTMLElement | null;
+  private goldCapEl: HTMLElement | null;
+  private heartEl: HTMLElement | null;
+  private heartBar: HTMLElement | null;
+  private paydayEl: HTMLElement | null;
+  private inspHungerRow: HTMLElement | null;
+  private inspTiredRow: HTMLElement | null;
 
   onToolChange: ((tool: ToolMode) => void) | null = null;
   onSpell: ((spell: SpellId) => void) | null = null;
@@ -81,6 +87,12 @@ export class HUD {
     this.rosterSheet = document.getElementById('roster-sheet');
     this.rosterList = document.getElementById('roster-list');
     this.btnRoster = document.getElementById('btn-roster');
+    this.goldCapEl = document.getElementById('gold-cap');
+    this.heartEl = document.getElementById('heart-value');
+    this.heartBar = document.getElementById('heart-bar');
+    this.paydayEl = document.getElementById('payday-value');
+    this.inspHungerRow = document.getElementById('insp-hunger-row');
+    this.inspTiredRow = document.getElementById('insp-tired-row');
     document.getElementById('insp-close')?.addEventListener('click', () => {
       this.hideInspector();
       this.onInspectorClose?.();
@@ -98,7 +110,7 @@ export class HUD {
       btn.addEventListener('click', () => {
         const spell = (btn as HTMLElement).dataset.spell as SpellId;
         this.onSpell?.(spell);
-        if (spell === 'speed' || spell === 'lightning' || spell === 'possess') this.closeSheet('spells');
+        if (spell === 'speed' || spell === 'lightning' || spell === 'possess' || spell === 'sight' || spell === 'callToArms') this.closeSheet('spells');
       });
     });
     document.getElementById('overlay-btn')!.addEventListener('click', () => {
@@ -260,6 +272,34 @@ export class HUD {
     this.creaturesEl.textContent = String(Math.max(0, creatures | 0));
   }
 
+  updateKeepVitals(opts: {
+    goldCap: number;
+    heartHp: number;
+    heartMax: number;
+    paydayIn: number;
+    paydayDue: number;
+    portalCount: number;
+    portalCap: number;
+  }): void {
+    if (this.goldCapEl) {
+      this.goldCapEl.textContent = `/${Math.floor(opts.goldCap)}`;
+    }
+    if (this.heartEl) {
+      this.heartEl.textContent = `${Math.max(0, Math.ceil(opts.heartHp))}`;
+    }
+    if (this.heartBar) {
+      const pct = opts.heartMax > 0 ? Math.max(0, Math.min(100, (opts.heartHp / opts.heartMax) * 100)) : 0;
+      this.heartBar.style.width = `${pct}%`;
+    }
+    if (this.paydayEl) {
+      const secs = Math.max(0, Math.ceil(opts.paydayIn));
+      this.paydayEl.textContent = opts.paydayDue > 0 ? `${secs}s · ${opts.paydayDue}g` : `${secs}s`;
+    }
+    if (opts.portalCap > 0) {
+      this.creaturesEl.textContent = `${Math.max(0, opts.portalCount | 0)}/${opts.portalCap}`;
+    }
+  }
+
   setSpellAffordable(spell: SpellId, ok: boolean): void {
     document.querySelectorAll(`.spell[data-spell="${spell}"]`).forEach((el) => {
       (el as HTMLButtonElement).disabled = !ok;
@@ -318,6 +358,7 @@ export class HUD {
     mood: number;
     efficiency: number;
     held?: boolean;
+    worker?: boolean;
   }): void {
     try {
     const clamp01 = (n: number, lo: number, hi: number, fb = lo) => {
@@ -340,8 +381,17 @@ export class HUD {
     this.inspHp.textContent = `${Math.ceil(hp)}/${Math.ceil(maxHp)}`;
     const hpPct = clamp01((hp / maxHp) * 100, 0, 100, 0);
     this.inspHpBar.style.width = `${hpPct}%`;
-    this.inspHunger.textContent = `${Math.floor(hunger)}`;
-    this.inspTired.textContent = `${Math.floor(tired)}`;
+    if (data.worker) {
+      this.inspHunger.textContent = 'None';
+      this.inspTired.textContent = 'None';
+      this.inspHungerRow?.classList.add('insp-na');
+      this.inspTiredRow?.classList.add('insp-na');
+    } else {
+      this.inspHunger.textContent = `${Math.floor(hunger)}`;
+      this.inspTired.textContent = `${Math.floor(tired)}`;
+      this.inspHungerRow?.classList.remove('insp-na');
+      this.inspTiredRow?.classList.remove('insp-na');
+    }
     const moodLabel =
       mood >= 75 ? 'Happy' : mood >= 50 ? 'Content' : mood >= 30 ? 'Grumpy' : mood >= 15 ? 'Angry' : 'Leaving?';
     this.inspMood.textContent = `${Math.floor(mood)} · ${moodLabel}`;
@@ -418,6 +468,7 @@ export class HUD {
         else if (kind === 7) color = '#e05010';
         else if (kind === 8) color = '#2060a0';
         else if (kind === 9 || kind === 10) color = '#8a7050';
+        else if (kind === 11) color = '#40e0c0'; // Gem
         if (kind === 4 && room === 8) color = '#a07840'; // Workshop
         if (kind === 4 && room === 7) color = '#607080'; // Guard
         if (kind === 4 && room === 9) color = '#506070'; // Prison
@@ -425,6 +476,7 @@ export class HUD {
         if (kind === 4 && room === 11) color = '#406850'; // Graveyard
         if (kind === 4 && room === 12) color = '#c0a040'; // Temple
         if (kind === 4 && room === 13) color = '#a04030'; // Combat Pit
+        if (kind === 4 && room === 14) color = '#c060a0'; // Wagerden
         ctx.fillStyle = color;
         ctx.fillRect(ox + x * cell, oy + y * cell, Math.max(1, cell), Math.max(1, cell));
       }
@@ -471,7 +523,7 @@ export const MENTOR_LINES = {
   firstGold: "Ah, glittering greed. Stockpile it — Scrabblers don't dig for free forever.",
   firstRoom: "A room! How civilized. Your minions prefer beds to sleeping in the mud.",
   needGold: "The Treasury is too light. You need %g gold.",
-  cannotDig: "That rock laughs at your marks. Earth and gold only.",
+  cannotDig: "That rock laughs at your marks. Earth, gold, and gem seams only.",
   cannotClaim: "Only freshly dug dirt can be claimed.",
   cannotFortify: "Fortify soft earth beside your land — never gold, never rock.",
   cannotRoom: "Rooms sit on claimed flagstones that are still empty.",
@@ -562,4 +614,20 @@ export const MENTOR_LINES = {
   fleeLair: "Wounded minions flee toward the Lair!",
   dragWounded: "Scrabblers drag the wounded home to their beds.",
   allyKnocked: "A minion collapses! Scrabblers can haul them to a Lair bed.",
+  sellRoom: "Sold for %g gold. The flagstones remember nothing.",
+  cannotSell: "Nothing to sell — rooms and doors only, never the Heart.",
+  workerRefund: "The Heart reclaims a Scrabbler. %g gold returns to the vault.",
+  slapWork: "A sting of purpose. The Scrabbler digs harder.",
+  slapWitch: "The Thornwitch smiles. Pain is a language she speaks.",
+  slapAnger: "That minion did not enjoy the Hand. Mood sours.",
+  sightArm: "Sight of Evil armed — click the dark to peel the fog.",
+  sightCast: "The veil lifts. What was hidden now belongs to you.",
+  callToArms: "Call to Arms! Fighters muster to the banner.",
+  gemSeam: "A gem seam! It never runs dry — haul until the vault groans.",
+  treasuryFull: "The vault is full. Build more Treasury, or gold stays in their claws.",
+  trainGold: "Training costs gold. Empty coffers mean idle claws.",
+  portalFull: "The Portal is crowded. Expand it — or the veil stays shut.",
+  casinoBuilt: "Wagerden opens. Idle minions will gamble their moods into shape.",
+  gambling: "Dice clatter in the Wagerden. Fortune is a cheap friend.",
+  heartDefend: "Scrabblers defend the Heart! Even workers have teeth when home burns.",
 };

@@ -6,11 +6,13 @@ import { Grid } from './Grid';
 import {
   BRIDGE_STONE_COST,
   BRIDGE_WOOD_COST,
+  CALL_TO_ARMS_COST,
   CREATURE_STATS,
   CreatureKind,
   DOOR_COST,
   DoorState,
   GOLD_WIN_THRESHOLD,
+  HEART_MAX_HP,
   JobType,
   KIT_CAP,
   MarkType,
@@ -20,15 +22,20 @@ import {
   ROOM_COST,
   RoomType,
   SENTRY_COST,
+  SIGHT_COST,
   SpellId,
   TILE_SIZE,
+  TRAINING_GOLD_PER_SEC,
   ToolMode,
   TrapType,
   Vec2,
   TileKind,
   WIN_WAVES,
+  goldCapacity,
+  isDiggableKind,
   isFlyer,
   isHeatResistant,
+  portalCapacity,
   roomSizeEfficiencyBonus,
 } from './types';
 import {
@@ -45,6 +52,10 @@ const WORKER_BASE_COST = 150;
 const MANA_MAX_BASE = 100;
 const SPEED_COST = 25;
 const LIGHTNING_COST = 40;
+/** Haul leftover gold when there is no tagged earth waiting. */
+const HAUL_WHEN_IDLE = 40;
+/** Keep chipping tagged gold until a full claw-load if the vault has room. */
+const HAUL_WHEN_DIGGING = 100;
 
 export class Game {
   private grid: Grid;
@@ -68,6 +79,8 @@ export class Game {
     cz: number;
   } | null = null;
   private possessArmed = false;
+  private sightArmed = false;
+  private callArmed = false;
   private lavaDmgAcc = 0;
   private paydayToastCooldown = 0;
   /** Pass 7.2 mission progress */
@@ -200,6 +213,15 @@ export class Game {
       this.creatures.filter((c) => c.alive && c.isWorker).length,
       this.creatures.filter((c) => c.alive && !c.isWorker && !c.isHero).length
     );
+    this.hud.updateKeepVitals({
+      goldCap: this.vaultCap(),
+      heartHp: this.heartHp,
+      heartMax: HEART_MAX_HP,
+      paydayIn: PAYDAY_INTERVAL,
+      paydayDue: this.paydayDueNow(),
+      portalCount: this.attractedCount(),
+      portalCap: this.portalCap(),
+    });
     this.markReady();
   }
 
@@ -236,7 +258,7 @@ export class Game {
     const heart = this.grid.get(this.grid.heartPos.x, this.grid.heartPos.y);
     if (!heart || heart.kind !== TileKind.Heart) return false;
     const diggable = this.grid.tiles.some(
-      (t) => t.kind === TileKind.Earth || t.kind === TileKind.Gold
+      (t) => isDiggableKind(t.kind)
     );
     if (!diggable) return false;
     const scrabblers = this.creatures.filter((c) => c.alive && c.isWorker).length;
@@ -290,7 +312,7 @@ export class Game {
     this.won = false;
     this.mentored = new Set();
     this.wageAcc = 0;
-    this.heartHp = 500;
+    this.heartHp = HEART_MAX_HP;
     this.restoredFromSave = false;
     this.hatcheryFood = 0;
     this.foodRegenAcc = 0;
@@ -301,6 +323,8 @@ export class Game {
     this.healUnlocked = false;
     this.exitPossession(true);
     this.possessArmed = false;
+    this.sightArmed = false;
+    this.callArmed = false;
     this.lavaDmgAcc = 0;
     this.paydayToastCooldown = 0;
     this.marksDirty = false;
@@ -661,6 +685,24 @@ export class Game {
   private bindInput(canvas: HTMLCanvasElement): void {
     window.addEventListener('keydown', (e) => {
       this.keys.add(e.key.toLowerCase());
+      const key = e.key.toLowerCase();
+      if (e.shiftKey && !e.metaKey && !e.ctrlKey) {
+        if (key === 'h') {
+          e.preventDefault();
+          this.focusKeepPoint('heart');
+          return;
+        }
+        if (key === 'f') {
+          e.preventDefault();
+          this.focusKeepPoint('fight');
+          return;
+        }
+        if (key === 'o') {
+          e.preventDefault();
+          this.focusKeepPoint('portal');
+          return;
+        }
+      }
       const map: Record<string, ToolMode> = {
         '1': 'select',
         '2': 'dig',
@@ -682,6 +724,7 @@ export class Game {
         d: 'door',
         f: 'sentry',
         y: 'rally',
+        x: 'sell',
       };
       if (map[e.key]) {
         this.tool = map[e.key];
@@ -692,6 +735,8 @@ export class Game {
       if (e.key.toLowerCase() === 'r') this.castSpell('lightning');
       if (e.key.toLowerCase() === 't') this.castSpell('heal');
       if (e.key.toLowerCase() === 'p') this.castSpell('possess');
+      if (e.key.toLowerCase() === 'i') this.castSpell('sight');
+      if (e.key.toLowerCase() === 'z') this.castSpell('callToArms');
       if (e.key.toLowerCase() === 'b') {
         this.tool = 'bridgeWood';
         this.hud.setActiveTool(this.tool);
@@ -712,6 +757,8 @@ export class Game {
         this.cancelBoxSelect();
         this.clearSelection();
         this.possessArmed = false;
+        this.sightArmed = false;
+        this.callArmed = false;
       }
       if (e.key.toLowerCase() === 'l' && !e.metaKey && !e.ctrlKey) {
         this.refreshRosterUi(true);
@@ -801,10 +848,7 @@ export class Game {
       if (this.paint && this.tool !== 'select') {
         const tp = this.pointerToTile(e, canvas);
         if (!tp) return;
-        if (!this.lastPaint || this.lastPaint.x !== tp.x || this.lastPaint.y !== tp.y) {
-          this.applyTool(tp.x, tp.y);
-          this.lastPaint = { ...tp };
-        }
+        this.paintToward(tp);
       }
       if (this.held) {
         try {
@@ -945,10 +989,7 @@ export class Game {
       if (this.touchMode === 'paint') {
         const tp = this.pointerToTile(p, canvas);
         if (tp) {
-          if (!this.lastPaint || this.lastPaint.x !== tp.x || this.lastPaint.y !== tp.y) {
-            this.applyTool(tp.x, tp.y);
-            this.lastPaint = { ...tp };
-          }
+          this.paintToward(tp);
           this.updatePointerHover(p, canvas);
         }
       } else if (this.touchMode === 'pan') {
@@ -1063,6 +1104,16 @@ export class Game {
           this.dropHeldAt(tx, ty);
           return;
         }
+        if (this.sightArmed) {
+          this.sightArmed = false;
+          this.castSightAt(tx, ty);
+          return;
+        }
+        if (this.callArmed) {
+          this.callArmed = false;
+          this.musterAt(tx, ty);
+          return;
+        }
         const c = this.creatureAt(tx, ty, hit);
         // Armed Possess spell — click a minion to enter them
         if (this.possessArmed && c && !c.isHero) {
@@ -1108,8 +1159,8 @@ export class Game {
         this.clearSelection();
       } else {
         this.paint = true;
-        this.applyTool(tx, ty);
-        this.lastPaint = { x: tx, y: ty };
+        this.lastPaint = null;
+        this.paintToward({ x: tx, y: ty });
       }
     } catch (err) {
       console.warn('[underkeep] primary input failed', err);
@@ -1170,7 +1221,7 @@ export class Game {
     if (tile) {
       let room =
         tile.room !== RoomType.None
-          ? ` · ${['', 'Treasury', 'Lair', 'Hatchery', 'Training', 'Library', 'Portal', 'Guard', 'Workshop', 'Prison', 'Torture Chamber', 'Graveyard', 'Temple', 'Combat Pit'][tile.room]}`
+          ? ` · ${['', 'Treasury', 'Lair', 'Hatchery', 'Training', 'Library', 'Portal', 'Guard', 'Workshop', 'Prison', 'Torture Chamber', 'Graveyard', 'Temple', 'Combat Pit', 'Wagerden'][tile.room]}`
           : '';
       if (tile.room === RoomType.Hatchery) room += ` · food ${Math.floor(this.hatcheryFood)}`;
       if (tile.room === RoomType.Workshop) room += ` · kits D${this.doorKits}/S${this.sentryKits}`;
@@ -1212,7 +1263,9 @@ export class Game {
       }
       const dig = tile.digProgress > 0 ? ` · dig ${Math.floor(tile.digProgress * 100)}%` : '';
       const kindLabel =
-        tile.kind === TileKind.Gold
+        tile.kind === TileKind.Gem
+          ? 'Gem seam'
+          : tile.kind === TileKind.Gold
           ? 'Gold'
           : tile.kind === TileKind.Earth
             ? 'Earth'
@@ -1573,29 +1626,44 @@ export class Game {
         mood: c.mood,
         efficiency: c.workEfficiency(),
         held: c.held,
+        worker: c.isWorker,
       });
     } catch (err) {
       console.warn('[underkeep] refreshInspector failed', err);
     }
   }
 
+  /**
+   * Paint the current tool onto tiles under a drag.
+   * Isometric ray picks can jump to a distant cube — ignore those so we
+   * never auto-highlight blocks the keeper did not sweep.
+   */
+  private paintToward(tp: Vec2): void {
+    if (this.lastPaint) {
+      const cheb = Math.max(Math.abs(tp.x - this.lastPaint.x), Math.abs(tp.y - this.lastPaint.y));
+      if (cheb === 0) return;
+      if (cheb > 2) return;
+      if (cheb === 2) {
+        const mx = this.lastPaint.x + Math.sign(tp.x - this.lastPaint.x);
+        const my = this.lastPaint.y + Math.sign(tp.y - this.lastPaint.y);
+        if (mx !== this.lastPaint.x || my !== this.lastPaint.y) this.applyTool(mx, my);
+      }
+    }
+    this.applyTool(tp.x, tp.y);
+    this.lastPaint = { ...tp };
+  }
+
   private applyTool(x: number, y: number): void {
     const tile = this.grid.get(x, y);
     if (!tile) return;
 
-    if (this.tool === 'dig') {
-      if (tile.kind === TileKind.Earth || tile.kind === TileKind.Gold) {
+    if (this.tool === 'sell') {
+      this.sellAt(x, y);
+    } else if (this.tool === 'dig') {
+      if (isDiggableKind(tile.kind)) {
         if (tile.fortified) tile.fortified = false;
         tile.mark = MarkType.Dig;
         if (tile.digProgress <= 0) tile.digProgress = 0;
-        const face = this.grid.findDiggableFace(x, y);
-        if (face && (face.x !== x || face.y !== y)) {
-          const ft = this.grid.get(face.x, face.y);
-          if (ft && (ft.kind === TileKind.Earth || ft.kind === TileKind.Gold)) {
-            if (ft.fortified) ft.fortified = false;
-            ft.mark = MarkType.Dig;
-          }
-        }
         this.marksDirty = true;
       } else if (!this.lastPaint && tile.kind === TileKind.Rock) {
         this.hud.sayNow(MENTOR_LINES.cannotDig);
@@ -1611,7 +1679,7 @@ export class Game {
       if (tile.kind === TileKind.Earth && this.grid.hasAdjacentClaimed(x, y)) {
         tile.mark = MarkType.Fortify;
         this.marksDirty = true;
-      } else if (!this.lastPaint && (tile.kind === TileKind.Gold || tile.kind === TileKind.Rock || tile.fortified)) {
+      } else if (!this.lastPaint && (tile.kind === TileKind.Gold || tile.kind === TileKind.Gem || tile.kind === TileKind.Rock || tile.fortified)) {
         this.hud.sayNow(MENTOR_LINES.cannotFortify);
       }
     } else if (this.tool === 'bridgeWood' || this.tool === 'bridgeStone') {
@@ -1691,6 +1759,7 @@ export class Game {
         graveyard: RoomType.Graveyard,
         temple: RoomType.Temple,
         combatPit: RoomType.CombatPit,
+        casino: RoomType.Casino,
       };
       const room = roomMap[this.tool];
       if (room) {
@@ -1736,6 +1805,9 @@ export class Game {
           }
           if (room === RoomType.CombatPit) {
             this.mentioneOnce('combatPitBuilt', MENTOR_LINES.combatPitBuilt);
+          }
+          if (room === RoomType.Casino) {
+            this.mentioneOnce('casinoBuilt', MENTOR_LINES.casinoBuilt);
           }
           this.saveNow();
         }
@@ -1811,6 +1883,22 @@ export class Game {
     c.wx = w.x;
     c.wz = w.z;
 
+    // Drop worker on Heart — reclaim half the Create Worker gold
+    const dropKind = this.grid.get(x, y)?.kind;
+    if (c.isWorker && dropKind === TileKind.Heart) {
+      const refund = this.workerRefundAmount();
+      this.workerCostScale = Math.max(0, this.workerCostScale - 1);
+      const paid = this.addGold(refund);
+      this.hud.sayNow(MENTOR_LINES.workerRefund.replace('%g', String(paid)));
+      this.renderer.spawnFx(new THREE.Vector3(w.x, 1.1, w.z), 0xffe080, 0.8);
+      c.alive = false;
+      try { this.renderer.removeEntityMesh(c.mesh); } catch { /* ignore */ }
+      this.held = null;
+      this.refreshInspector();
+      this.hud.setWorkerCost(this.workerCost());
+      return;
+    }
+
     // Dropping captive on Prison → imprison
     const dropTile = this.grid.get(x, y);
     if (c.isHero && (c.knockedOut || c.isPrisoner) && dropTile?.room === RoomType.Prison) {
@@ -1879,30 +1967,35 @@ export class Game {
     try {
       if (!c || !c.alive || c.isHero) return;
       c.clampStats();
-      // Stun + interrupt current job (DK2-like Hand slap)
-      c.stunTimer = Math.max(c.stunTimer, 1.35);
-      c.speedBuff = Math.max(c.speedBuff, 2.8);
-      c.sleepNeed = Math.max(0, Math.min(100, c.sleepNeed - 12));
-      c.hunger = Math.max(0, Math.min(100, c.hunger - 4));
-      this.safeMood(c, (Number.isFinite(c.mood) ? c.mood : 72) + 8);
-      c.setPath(null);
-      c.workTimer = 0;
-      if (c.job !== JobType.Sleep && c.job !== JobType.Eat) {
-        c.job = JobType.Idle;
-        c.jobTarget = null;
-      }
       const wx = Number.isFinite(c.wx) ? c.wx : 0;
       const wz = Number.isFinite(c.wz) ? c.wz : 0;
-      // Brief slap VFX (capped — excess particles contributed to context-loss blackouts)
       this.renderer.spawnFx(new THREE.Vector3(wx, 0.7, wz), 0xffee88, 0.7);
       this.renderer.spawnFx(new THREE.Vector3(wx, 1.15, wz), 0xffaa44, 0.55);
       this.renderer.spawnDigDebris(wx, wz, 0xffdd88);
-      // Conclusive toast on EVERY successful slap — before any further UI work
-      this.hud.sayNow(MENTOR_LINES.slap);
+
+      if (c.isWorker) {
+        // Guide: workers work harder — do not stun them off the job
+        c.slapWorkBuff = Math.max(c.slapWorkBuff, 10);
+        c.speedBuff = Math.max(c.speedBuff, 3.2);
+        this.safeMood(c, (Number.isFinite(c.mood) ? c.mood : 72) + 4);
+        this.hud.sayNow(MENTOR_LINES.slapWork);
+        this.refreshInspector();
+        return;
+      }
+      if (c.kind === CreatureKind.Thornwitch) {
+        c.speedBuff = Math.max(c.speedBuff, 2.4);
+        this.safeMood(c, (Number.isFinite(c.mood) ? c.mood : 72) + 14);
+        this.hud.sayNow(MENTOR_LINES.slapWitch);
+        this.refreshInspector();
+        return;
+      }
+      // Other minions resent the Hand
+      this.safeMood(c, (Number.isFinite(c.mood) ? c.mood : 72) - 10);
+      c.stunTimer = Math.max(c.stunTimer, 0.45);
+      this.hud.sayNow(MENTOR_LINES.slapAnger);
       this.refreshInspector();
     } catch (err) {
       console.warn('[underkeep] slap failed', err);
-      // Still show the toast even if VFX/inspector blows up
       try { this.hud.sayNow(MENTOR_LINES.slap); } catch { /* ignore */ }
     }
   }
@@ -1973,6 +2066,183 @@ export class Game {
 
   private workerCost(): number {
     return WORKER_BASE_COST + this.workerCostScale * 50;
+  }
+
+  private workerRefundAmount(): number {
+    if (this.workerCostScale > 0) {
+      return Math.floor((WORKER_BASE_COST + (this.workerCostScale - 1) * 50) / 2);
+    }
+    return Math.floor(WORKER_BASE_COST / 2);
+  }
+
+  private vaultCap(): number {
+    return goldCapacity(this.grid.countRoom(RoomType.Treasury));
+  }
+
+  private vaultRoom(): number {
+    return Math.max(0, this.vaultCap() - this.gold);
+  }
+
+  /** Deposit gold; leftover stays with the caller. */
+  private addGold(amount: number): number {
+    const n = Math.max(0, Math.floor(amount));
+    if (n <= 0) return 0;
+    const room = Math.max(0, this.vaultCap() - this.gold);
+    const added = Math.min(n, room);
+    this.gold += added;
+    if (this.gold > this.goldEver) this.goldEver = this.gold;
+    return added;
+  }
+
+  private paydayDueNow(): number {
+    let due = 0;
+    for (const c of this.creatures) {
+      if (!c.alive || c.isHero || c.isWorker) continue;
+      due += CREATURE_STATS[c.kind].goldWage;
+    }
+    return due;
+  }
+
+  private attractedCount(): number {
+    return this.creatures.filter((c) => c.alive && !c.isHero && !c.isWorker).length;
+  }
+
+  private portalCap(): number {
+    return portalCapacity(this.grid.countRoom(RoomType.Portal));
+  }
+
+  private sellAt(x: number, y: number): void {
+    const tile = this.grid.get(x, y);
+    if (!tile) return;
+    if (tile.kind === TileKind.Heart) {
+      if (!this.lastPaint) this.hud.sayNow(MENTOR_LINES.cannotSell);
+      return;
+    }
+    if (tile.door !== DoorState.None) {
+      tile.door = DoorState.None;
+      this.addGold(Math.floor(DOOR_COST * 0.5));
+      this.requestStructuralRebuild();
+      this.hud.sayNow(MENTOR_LINES.sellRoom.replace('%g', String(Math.floor(DOOR_COST * 0.5))));
+      this.saveNow();
+      return;
+    }
+    if (tile.trap !== TrapType.None) {
+      tile.trap = TrapType.None;
+      this.addGold(Math.floor(SENTRY_COST * 0.5));
+      this.requestStructuralRebuild();
+      this.hud.sayNow(MENTOR_LINES.sellRoom.replace('%g', String(Math.floor(SENTRY_COST * 0.5))));
+      this.saveNow();
+      return;
+    }
+    if (tile.rally) {
+      tile.rally = false;
+      this.addGold(Math.floor(RALLY_COST * 0.5));
+      this.requestStructuralRebuild();
+      this.hud.sayNow(MENTOR_LINES.sellRoom.replace('%g', String(Math.floor(RALLY_COST * 0.5))));
+      this.saveNow();
+      return;
+    }
+    if (tile.room === RoomType.None) {
+      if (!this.lastPaint) this.hud.sayNow(MENTOR_LINES.cannotSell);
+      return;
+    }
+    const refund = Math.floor(ROOM_COST[tile.room] * 0.5);
+    tile.room = RoomType.None;
+    this.addGold(refund);
+    this.requestStructuralRebuild();
+    this.hud.sayNow(MENTOR_LINES.sellRoom.replace('%g', String(refund)));
+    this.saveNow();
+  }
+
+  private castSightAt(x: number, y: number): void {
+    if (this.mana < SIGHT_COST) {
+      this.hud.sayNow('Not enough mana for Sight of Evil.');
+      return;
+    }
+    this.mana -= SIGHT_COST;
+    const changed = this.grid.revealAround(x, y, 4);
+    if (changed) this.fogDirty = true;
+    const w = this.grid.tileToWorld(x, y);
+    this.renderer.spawnFx(new THREE.Vector3(w.x, 1.4, w.z), 0x88ddff, 1.1);
+    this.renderer.spawnFx(new THREE.Vector3(w.x, 0.4, w.z), 0x4060c0, 0.7);
+    this.hud.sayNow(MENTOR_LINES.sightCast);
+  }
+
+  private musterAt(x: number, y: number): void {
+    if (this.mana < CALL_TO_ARMS_COST) {
+      this.hud.sayNow('Not enough mana to Call to Arms.');
+      return;
+    }
+    const tile = this.grid.get(x, y);
+    const walk = this.grid.isWalkable(x, y) || tile?.kind === TileKind.Heart;
+    if (!walk) {
+      this.hud.sayNow('Call to Arms needs claimed land.');
+      this.callArmed = true;
+      return;
+    }
+    this.mana -= CALL_TO_ARMS_COST;
+    for (const t of this.grid.tiles) t.rally = false;
+    if (tile && tile.kind === TileKind.Claimed) tile.rally = true;
+    this.requestStructuralRebuild();
+    for (const c of this.creatures) {
+      if (!c.alive || c.isHero || c.isWorker || c.held || c.knockedOut) continue;
+      if (
+        c.kind === CreatureKind.Rattlekin ||
+        c.kind === CreatureKind.Emberling ||
+        c.kind === CreatureKind.Skitterwing ||
+        c.kind === CreatureKind.Thornwitch ||
+        c.kind === CreatureKind.Bonewretch
+      ) {
+        c.job = JobType.Guard;
+        c.jobTarget = { x, y };
+        const path = this.grid.findPath(c.x, c.y, x, y);
+        if (path) c.setPath(path);
+      }
+    }
+    this.hud.sayNow(MENTOR_LINES.callToArms);
+    this.saveNow();
+  }
+
+  private focusKeepPoint(kind: 'heart' | 'fight' | 'portal'): void {
+    let x = this.grid.heartPos.x;
+    let y = this.grid.heartPos.y;
+    if (kind === 'portal') {
+      const p = this.grid.tiles.find((t) => t.room === RoomType.Portal);
+      if (p) {
+        x = p.x;
+        y = p.y;
+      } else {
+        this.hud.sayNow('No Portal to focus.');
+        return;
+      }
+    } else if (kind === 'fight') {
+      let best: Creature | null = null;
+      let bestD = Infinity;
+      for (const c of this.creatures) {
+        if (!c.alive) continue;
+        const fighting =
+          c.job === JobType.Fight ||
+          (c.isHero && !c.knockedOut) ||
+          c.job === JobType.AttackMove;
+        if (!fighting) continue;
+        const d = Math.hypot(c.x - this.grid.heartPos.x, c.y - this.grid.heartPos.y);
+        if (d < bestD) {
+          bestD = d;
+          best = c;
+        }
+      }
+      if (!best) {
+        this.hud.sayNow('No fight to focus.');
+        return;
+      }
+      x = Math.round(best.x);
+      y = Math.round(best.y);
+    }
+    const w = this.grid.tileToWorld(x, y);
+    this.camTarget.set(w.x, 0, w.z);
+    const cam = this.renderer.camera;
+    cam.position.set(w.x + 4, Math.max(16, cam.position.y), w.z + 14);
+    cam.lookAt(this.camTarget);
   }
 
   private castSpell(spell: SpellId): void {
@@ -2111,6 +2381,28 @@ export class Game {
       this.possessArmed = true;
       this.hud.say(MENTOR_LINES.possessArm);
       this.hud.sayNow('Possess armed — click a minion to ride their senses. Esc exits.');
+      return;
+    }
+    if (spell === 'sight') {
+      if (this.mana < SIGHT_COST) {
+        this.hud.sayNow('Not enough mana for Sight of Evil.');
+        return;
+      }
+      this.sightArmed = true;
+      this.callArmed = false;
+      this.possessArmed = false;
+      this.hud.sayNow(MENTOR_LINES.sightArm);
+      return;
+    }
+    if (spell === 'callToArms') {
+      if (this.mana < CALL_TO_ARMS_COST) {
+        this.hud.sayNow('Not enough mana to Call to Arms.');
+        return;
+      }
+      this.callArmed = true;
+      this.sightArmed = false;
+      this.possessArmed = false;
+      this.hud.sayNow('Call to Arms armed — click claimed land to plant the banner.');
       return;
     }
   }
@@ -3899,6 +4191,194 @@ export class Game {
     this.hud.sayNow('Claimed land wears gold. Flowers measure health. Scrabblers haul the glitter home.');
   }
 
+  /** QA: Pass 10 HUD + sell + slap-work + gem face in view. */
+  preparePass10Shot(): void {
+    this.hud.hideOverlay();
+    const hx = this.grid.heartPos.x;
+    const hy = this.grid.heartPos.y;
+    const claim = (x: number, y: number, room = RoomType.None) => {
+      const tile = this.grid.get(x, y);
+      if (!tile || tile.kind === TileKind.Heart) return;
+      tile.kind = TileKind.Claimed;
+      tile.room = room;
+      tile.mark = MarkType.None;
+      tile.digProgress = 0;
+      tile.claimedProgress = 1;
+      tile.fortified = false;
+      tile.explored = true;
+    };
+    claim(hx + 2, hy, RoomType.Treasury);
+    claim(hx + 3, hy, RoomType.Treasury);
+    claim(hx + 2, hy + 1, RoomType.Casino);
+    claim(hx + 3, hy + 1, RoomType.Casino);
+    this.gold = Math.min(this.vaultCap(), Math.max(this.gold, 720));
+    this.wageAcc = PAYDAY_INTERVAL - 12;
+    const worker = this.creatures.find((c) => c.alive && c.isWorker);
+    if (worker) {
+      worker.slapWorkBuff = 8;
+      worker.goldCarried = 80;
+    }
+    this.grid.revealAround(hx + 8, hy + 1, 3);
+    this.requestStructuralRebuild();
+    this.rebuild();
+    const focus = this.grid.tileToWorld(hx + 2, hy);
+    this.camTarget.set(focus.x, 0, focus.z);
+    this.renderer.camera.position.set(focus.x + 5, 26, focus.z + 16);
+    this.renderer.camera.lookAt(this.camTarget);
+    this.hud.setTooltip('Pass 10 — Heart · payday · vault cap · Wagerden · slap-work');
+    this.hud.sayNow('Scrabblers never rest. Sell rooms. Sight peels the fog. The Heart keeps score.');
+  }
+
+  /** QA: Dig paint stays on tagged cubes; workers leave a full Heart vault. */
+  preparePass101Shot(): void {
+    this.hud.hideOverlay();
+    const hx = this.grid.heartPos.x;
+    const hy = this.grid.heartPos.y;
+    for (const t of this.grid.tiles) {
+      if (t.mark === MarkType.Dig) t.mark = MarkType.None;
+    }
+    this.tool = 'dig';
+    this.lastPaint = null;
+    for (let i = 0; i < 5; i++) this.applyTool(hx - 1 + i, hy + 3);
+    this.gold = this.vaultCap();
+    const heartW = this.grid.tileToWorld(hx, hy);
+    for (const w of this.creatures) {
+      if (!w.alive || !w.isWorker) continue;
+      w.goldCarried = 90;
+      w.job = JobType.Haul;
+      w.jobTarget = { x: hx, y: hy };
+      w.setPath(null);
+      w.x = hx;
+      w.y = hy;
+      w.wx = heartW.x;
+      w.wz = heartW.z;
+    }
+    for (let i = 0; i < 48; i++) this.update(0.05);
+    const focus = this.grid.tileToWorld(hx + 0.4, hy + 2.1);
+    this.camTarget.set(focus.x, 0, focus.z);
+    this.renderer.camera.position.set(focus.x + 4.2, 21, focus.z + 13.5);
+    this.renderer.camera.lookAt(this.camTarget);
+    this.hud.setTooltip('Dig marks stay on the cubes you tagged · full vault, still digging');
+    this.hud.sayNow('The vault is full. They keep the gold in their claws and return to the vein.');
+  }
+
+  /**
+   * Headless guide-loop smoke: mark starting gold, simulate time, sell a room, slap a worker.
+   * Used by the QA harness — not player-facing.
+   */
+  runGuideSmoke(seconds = 16): {
+    goldBefore: number;
+    goldAfter: number;
+    carried: number;
+    vaultCap: number;
+    soldRefund: number;
+    slapBuff: number;
+    workerHunger: number;
+    workerSleep: number;
+    heartHp: number;
+    paydayIn: number;
+    mined: boolean;
+    extraDigMarks: number;
+    stuckHaul: number;
+    resumedDig: boolean;
+  } {
+    this.hud.hideOverlay();
+    const hx = this.grid.heartPos.x;
+    const hy = this.grid.heartPos.y;
+    for (const t of this.grid.tiles) {
+      if (t.mark === MarkType.Dig) t.mark = MarkType.None;
+    }
+    this.tool = 'dig';
+    this.lastPaint = null;
+    const buried = { x: hx + 4, y: hy };
+    this.applyTool(buried.x, buried.y);
+    let extraDigMarks = 0;
+    for (const t of this.grid.tiles) {
+      if (t.mark === MarkType.Dig && (t.x !== buried.x || t.y !== buried.y)) extraDigMarks++;
+    }
+    const goldBefore = this.gold;
+    this.tool = 'dig';
+    this.lastPaint = null;
+    for (let i = 0; i < 4; i++) this.applyTool(hx + 3, hy - 1 + i);
+    for (let i = 0; i < 5; i++) this.applyTool(hx - 1 + i, hy + 3);
+    const steps = Math.max(1, Math.ceil(seconds / 0.05));
+    for (let i = 0; i < steps; i++) this.update(0.05);
+    const carried = this.creatures
+      .filter((c) => c.alive && c.isWorker)
+      .reduce((sum, c) => sum + c.goldCarried, 0);
+    let soldRefund = 0;
+    const sx = hx + 1;
+    const sy = hy + 1;
+    const roomTile = this.grid.get(sx, sy);
+    if (roomTile && roomTile.kind === TileKind.Claimed) {
+      roomTile.room = RoomType.None;
+      this.tool = 'treasury';
+      this.lastPaint = null;
+      const beforePlace = this.gold;
+      this.applyTool(sx, sy);
+      this.tool = 'sell';
+      this.lastPaint = null;
+      const beforeSell = this.gold;
+      this.applyTool(sx, sy);
+      soldRefund = this.gold - beforeSell;
+      void beforePlace;
+    }
+    const worker = this.creatures.find((c) => c.alive && c.isWorker);
+    if (worker) this.slap(worker);
+    this.castSightAt(hx + 6, hy - 5);
+    const goldAfter = this.gold;
+    const mined = goldAfter + carried > goldBefore;
+
+    // Vault-full: workers sitting on the Heart with leftover gold must resume Dig.
+    this.gold = this.vaultCap();
+    const heartW = this.grid.tileToWorld(hx, hy);
+    const retagGold = (x: number, y: number) => {
+      const t = this.grid.get(x, y);
+      if (!t || t.kind === TileKind.Heart || t.kind === TileKind.Claimed) return;
+      t.kind = TileKind.Gold;
+      t.goldAmount = 420;
+      t.mark = MarkType.Dig;
+      t.fortified = false;
+      t.digProgress = 0;
+      t.room = RoomType.None;
+    };
+    retagGold(hx + 3, hy);
+    retagGold(hx + 3, hy + 1);
+    retagGold(hx + 4, hy);
+    for (const w of this.creatures) {
+      if (!w.alive || !w.isWorker) continue;
+      w.goldCarried = Math.max(w.goldCarried, 80);
+      w.job = JobType.Haul;
+      w.jobTarget = { x: hx, y: hy };
+      w.setPath(null);
+      w.x = hx;
+      w.y = hy;
+      w.wx = heartW.x;
+      w.wz = heartW.z;
+    }
+    for (let i = 0; i < 24; i++) this.update(0.05);
+    const afterVault = this.creatures.filter((c) => c.alive && c.isWorker);
+    const stuckHaul = afterVault.filter((w) => w.job === JobType.Haul).length;
+    const resumedDig = afterVault.some((w) => w.job === JobType.Dig || w.job === JobType.Mine);
+
+    return {
+      goldBefore,
+      goldAfter,
+      carried,
+      vaultCap: this.vaultCap(),
+      soldRefund,
+      slapBuff: worker?.slapWorkBuff ?? 0,
+      workerHunger: worker?.hunger ?? -1,
+      workerSleep: worker?.sleepNeed ?? -1,
+      heartHp: this.heartHp,
+      paydayIn: Math.max(0, PAYDAY_INTERVAL - this.wageAcc),
+      mined,
+      extraDigMarks,
+      stuckHaul,
+      resumedDig,
+    };
+  }
+
   /** QA/screenshot: Pass 8 layered wall faces, monumental Heart/Portal, cavern atmosphere. */
   preparePass8Shot(): void {
     this.preparePass7Shot();
@@ -4183,7 +4663,7 @@ export class Game {
       if (this.pendingStructuralRebuild || this.gridDirty) {
         if (this.rebuildCooldown <= 0) this.rebuild();
       } else {
-        if (this.marksDirty && !this.paint) this.flushMarks();
+        if (this.marksDirty) this.flushMarks();
         if (this.fogDirty) this.flushFog();
       }
 
@@ -4223,6 +4703,7 @@ export class Game {
       for (const c of this.creatures) {
         if (!c.alive) continue;
         if (c.prayerBuff > 0) c.prayerBuff = Math.max(0, c.prayerBuff - dt);
+        if (c.slapWorkBuff > 0) c.slapWorkBuff = Math.max(0, c.slapWorkBuff - dt);
         if (c.job === JobType.Pray && !c.isHero) this.templePrayCount++;
       }
       this.rosterAcc += dt;
@@ -4238,11 +4719,22 @@ export class Game {
         this.creatures.filter((c) => c.alive && c.isWorker).length,
         this.creatures.filter((c) => c.alive && !c.isWorker && !c.isHero).length
       );
+      this.hud.updateKeepVitals({
+        goldCap: this.vaultCap(),
+        heartHp: this.heartHp,
+        heartMax: HEART_MAX_HP,
+        paydayIn: Math.max(0, PAYDAY_INTERVAL - this.wageAcc),
+        paydayDue: this.paydayDueNow(),
+        portalCount: this.attractedCount(),
+        portalCap: this.portalCap(),
+      });
       this.hud.setSpellAffordable('createWorker', this.gold >= this.workerCost());
       this.hud.setSpellAffordable('speed', this.mana >= SPEED_COST);
       this.hud.setSpellAffordable('lightning', this.mana >= LIGHTNING_COST);
       this.hud.setSpellAffordable('heal', this.healUnlocked && this.mana >= 30);
       this.hud.setSpellAffordable('possess', this.possessed ? true : this.mana >= POSSESS_COST);
+      this.hud.setSpellAffordable('sight', this.mana >= SIGHT_COST);
+      this.hud.setSpellAffordable('callToArms', this.mana >= CALL_TO_ARMS_COST);
       this.syncMissionHud();
       this.minimapAcc += dt;
       if (this.minimapAcc >= 0.35) {
@@ -4555,13 +5047,35 @@ export class Game {
 
   private assignJobs(dt: number): void {
     const workers = this.creatures.filter((c) => c.alive && c.isWorker && !c.held && c.stunTimer <= 0);
-    // heroes force flee
+    // heroes force flee — except workers near the Heart, who defend it
+    const hx = this.grid.heartPos.x;
+    const hy = this.grid.heartPos.y;
     for (const w of workers) {
       if (w.job === JobType.DragPrisoner || w.job === JobType.DragWounded) continue;
       const threat = this.creatures.find(
         (h) => h.alive && h.isHero && !h.knockedOut && !h.isPrisoner && Math.hypot(h.x - w.x, h.y - w.y) < 5
       );
       if (threat) {
+        const nearHeart = Math.hypot(w.x - hx, w.y - hy) < 8 && Math.hypot(threat.x - hx, threat.y - hy) < 7;
+        const busy =
+          w.job === JobType.Dig ||
+          w.job === JobType.Mine ||
+          w.job === JobType.Haul ||
+          w.job === JobType.Claim;
+        if (nearHeart) {
+          // Don't yank diggers off a vein because a hero is merely near the Heart.
+          if (busy && Math.hypot(w.x - threat.x, w.y - threat.y) > 2.5) continue;
+          w.job = JobType.Fight;
+          w.jobTarget = { x: threat.x, y: threat.y };
+          if (Math.hypot(w.x - threat.x, w.y - threat.y) > 1.2) {
+            const path = this.grid.findPath(w.x, w.y, threat.x, threat.y);
+            if (path) w.setPath(path);
+          } else {
+            w.setPath(null);
+          }
+          this.mentioneOnce('heartDefend', MENTOR_LINES.heartDefend);
+          continue;
+        }
         w.job = JobType.Flee;
         w.fleeTimer = 2;
         const dx = w.x - threat.x;
@@ -4592,21 +5106,19 @@ export class Game {
     }
 
     const claimedTargets = new Set<string>();
+    const activeDig = this.grid.activeDigWorkKeys();
     for (const w of workers) {
       if (w.jobTarget && (w.job === JobType.Dig || w.job === JobType.Mine || w.job === JobType.Claim || w.job === JobType.Fortify)) {
         claimedTargets.add(`${w.jobTarget.x},${w.jobTarget.y}`);
       }
-      // Unstick: dig/mine job whose mark vanished or became unreachable
-      if (
-        (w.job === JobType.Dig || w.job === JobType.Mine) &&
-        w.jobTarget &&
-        (!this.grid.get(w.jobTarget.x, w.jobTarget.y) ||
-          this.grid.get(w.jobTarget.x, w.jobTarget.y)!.mark !== MarkType.Dig ||
-          !this.grid.isDiggable(w.jobTarget.x, w.jobTarget.y))
-      ) {
-        w.job = JobType.Idle;
-        w.jobTarget = null;
-        w.setPath(null);
+      // Unstick when the face is gone or no remaining Dig mark uses that face
+      if ((w.job === JobType.Dig || w.job === JobType.Mine) && w.jobTarget) {
+        const key = `${w.jobTarget.x},${w.jobTarget.y}`;
+        if (!activeDig.has(key) || !this.grid.isDiggable(w.jobTarget.x, w.jobTarget.y)) {
+          w.job = JobType.Idle;
+          w.jobTarget = null;
+          w.setPath(null);
+        }
       }
     }
 
@@ -4642,8 +5154,10 @@ export class Game {
       w.jobTarget = null;
       let assigned = false;
 
-      // Haul gold to Treasury first when carrying a load
-      if (w.goldCarried >= 40) {
+      // Haul gold to Treasury when the vault has room. If tagged earth is
+      // waiting, keep digging until a full claw-load — don't camp the Heart.
+      const haulNeed = digMarks.length + claimMarks.length > 0 ? HAUL_WHEN_DIGGING : HAUL_WHEN_IDLE;
+      if (w.goldCarried >= haulNeed && this.vaultRoom() > 0) {
         const treasury = this.grid.tiles.find((t) => t.room === RoomType.Treasury);
         const tx = treasury?.x ?? this.grid.heartPos.x;
         const ty = treasury?.y ?? this.grid.heartPos.y;
@@ -4756,13 +5270,9 @@ export class Game {
         const key = `${face.x},${face.y}`;
         if (claimedTargets.has(key)) continue;
         const tile = this.grid.get(face.x, face.y)!;
-        if (tile.mark !== MarkType.Dig) {
-          tile.mark = MarkType.Dig;
-          this.marksDirty = true;
-        }
         const path = this.grid.findPathAdjacent(w.x, w.y, face.x, face.y);
         if (!path) continue;
-        w.job = tile.kind === TileKind.Gold ? JobType.Mine : JobType.Dig;
+        w.job = tile.kind === TileKind.Gold || tile.kind === TileKind.Gem ? JobType.Mine : JobType.Dig;
         w.jobTarget = face;
         w.setPath(path);
         w.workTimer = 0;
@@ -4879,7 +5389,7 @@ export class Game {
           }
         }
       }
-      if (!assigned && w.goldCarried > 0) {
+      if (!assigned && w.goldCarried > 0 && this.vaultRoom() > 0 && digMarks.length === 0) {
         const treasury = this.grid.tiles.find((t) => t.room === RoomType.Treasury);
         const tx = treasury?.x ?? this.grid.heartPos.x;
         const ty = treasury?.y ?? this.grid.heartPos.y;
@@ -4892,34 +5402,10 @@ export class Game {
       }
     }
 
-    // Scrabblers accrue needs slowly — they are workers first, guests second.
+    // Scrabblers never eat or sleep — they are forged, not born.
     for (const w of workers) {
-      if (w.job === JobType.Flee || w.held) continue;
-      const hasHatch = this.grid.countRoom(RoomType.Hatchery) > 0;
-      const hasLair = this.grid.countRoom(RoomType.Lair) > 0;
-      w.hunger = Math.min(100, w.hunger + (hasHatch ? 0.85 : 0.45) * dt);
-      w.sleepNeed = Math.min(100, w.sleepNeed + (hasLair ? 0.7 : 0.35) * dt);
-      if (w.job === JobType.Eat || w.job === JobType.Sleep) continue;
-
-      const onPlayerWork =
-        w.job === JobType.Dig ||
-        w.job === JobType.Mine ||
-        w.job === JobType.Claim ||
-        w.job === JobType.Haul ||
-        w.job === JobType.Fortify ||
-        w.job === JobType.DragPrisoner ||
-        w.job === JobType.DragWounded;
-      const desperate = w.hunger > 78 || w.sleepNeed > 82 || w.hp < w.maxHp * 0.4;
-      if (onPlayerWork && !desperate) continue;
-
-      const hungry = w.hunger > (hasHatch ? 62 : 80);
-      const tired = w.sleepNeed > (hasLair ? 68 : 85) || w.hp < w.maxHp * 0.4;
-      if (!hungry && !tired) continue;
-      if (hungry && hasHatch && (this.hatcheryFood > 0 || w.hunger > 70)) {
-        this.assignEat(w);
-      } else if (tired && hasLair) {
-        this.assignSleep(w);
-      }
+      w.hunger = 0;
+      w.sleepNeed = 0;
     }
 
     // non-worker jobs: eat / sleep / train / fight / pray
@@ -4982,7 +5468,8 @@ export class Game {
         c.job === JobType.Train ||
         c.job === JobType.Research ||
         c.job === JobType.Pray ||
-        c.job === JobType.Flee
+        c.job === JobType.Flee ||
+        c.job === JobType.Gamble
       ) {
         if (c.job === JobType.Sleep && c.jobTarget) {
           const key = `${c.jobTarget.x},${c.jobTarget.y}`;
@@ -5151,6 +5638,16 @@ export class Game {
         }
       }
       if (c.job === JobType.Idle || (c.job === JobType.Wander && c.path.length === 0)) {
+        if (this.grid.countRoom(RoomType.Casino) > 0 && c.mood < 82 && Math.random() < 0.35) {
+          const den = this.findRoomTile(RoomType.Casino);
+          if (den) {
+            c.job = JobType.Gamble;
+            c.jobTarget = den;
+            c.setPath(this.grid.findPath(c.x, c.y, den.x, den.y));
+            this.mentioneOnce('gambling', MENTOR_LINES.gambling);
+            continue;
+          }
+        }
         // Prefer idling near own bed / Lair when available
         if (Math.random() < 0.008) {
           const lair = this.findFreeOrOwnedBed(c);
@@ -5448,6 +5945,18 @@ export class Game {
   }
 
   private updateWorkerJob(c: Creature, dt: number, arrived: boolean): void {
+    if (c.job === JobType.Fight) {
+      const foe = this.creatures.find(
+        (h) => h.alive && h.isHero && !h.knockedOut && !h.isPrisoner && Math.hypot(h.x - c.x, h.y - c.y) < 7
+      );
+      if (!foe) {
+        c.job = JobType.Idle;
+        c.jobTarget = null;
+        return;
+      }
+      this.doCombat(c, dt);
+      return;
+    }
     if (c.job === JobType.Flee) {
       if (arrived || c.fleeTimer <= 0) {
         c.job = JobType.Idle;
@@ -5659,18 +6168,22 @@ export class Game {
       if (c.workTimer >= digCadence) {
         c.workTimer = 0;
         const wpos = this.grid.tileToWorld(t.x, t.y);
-        this.renderer.spawnDigDebris(wpos.x, wpos.z, t.kind === TileKind.Gold ? 0xe0b040 : 0xc08040);
+        this.renderer.spawnDigDebris(
+          wpos.x,
+          wpos.z,
+          t.kind === TileKind.Gem ? 0x40e0c0 : t.kind === TileKind.Gold ? 0xe0b040 : 0xc08040
+        );
         // Skip extra spark under dig load (debris alone is enough)
 
-        if (t.kind === TileKind.Gold) {
-          const mined = Math.min(40, t.goldAmount);
-          t.goldAmount -= mined;
+        if (t.kind === TileKind.Gold || t.kind === TileKind.Gem) {
+          const mined = t.kind === TileKind.Gem ? 40 : Math.min(40, t.goldAmount);
+          if (t.kind === TileKind.Gold) t.goldAmount -= mined;
           c.goldCarried += mined;
-          t.digProgress = Math.min(1, t.digProgress + 0.2 * c.workEfficiency());
-          // Incremental visual — NO full mesh rebuild (white-screen fix)
+          t.digProgress = Math.min(t.kind === TileKind.Gem ? 0.35 : 1, t.digProgress + 0.2 * c.workEfficiency());
           this.renderer.updateDigVisual(t.x, t.y, t.digProgress, t.kind);
           this.mentioneOnce('firstGold', MENTOR_LINES.firstGold);
-          if (t.goldAmount <= 0) {
+          if (t.kind === TileKind.Gem) this.mentioneOnce('gemSeam', MENTOR_LINES.gemSeam);
+          if (t.kind === TileKind.Gold && t.goldAmount <= 0) {
             t.kind = TileKind.Dirt;
             t.mark = MarkType.None;
             t.goldAmount = 0;
@@ -5681,7 +6194,6 @@ export class Game {
             c.job = JobType.Idle;
             c.jobTarget = null;
           } else if (c.goldCarried >= 120) {
-            // Break to haul a full load to Treasury
             c.job = JobType.Idle;
             c.jobTarget = null;
             c.setPath(null);
@@ -5760,11 +6272,17 @@ export class Game {
     } else if (c.job === JobType.Haul) {
       if (!arrived) return;
       if (c.goldCarried > 0) {
-        this.gold += c.goldCarried;
+        const deposited = this.addGold(c.goldCarried);
+        c.goldCarried -= deposited;
         this.renderer.spawnFx(new THREE.Vector3(c.wx, 0.6, c.wz), 0xffd040, 0.55);
         this.mentioneOnce('firstGold', MENTOR_LINES.firstGold);
+        if (c.goldCarried > 0) {
+          this.mentioneOnce('treasuryFull', MENTOR_LINES.treasuryFull);
+        }
       }
-      c.goldCarried = 0;
+      // Always leave Haul after a deposit attempt — leftover gold stays in claws.
+      // Sitting on the Heart with a full vault used to freeze the worker.
+      if (c.goldCarried <= 0) c.goldCarried = 0;
       c.job = JobType.Idle;
       c.jobTarget = null;
     }
@@ -5912,6 +6430,14 @@ export class Game {
       c.setPath(null);
       return;
     } else if (c.job === JobType.Train && arrived) {
+      const trainCost = TRAINING_GOLD_PER_SEC * dt;
+      if (this.gold < trainCost) {
+        this.mentioneOnce('trainGold', MENTOR_LINES.trainGold);
+        c.job = JobType.Idle;
+        c.jobTarget = null;
+        return;
+      }
+      this.gold = Math.max(0, this.gold - trainCost);
       c.trainNeed = Math.max(0, c.trainNeed - 30 * dt);
       c.workTimer += dt;
       const tileRoom = this.grid.get(c.x, c.y)?.room;
@@ -6020,6 +6546,35 @@ export class Game {
           // Convert to Guard hold at ordered tile (rally-attack destination)
           c.job = JobType.Guard;
         }
+      }
+    } else if (c.job === JobType.Gamble) {
+      if (!c.jobTarget) {
+        c.job = JobType.Idle;
+        return;
+      }
+      if (!arrived && c.path.length > 0) return;
+      if (c.x !== c.jobTarget.x || c.y !== c.jobTarget.y) {
+        const path = this.grid.findPath(c.x, c.y, c.jobTarget.x, c.jobTarget.y);
+        if (path) c.setPath(path);
+        return;
+      }
+      c.setPath(null);
+      this.safeMood(c, (Number.isFinite(c.mood) ? c.mood : 72) + 8 * dt);
+      c.workTimer += dt;
+      if (Math.random() < dt * 0.8) {
+        this.renderer.spawnFx(new THREE.Vector3(c.wx, 0.7, c.wz), 0xf0c040, 0.25);
+      }
+      if (c.workTimer >= 3.2) {
+        c.workTimer = 0;
+        if (Math.random() < 0.32) {
+          this.addGold(6);
+        } else if (this.gold >= 2) {
+          this.gold -= 2;
+        }
+      }
+      if (c.mood >= 88) {
+        c.job = JobType.Idle;
+        c.jobTarget = null;
       }
     } else if (c.job === JobType.Fight) {
       this.doCombat(c, dt);
@@ -6179,6 +6734,11 @@ export class Game {
     if (this.portalCooldown > 0) return;
     const portals = this.grid.countRoom(RoomType.Portal);
     if (portals <= 0) return;
+    if (this.attractedCount() >= this.portalCap()) {
+      this.mentioneOnce('portalFull', MENTOR_LINES.portalFull);
+      this.portalCooldown = 6;
+      return;
+    }
 
     // Recruitment driven by dungeon composition (room tiles)
     const lair = this.grid.countRoom(RoomType.Lair);

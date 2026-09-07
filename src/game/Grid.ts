@@ -1,4 +1,4 @@
-import { DoorState, MarkType, RoomType, TILE_SIZE, Tile, TileKind, TrapType, Vec2 } from './types';
+import { DoorState, MarkType, RoomType, TILE_SIZE, Tile, TileKind, TrapType, Vec2, isDiggableKind } from './types';
 
 export class Grid {
   readonly width: number;
@@ -181,14 +181,34 @@ export class Grid {
     // Thin lava seam south-east for bridge demos
     for (let i = 0; i < 5; i++) {
       const t = this.get(cx + 6 + (i % 2), cy + 6 + Math.floor(i / 2));
-      if (t && (t.kind === TileKind.Earth || t.kind === TileKind.Gold)) {
-        t.kind = TileKind.Lava;
-        t.goldAmount = 0;
-        t.fortified = false;
-      }
+        if (t && (t.kind === TileKind.Earth || t.kind === TileKind.Gold)) {
+          t.kind = TileKind.Lava;
+          t.goldAmount = 0;
+          t.fortified = false;
+        }
     }
     // Small water moat pocket north-west
     this.paintHazardBlob(cx - 8, cy - 8, 2, TileKind.Water);
+
+    // Gem seam — infinite gold, east of the plaza (after hazards so lava cannot eat it)
+    {
+      const gx = Math.min(this.width - 6, cx + 9);
+      const gy = Math.max(4, cy + 1);
+      for (const [dx, dy] of [
+        [0, 0],
+        [1, 0],
+        [0, 1],
+        [1, 1],
+        [2, 0],
+      ] as const) {
+        const t = this.get(gx + dx, gy + dy);
+        if (t && (t.kind === TileKind.Earth || t.kind === TileKind.Gold)) {
+          t.kind = TileKind.Gem;
+          t.goldAmount = 9999;
+          t.fortified = false;
+        }
+      }
+    }
 
     // Place a few torches on claimed tiles near walls
     this.refreshTorches();
@@ -232,7 +252,7 @@ export class Grid {
       ];
       for (const [dx, dy] of dirs) {
         const n = this.get(t.x + dx, t.y + dy);
-        if (n && (n.kind === TileKind.Earth || n.kind === TileKind.Gold || n.kind === TileKind.Rock || n.fortified)) {
+        if (n && (isDiggableKind(n.kind) || n.kind === TileKind.Rock || n.fortified)) {
           t.torch = true;
           break;
         }
@@ -244,8 +264,7 @@ export class Grid {
     const t = this.get(x, y);
     if (!t) return true;
     return (
-      t.kind === TileKind.Earth ||
-      t.kind === TileKind.Gold ||
+      isDiggableKind(t.kind) ||
       t.kind === TileKind.Rock ||
       t.fortified
     );
@@ -302,7 +321,7 @@ export class Grid {
   isDiggable(x: number, y: number): boolean {
     const t = this.get(x, y);
     if (!t) return false;
-    if (t.kind !== TileKind.Earth && t.kind !== TileKind.Gold) return false;
+    if (!isDiggableKind(t.kind)) return false;
     // Player Dig marks tear down auto-fortified earth so the opening excavation can happen
     if (t.fortified && t.mark !== MarkType.Dig) return false;
     return true;
@@ -377,7 +396,7 @@ export class Grid {
    */
   findDiggableFace(x: number, y: number): Vec2 | null {
     const start = this.get(x, y);
-    if (!start || (start.kind !== TileKind.Earth && start.kind !== TileKind.Gold)) return null;
+    if (!start || !isDiggableKind(start.kind)) return null;
     if (this.isReachableSolid(x, y)) return { x, y };
     const seen = new Set<string>([`${x},${y}`]);
     const q: Vec2[] = [{ x, y }];
@@ -388,13 +407,28 @@ export class Grid {
         const key = `${n.x},${n.y}`;
         if (seen.has(key)) continue;
         seen.add(key);
-        if (n.kind !== TileKind.Earth && n.kind !== TileKind.Gold) continue;
+        if (!isDiggableKind(n.kind)) continue;
         if (n.fortified && n.mark !== MarkType.Dig) continue;
         if (this.isReachableSolid(n.x, n.y)) return { x: n.x, y: n.y };
         q.push({ x: n.x, y: n.y });
       }
     }
     return null;
+  }
+
+  /**
+   * Tiles workers may chip for current Dig marks: the marked block itself
+   * plus its open face. The face is work, not an extra player mark.
+   */
+  activeDigWorkKeys(): Set<string> {
+    const keys = new Set<string>();
+    for (const t of this.tiles) {
+      if (t.mark !== MarkType.Dig || !isDiggableKind(t.kind)) continue;
+      keys.add(`${t.x},${t.y}`);
+      const face = this.findDiggableFace(t.x, t.y);
+      if (face) keys.add(`${face.x},${face.y}`);
+    }
+    return keys;
   }
 
   hasAdjacentClaimed(x: number, y: number): boolean {
@@ -418,7 +452,7 @@ export class Grid {
     let walk = 0;
     let roomAdj = false;
     for (const n of this.neighbors4(x, y)) {
-      if (n.fortified || n.kind === TileKind.Earth || n.kind === TileKind.Gold || n.kind === TileKind.Rock) {
+      if (n.fortified || isDiggableKind(n.kind) || n.kind === TileKind.Rock) {
         solid++;
       }
       if (

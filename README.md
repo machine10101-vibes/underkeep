@@ -4,9 +4,9 @@ Original-IP dungeon management game inspired by **Dungeon Keeper 2** (3D). Dark-
 
 ## Play online
 
-**https://machine10101-vibes.github.io/underkeep/?v=pass9**
+**https://machine10101-vibes.github.io/underkeep/?v=pass10.1**
 
-Pass 9 play: tagged earth is the order. Scrabblers dig, claim, and haul before chores; rooms and the Portal attract a working dungeon; heroes march on the Heart.
+Pass 10 play: the keeper loop follows the classic dungeon-keeper playthrough — dig, claim, fortify, rooms, Portal, payday, Heart defense — with Underkeep names and unique gold-cost workers. Pass 10.1: Scrabblers keep digging when the vault is full, and Dig paint marks only the tiles you sweep.
 
 Works on desktop and phones (touch controls).
 
@@ -43,11 +43,15 @@ npm run preview
 | **3** | Claim mark |
 | **4** | Fortify mark |
 | **5–0** | Rooms: Treasury, Lair, Hatchery, Training, Library, Portal |
+| **X** | Sell room / door / trap (half gold back) |
 | **Q** | Create Scrabbler (gold; cost scales) |
 | **E** | Speed Burst (mana) — haste all minions |
 | **R** | Lightning (mana) — strike nearest hero |
 | **T** | Heal (mana; Library research unlock) |
 | **P** | Possess (mana) — FP control one minion; Esc exits |
+| **I** | Sight of Evil (mana) — reveal fog around a click |
+| **Z** | Call to Arms (mana) — muster fighters to a tile |
+| **Shift+H / F / O** | Focus camera on Heart / fight / Portal |
 | **B** / **N** | Wooden / Stone bridge over lava or water |
 | **U** | Workshop room |
 | **J** / **K** / **H** | Prison / Torture Chamber / Graveyard |
@@ -73,20 +77,18 @@ Dropping a creature into a fight **stuns** them briefly (DK2-style).
 
 ## Phase 1 loop
 
-1. Mark earth/gold for digging; Scrabblers dig & mine.
+1. Mark earth / gold / **gem seams** for digging; Scrabblers dig & mine. Gems never run dry.
 2. Mark dirt to **claim**; claimed tiles regenerate **mana**.
-3. Fortify adjacent earth walls.
-4. Build rooms on claimed tiles (costs gold).
-5. Place a **Portal**; attract **Skitterwing**, **Rattlekin**, **Emberling** when thresholds are met.
-6. Minions sleep (Lair), eat (Hatchery), train (Training).
-7. Hero waves march toward the Heart — **survive 3 waves** OR gather **2500 gold** to win.
-8. **Fog of war** — unexplored tiles stay dark until dig/claim / LOS from claimed land.
-9. Idle Scrabblers **auto-fortify** soft earth walls adjacent to claimed territory (rock stays impassable).
-10. **Workshop** — Scrabblers craft free door/Sentry kits (or discounted gold builds).
-11. **Minimap** — explored/claimed overview with Heart marker.
-10. **Lava** burns non-resistant units; Scrabblers will not path across — build **wooden/stone bridges**.
-11. **Possess** a minion (mana) for temporary FP steering; Esc returns to Keeper view.
-12. **Payday** drains wages from the Treasury; empty coffers crash moods.
+3. Fortify adjacent earth walls (never gold or gems).
+4. Build rooms on claimed tiles (costs gold). **Sell** a room to recover half.
+5. Place a **Portal**; attract **Skitterwing**, **Rattlekin**, **Emberling**, **Gravemage** (Portal has a population cap).
+6. Minions sleep (Lair), eat (Hatchery), train (Training — costs gold), gamble (**Wagerden**).
+7. **Scrabblers never eat or sleep.** Slap them to work harder. Drop one on the Heart to reclaim half its gold.
+8. Hero waves march toward the Heart — **survive 3 waves** OR gather **2500 gold** (needs Treasury space) to win.
+9. **Fog of war** — unexplored tiles stay dark until dig/claim, or **Sight of Evil**.
+10. Idle Scrabblers **auto-fortify** after a delay when no dig/claim marks wait.
+11. **Payday** and **Heart HP** sit on the top bar. Workers defend the Heart instead of fleeing.
+12. **Call to Arms** musters fighters. **Possess**, lava/bridges, Workshop, Prison/Torture/Graveyard, Temple, Combat Pit remain.
 
 ## Stack
 

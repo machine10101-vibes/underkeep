@@ -148,7 +148,11 @@ if (
     params.get('shot') === '7.4-roster' ||
     params.get('shot') === '74-roster' ||
     params.get('shot') === '7.4-flee' ||
-    params.get('shot') === '74-flee')
+    params.get('shot') === '74-flee' ||
+    params.get('shot') === '10' ||
+    params.get('shot') === 'pass10' ||
+    params.get('shot') === '10.1' ||
+    params.get('shot') === '101')
 ) {
   // Auto-arrange evidence shots
   setTimeout(() => {
@@ -173,10 +177,14 @@ if (
       preparePass72Shot?: (focus?: 'minimap' | 'mission' | 'workshop' | 'worker' | 'both') => void;
       preparePass73Shot?: (focus?: 'prison' | 'torture' | 'graveyard' | 'efficiency' | 'both') => void;
       preparePass74Shot?: (focus?: 'temple' | 'combatPit' | 'roster' | 'flee' | 'both') => void;
+      preparePass10Shot?: () => void;
+      preparePass101Shot?: () => void;
     };
     g.hud.hideOverlay();
     const shot = params.get('shot');
-    if (shot === '8' || shot === '8.0') g.preparePass8Shot?.();
+    if (shot === '10.1' || shot === '101') g.preparePass101Shot?.();
+    else if (shot === '10' || shot === 'pass10') g.preparePass10Shot?.();
+    else if (shot === '8' || shot === '8.0') g.preparePass8Shot?.();
     else if (shot === '7' || shot === '7.0') g.preparePass7Shot?.();
     else if (shot === '7.4-temple' || shot === '74-temple') g.preparePass74Shot?.('temple');
     else if (shot === '7.4-combat' || shot === '74-combat') g.preparePass74Shot?.('combatPit');
@@ -223,4 +231,28 @@ if (
     else if (params.get('pass') === '3') g.preparePass3Shot?.();
     else g.preparePass4Shot?.();
   }, 400);
+}
+
+if (game && params.get('smoke') === '1') {
+  setTimeout(() => {
+    const g = game as unknown as { hud: { hideOverlay: () => void }; runGuideSmoke?: (s?: number) => unknown };
+    g.hud.hideOverlay();
+    const result = g.runGuideSmoke?.(16);
+    let el = document.getElementById('smoke-result');
+    if (!el) {
+      el = document.createElement('pre');
+      el.id = 'smoke-result';
+      el.setAttribute('data-smoke', '1');
+      document.body.appendChild(el);
+    }
+    el.textContent = JSON.stringify(result ?? { error: 'no-smoke' });
+    const r = result as {
+      mined?: boolean;
+      extraDigMarks?: number;
+      stuckHaul?: number;
+      resumedDig?: boolean;
+    } | null;
+    const ok = !!r?.mined && (r.extraDigMarks ?? 1) === 0 && (r.stuckHaul ?? 1) === 0 && r.resumedDig === true;
+    document.title = `smoke:${ok ? 'ok' : 'fail'}`;
+  }, 600);
 }

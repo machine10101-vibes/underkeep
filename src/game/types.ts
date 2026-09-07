@@ -12,6 +12,7 @@ export enum TileKind {
   Water = 8,     // hazard floor — moat; bridgeable
   BridgeWood = 9,
   BridgeStone = 10,
+  Gem = 11,      // infinite gold seam — never depletes
 }
 
 export enum RoomType {
@@ -29,6 +30,7 @@ export enum RoomType {
   Graveyard = 11,
   Temple = 12,
   CombatPit = 13,
+  Casino = 14,   // Wagerden — mood room; idle minions gamble
 }
 
 /** Wooden door on a claimed corridor tile. */
@@ -83,6 +85,7 @@ export enum JobType {
   DragPrisoner = 'drag',
   Pray = 'pray',
   DragWounded = 'dragwounded',
+  Gamble = 'gamble',
 }
 
 export interface Tile {
@@ -125,6 +128,7 @@ export const ROOM_COST: Record<RoomType, number> = {
   [RoomType.Graveyard]: 250,
   [RoomType.Temple]: 300,
   [RoomType.CombatPit]: 350,
+  [RoomType.Casino]: 225,
 };
 
 export const DOOR_COST = 75;
@@ -133,8 +137,19 @@ export const RALLY_COST = 40;
 export const BRIDGE_WOOD_COST = 60;
 export const BRIDGE_STONE_COST = 120;
 export const POSSESS_COST = 35;
+export const SIGHT_COST = 22;
+export const CALL_TO_ARMS_COST = 28;
+/** Heart vault + each Treasury tile (gold that will not fit stays on the worker). */
+export const HEART_GOLD_CAP = 1000;
+export const TREASURY_TILE_CAP = 200;
+/** First Portal tile holds this many attracted minions; each extra tile adds more. */
+export const PORTAL_BASE_CAP = 8;
+export const PORTAL_PER_TILE = 3;
+/** Gold drained per second while a minion trains. */
+export const TRAINING_GOLD_PER_SEC = 4;
 /** Payday interval (seconds). */
 export const PAYDAY_INTERVAL = 48;
+export const HEART_MAX_HP = 500;
 /** Survive this many hero waves to win (or hit gold threshold). */
 export const WIN_WAVES = 3;
 /** Treasury gold threshold alternate win. */
@@ -158,6 +173,7 @@ export const ROOM_NAMES: Record<RoomType, string> = {
   [RoomType.Graveyard]: 'Graveyard',
   [RoomType.Temple]: 'Temple',
   [RoomType.CombatPit]: 'Combat Pit',
+  [RoomType.Casino]: 'Wagerden',
 };
 
 export const CREATURE_STATS: Record<
@@ -197,9 +213,32 @@ export type ToolMode =
   | 'torture'
   | 'graveyard'
   | 'temple'
-  | 'combatPit';
+  | 'combatPit'
+  | 'casino'
+  | 'sell';
 
-export type SpellId = 'createWorker' | 'speed' | 'lightning' | 'heal' | 'possess';
+export type SpellId =
+  | 'createWorker'
+  | 'speed'
+  | 'lightning'
+  | 'heal'
+  | 'possess'
+  | 'sight'
+  | 'callToArms';
+
+/** Earth, gold, and gem seams that a Dig mark can chip. */
+export function isDiggableKind(kind: TileKind): boolean {
+  return kind === TileKind.Earth || kind === TileKind.Gold || kind === TileKind.Gem;
+}
+
+export function goldCapacity(treasuryTiles: number): number {
+  return HEART_GOLD_CAP + Math.max(0, treasuryTiles) * TREASURY_TILE_CAP;
+}
+
+export function portalCapacity(portalTiles: number): number {
+  if (portalTiles <= 0) return 0;
+  return PORTAL_BASE_CAP + Math.max(0, portalTiles - 1) * PORTAL_PER_TILE;
+}
 
 /** Emberling shrugs lava; Skitterwing flies over hazards. */
 export function isHeatResistant(kind: CreatureKind): boolean {

@@ -221,41 +221,48 @@ export class Grid {
   }
 
   /**
-   * DK2 Portal: a 3×3 gateway placed on the map. Cannot be built or sold.
-   * Starts as unclaimed dirt so Scrabblers must claim it before anyone arrives.
+   * DK2 Portal: a 3×3 gateway found on the map, never built.
+   * Picked at random among legal chambers, then buried until the Keeper digs in.
    */
   private placeMapPortal(): void {
     const hx = this.heartPos.x;
     const hy = this.heartPos.y;
-    const tries: Vec2[] = [
-      { x: hx - 10, y: hy - 2 },
-      { x: hx - 9, y: hy + 6 },
-      { x: hx + 7, y: hy - 9 },
-      { x: hx - 8, y: hy - 8 },
-      { x: hx + 5, y: hy + 9 },
-      { x: hx - 11, y: hy + 1 },
-    ];
-    for (let i = tries.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      const tmp = tries[i];
-      tries[i] = tries[j];
-      tries[j] = tmp;
-    }
-    for (const c of tries) {
-      if (this.carvePortalChamber(c.x, c.y)) {
-        this.portalPos = { x: c.x, y: c.y };
-        return;
+    const candidates: Vec2[] = [];
+    for (let y = 4; y < this.height - 4; y++) {
+      for (let x = 4; x < this.width - 4; x++) {
+        if (Math.max(Math.abs(x - hx), Math.abs(y - hy)) < 8) continue;
+        if (this.portalChamberFits(x, y)) candidates.push({ x, y });
       }
+    }
+    if (candidates.length) {
+      const pick = candidates[Math.floor(Math.random() * candidates.length)];
+      this.carvePortalChamber(pick.x, pick.y);
+      this.portalPos = pick;
+      return;
     }
     const fallback = { x: Math.max(5, hx - 10), y: Math.max(5, Math.min(this.height - 6, hy)) };
     this.carvePortalChamber(fallback.x, fallback.y);
     this.portalPos = fallback;
   }
 
-  private carvePortalChamber(cx: number, cy: number): boolean {
+  private portalChamberFits(cx: number, cy: number): boolean {
     const hx = this.heartPos.x;
     const hy = this.heartPos.y;
-    if (Math.abs(cx - hx) < 7 && Math.abs(cy - hy) < 7) return false;
+    if (Math.max(Math.abs(cx - hx), Math.abs(cy - hy)) < 8) return false;
+    for (let dy = -1; dy <= 1; dy++) {
+      for (let dx = -1; dx <= 1; dx++) {
+        const t = this.get(cx + dx, cy + dy);
+        if (!t) return false;
+        if (t.kind === TileKind.Heart || t.kind === TileKind.Rock || t.kind === TileKind.Gem) return false;
+        if (t.kind === TileKind.Claimed) return false;
+        if (t.kind === TileKind.Lava || t.kind === TileKind.Water) return false;
+        if (t.room !== RoomType.None) return false;
+      }
+    }
+    return true;
+  }
+
+  private carvePortalChamber(cx: number, cy: number): boolean {
     const cells: Tile[] = [];
     for (let dy = -1; dy <= 1; dy++) {
       for (let dx = -1; dx <= 1; dx++) {
@@ -559,6 +566,8 @@ export class Grid {
   seedExploration(): void {
     for (const t of this.tiles) t.explored = false;
     for (const t of this.tiles) {
+      // Buried map Portals stay fogged — the Keeper must dig to the wound.
+      if (t.room === RoomType.Portal) continue;
       if (
         t.kind === TileKind.Claimed ||
         t.kind === TileKind.Heart ||
@@ -570,6 +579,7 @@ export class Grid {
     // LOS: solids adjacent to claimed/heart are visible wall faces
     for (const t of this.tiles) {
       if (!t.explored) continue;
+      if (t.room === RoomType.Portal) continue;
       if (
         t.kind !== TileKind.Claimed &&
         t.kind !== TileKind.Heart &&

@@ -2073,6 +2073,8 @@ export class Game {
       this.renderer.spawnFx(new THREE.Vector3(wx, 1.15, wz), 0xffaa44, 0.55);
       this.renderer.spawnDigDebris(wx, wz, 0xffdd88);
 
+      const slapHp = Math.max(1, Math.floor(c.maxHp * 0.04));
+      c.hp = Math.max(1, c.hp - slapHp);
       if (c.isWorker) {
         // Guide: workers work harder — do not stun them off the job
         c.slapWorkBuff = Math.max(c.slapWorkBuff, 10);
@@ -2141,9 +2143,15 @@ export class Game {
       height: this.grid.height,
       heartX: this.grid.heartPos.x,
       heartY: this.grid.heartPos.y,
+      portalX: this.grid.portalPos.x,
+      portalY: this.grid.portalPos.y,
       kindAt: (x, y) => this.grid.get(x, y)?.kind ?? 0,
       exploredAt: (x, y) => !!this.grid.get(x, y)?.explored,
       roomAt: (x, y) => this.grid.get(x, y)?.room ?? 0,
+      claimedPortalAt: (x, y) => {
+        const t = this.grid.get(x, y);
+        return !!t && t.room === RoomType.Portal && t.kind === TileKind.Claimed;
+      },
     });
   }
 
@@ -4483,6 +4491,153 @@ export class Game {
       stuckHaul,
       resumedDig,
     };
+  }
+
+  /** Headless DK2 Portal rules: found not built, claim to attract, Lair gates the veil. */
+  runPortalSmoke(): {
+    portalTiles: number;
+    dirtUnclaimed: number;
+    exploredAtStart: number;
+    minionsBeforeClaim: number;
+    cannotBuild: boolean;
+    cannotSell: boolean;
+    claimedTiles: number;
+    portalCap: number;
+    scoutAfterClaim: number;
+    stoppedWithoutLair: number;
+    rattlekinAfterRooms: number;
+    sacked: boolean;
+  } {
+    this.hud.hideOverlay();
+    const portalTiles = this.grid.tiles.filter((t) => t.room === RoomType.Portal);
+    const dirtUnclaimed = portalTiles.filter((t) => t.kind === TileKind.Dirt).length;
+    const exploredAtStart = portalTiles.filter((t) => t.explored).length;
+    this.portalCooldown = 0;
+    for (let i = 0; i < 40; i++) this.update(0.25);
+    const minionsBeforeClaim = this.creatures.filter((c) => c.alive && !c.isWorker && !c.isHero).length;
+
+    const hx = this.grid.heartPos.x;
+    const hy = this.grid.heartPos.y;
+    const empty = this.grid.get(hx + 1, hy);
+    const beforeBuild = empty?.room ?? RoomType.None;
+    this.tool = 'portal';
+    this.lastPaint = null;
+    if (empty) this.applyTool(empty.x, empty.y);
+    const cannotBuild = (empty?.room ?? RoomType.None) === beforeBuild;
+
+    const anyPortal = portalTiles[0];
+    const beforeSellKind = anyPortal?.kind;
+    const beforeSellRoom = anyPortal?.room;
+    this.tool = 'sell';
+    this.lastPaint = null;
+    if (anyPortal) this.applyTool(anyPortal.x, anyPortal.y);
+    const cannotSell = !!anyPortal && anyPortal.kind === beforeSellKind && anyPortal.room === beforeSellRoom;
+
+    for (const t of portalTiles) {
+      t.kind = TileKind.Claimed;
+      t.claimedProgress = 1;
+      t.explored = true;
+      t.mark = MarkType.None;
+    }
+    this.portalCooldown = 0;
+    this.attracted = { skitterwing: false, rattlekin: false, emberling: false, gravemage: false };
+    this.updatePortal(1);
+    const scoutAfterClaim = this.creatures.filter((c) => c.alive && !c.isWorker && !c.isHero).length;
+    this.portalCooldown = 0;
+    this.updatePortal(1);
+    this.updatePortal(1);
+    const stoppedWithoutLair = this.creatures.filter((c) => c.alive && !c.isWorker && !c.isHero).length;
+
+    const paintRoom = (x: number, y: number, room: RoomType) => {
+      const tile = this.grid.get(x, y);
+      if (!tile || tile.kind === TileKind.Heart) return;
+      tile.kind = TileKind.Claimed;
+      tile.room = room;
+      tile.claimedProgress = 1;
+      tile.explored = true;
+    };
+    paintRoom(hx + 1, hy, RoomType.Lair);
+    paintRoom(hx + 1, hy + 1, RoomType.Lair);
+    paintRoom(hx - 1, hy, RoomType.Hatchery);
+    this.hatcheryFood = Math.max(this.hatcheryFood, 6);
+    this.portalCooldown = 0;
+    this.updatePortal(1);
+    const rattlekinAfterRooms = this.creatures.filter((c) => c.alive && c.kind === CreatureKind.Rattlekin).length;
+
+    const fighter = this.creatures.find((c) => c.alive && c.kind === CreatureKind.Rattlekin);
+    let sacked = false;
+    if (fighter) {
+      this.held = fighter;
+      fighter.held = true;
+      const center = this.grid.get(this.grid.portalPos.x, this.grid.portalPos.y);
+      if (center) this.dropHeldAt(center.x, center.y);
+      sacked = !fighter.alive;
+    }
+
+    return {
+      portalTiles: portalTiles.length,
+      dirtUnclaimed,
+      exploredAtStart,
+      minionsBeforeClaim,
+      cannotBuild,
+      cannotSell,
+      claimedTiles: this.grid.countClaimedRoom(RoomType.Portal),
+      portalCap: this.portalCap(),
+      scoutAfterClaim,
+      stoppedWithoutLair,
+      rattlekinAfterRooms,
+      sacked,
+    };
+  }
+
+  /** QA/screenshot: the map Portal — buried blot, then claimed gateway. */
+  preparePass108Shot(focus: 'buried' | 'claimed' | 'both' = 'both'): void {
+    this.hud.hideOverlay();
+    const hx = this.grid.heartPos.x;
+    const hy = this.grid.heartPos.y;
+    const px = this.grid.portalPos.x;
+    const py = this.grid.portalPos.y;
+    const step = (a: number, b: number) => (a === b ? 0 : a < b ? 1 : -1);
+    let cx = hx;
+    let cy = hy;
+    while (cx !== px || cy !== py) {
+      if (cx !== px) cx += step(cx, px);
+      else cy += step(cy, py);
+      const t = this.grid.get(cx, cy);
+      if (!t || t.kind === TileKind.Heart || t.kind === TileKind.Rock) continue;
+      if (t.room !== RoomType.Portal) {
+        t.kind = TileKind.Claimed;
+        t.room = RoomType.None;
+        t.claimedProgress = 1;
+      }
+      t.explored = true;
+      t.fortified = false;
+    }
+    for (const t of this.grid.tiles) {
+      if (t.room !== RoomType.Portal) continue;
+      t.explored = true;
+      if (focus !== 'buried') {
+        t.kind = TileKind.Claimed;
+        t.claimedProgress = 1;
+      }
+    }
+    if (focus !== 'buried') {
+      if (!this.creatures.some((c) => c.alive && c.kind === CreatureKind.Skitterwing)) {
+        this.spawnCreature(CreatureKind.Skitterwing, px, py);
+        this.attracted.skitterwing = true;
+      }
+      this.hud.sayNow(MENTOR_LINES.portalClaimed);
+      this.hud.setTooltip('Claimed Portal — rooms decide who crosses the veil');
+    } else {
+      this.hud.sayNow(MENTOR_LINES.start);
+      this.hud.setTooltip('A Portal sleeps in the rock — dig to the purple wound');
+    }
+    this.rebuild();
+    this.updateMinimap();
+    const focusW = this.grid.tileToWorld(px, py);
+    this.camTarget.set(focusW.x, 0, focusW.z);
+    this.renderer.camera.position.set(focusW.x + 5, 16, focusW.z + 14);
+    this.renderer.camera.lookAt(this.camTarget);
   }
 
   /** QA/screenshot: Pass 8 layered wall faces, monumental Heart/Portal, cavern atmosphere. */
@@ -6839,7 +6994,6 @@ export class Game {
     const train = this.grid.countRoom(RoomType.Training);
     const library = this.grid.countRoom(RoomType.Library);
     const treasury = this.grid.countRoom(RoomType.Treasury);
-    const claimed = this.grid.countClaimed();
 
     // DK2: no Lair space → portal stops (one scout may sneak through with no beds)
     const minions = this.creatures.filter((c) => c.alive && !c.isWorker && !c.isHero && !c.isPrisoner).length;
@@ -6866,8 +7020,8 @@ export class Game {
       }
     }
 
-    // Skitterwing — Portal + claimed land (scouts)
-    if (!this.attracted.skitterwing && claimed >= 16 && portals >= 1) {
+    // Skitterwing — claimed Portal is enough (DK2: Firefly/Goblin scout)
+    if (!this.attracted.skitterwing && portals >= 1) {
       this.spawnCreature(CreatureKind.Skitterwing, sx, sy);
       this.attracted.skitterwing = true;
       this.portalCooldown = 8;

@@ -635,9 +635,9 @@ export function makeCreatureMesh(color: number, scale: number, kind: string): TH
       new THREE.CapsuleGeometry(0.07, 0.28, 3, 6),
       new THREE.MeshStandardMaterial({ color: 0x5a7030, roughness: 0.65 })
     );
-    upper.position.set(0.02, 0.1, 0.1);
-    upper.rotation.x = 0.55;
-    upper.rotation.z = 0.22;
+    upper.position.set(0.02, 0.08, 0.12);
+    upper.rotation.x = 0.85;
+    upper.rotation.z = 0.18;
     digArm.add(upper);
     const pick = new THREE.Group();
     const haftMat = new THREE.MeshStandardMaterial({ color: 0x7a5028, roughness: 0.85 });
@@ -666,10 +666,11 @@ export function makeCreatureMesh(color: number, scale: number, kind: string): TH
     butt.rotation.x = -Math.PI / 2;
     butt.position.set(0, 0.02, 0.54);
     pick.add(butt);
-    pick.position.set(0.02, 0.04, 0.1);
+    pick.position.set(0.02, 0.02, 0.08);
     digArm.add(pick);
-    digArm.position.set(0.3, 0.5, 0.4);
-    digArm.rotation.set(-0.55, 0, 0.04);
+    // Shoulder height so the spike meets a 2.4-tall wall face, not the floor
+    digArm.position.set(0.28, 1.02, 0.36);
+    digArm.rotation.set(-0.28, 0, 0.04);
     g.add(digArm);
     (g as THREE.Group & { pickaxe?: THREE.Object3D }).pickaxe = digArm;
 
@@ -2331,7 +2332,7 @@ export function makeGoldBag(): THREE.Group {
 export function poseScrabblerPickaxe(pick: THREE.Object3D, time: number, striking: boolean): void {
   pick.visible = true;
   if (!striking) {
-    pick.rotation.set(-0.42, 0, 0.05);
+    pick.rotation.set(-0.22, 0, 0.04);
     return;
   }
   const period = 1.25;
@@ -2345,10 +2346,10 @@ export function poseScrabblerPickaxe(pick: THREE.Object3D, time: number, strikin
   } else {
     impact = 1 - (u - 0.74) / 0.26;
   }
-  // Raised: spike at the upper face. Impact: drive into the mid-face.
-  pick.rotation.x = -0.95 + impact * 1.28;
+  // Raised: spike at the upper wall. Impact: nearly horizontal into the face.
+  pick.rotation.x = -0.58 + impact * 0.66;
   pick.rotation.y = 0;
-  pick.rotation.z = 0.06;
+  pick.rotation.z = 0.05;
 }
 
 /** Original-IP keeper claw — follows the cursor in Hand mode. */

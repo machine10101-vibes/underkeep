@@ -223,6 +223,7 @@ export class ModelStudio {
   private openFlag = false;
   private stage!: THREE.Group;
   private prevClear = new THREE.Color();
+  private digWall: THREE.Object3D | null = null;
 
   constructor(
     private canvas: HTMLCanvasElement,
@@ -549,6 +550,16 @@ export class ModelStudio {
     if (pick) {
       poseScrabblerPickaxe(pick, t, dig);
       if (!dig) pick.visible = this.entry?.id === 'scrabbler';
+    }
+    if (dig && this.entry?.id === 'scrabbler') {
+      if (!this.digWall) {
+        this.digWall = solidTile(TileKind.Gold);
+        this.digWall.position.set(0, 0, 2.05);
+        this.stage.add(this.digWall);
+      }
+    } else if (this.digWall) {
+      this.stage.remove(this.digWall);
+      this.digWall = null;
     }
     if (walk) {
       mesh.position.y = Math.abs(Math.sin(t * 8)) * 0.06;

@@ -4658,7 +4658,11 @@ export class Game {
     }
     for (let i = 0; i < 160; i++) this.update(0.05);
     const wallDug = this.grid.get(hx + 3, hy);
-    const markedGetsDug = !!wallDug && (wallDug.kind === TileKind.Dirt || wallDug.digProgress > 0);
+    const markedGetsDug =
+      !!wallDug &&
+      (wallDug.kind === TileKind.Dirt ||
+        wallDug.kind === TileKind.Claimed ||
+        wallDug.digProgress > 0);
 
     const workersNoRest = this.creatures
       .filter((c) => c.alive && c.isWorker)
@@ -4731,7 +4735,7 @@ export class Game {
       g.goldAmount = 380;
       g.fortified = false;
       g.explored = true;
-      g.mark = i < 3 ? MarkType.Dig : MarkType.None;
+      g.mark = i === 1 ? MarkType.Dig : MarkType.None;
       g.room = RoomType.None;
     }
     const earth = this.grid.get(hx + 3, hy);

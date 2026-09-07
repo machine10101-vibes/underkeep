@@ -348,26 +348,27 @@ export function makeWallFaceDetail(kind: TileKind, fortified = false): THREE.Gro
   }
 
   if (isGold) {
-    const nuggetMat = cachedMat('wall-face-nugget-v9', () =>
+    const nuggetMat = cachedMat('wall-face-nugget-v10', () =>
       new THREE.MeshStandardMaterial({
-        color: 0xe8b43a,
-        emissive: 0x6a4008,
-        emissiveIntensity: 0.35,
-        metalness: 0.55,
-        roughness: 0.42,
+        color: 0xf0c24a,
+        emissive: 0x8a5808,
+        emissiveIntensity: 0.55,
+        metalness: 0.62,
+        roughness: 0.36,
       })
     );
-    const nuggetGeo = cachedGeo('wall-face-nugget-v9', () => new THREE.DodecahedronGeometry(0.11, 0));
+    const nuggetGeo = cachedGeo('wall-face-nugget-v10', () => new THREE.DodecahedronGeometry(0.13, 0));
     const spots = [
       [-0.42, 0.78, 0.98],
       [0.18, 1.22, 0.96],
       [0.48, 0.62, 0.99],
       [-0.12, 1.72, 0.94],
+      [0.36, 1.55, 0.97],
     ];
     for (const [x, y, z] of spots) {
       const nugget = new THREE.Mesh(nuggetGeo, nuggetMat);
       nugget.position.set(x, y, z);
-      nugget.scale.set(1.1, 0.7, 0.55);
+      nugget.scale.set(1.35, 0.85, 0.7);
       nugget.rotation.set(x * 2, y, z * 3);
       nugget.castShadow = true;
       g.add(nugget);
@@ -1407,11 +1408,11 @@ export function tileMaterial(kind: TileKind, fortified: boolean, _room: RoomType
         vertexColors: true,
       });
     case TileKind.Gold:
-      return texturedMat('gold-v4', goldVeinTex(), {
-        metalness: 0.18,
-        roughness: 0.82,
-        emissive: 0x4a2808,
-        emissiveIntensity: 0.22,
+      return texturedMat('gold-v5', goldVeinTex(), {
+        metalness: 0.22,
+        roughness: 0.78,
+        emissive: 0x5a3010,
+        emissiveIntensity: 0.28,
         bump: 0.14,
         vertexColors: true,
       });
@@ -1952,11 +1953,11 @@ export function makeGemGlitter(): THREE.Group {
 export function makeGoldGlitter(): THREE.Group {
   const g = new THREE.Group();
   const mat = new THREE.MeshStandardMaterial({
-    color: 0xe0b040,
-    emissive: 0x5a3808,
-    emissiveIntensity: 0.4,
-    metalness: 0.58,
-    roughness: 0.4,
+    color: 0xe8bc48,
+    emissive: 0x6a4008,
+    emissiveIntensity: 0.55,
+    metalness: 0.6,
+    roughness: 0.38,
   });
   const spots = [
     [0.42, 1.15, 0.55],

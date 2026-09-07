@@ -303,7 +303,7 @@ export function gemVeinTex(): THREE.CanvasTexture {
 
 export function goldVeinTex(): THREE.CanvasTexture {
   // Dirt wall with gold chunks — not a solid gold cube
-  const key = 'gold-in-dirt-v4|64';
+  const key = 'gold-in-dirt-v5|64';
   const hit = texCache.get(key);
   if (hit) return hit;
   const earth = earthTex();
@@ -323,9 +323,9 @@ export function goldVeinTex(): THREE.CanvasTexture {
       const vein = fbm(nx * 2.8, ny * 0.55, 91);
       const i = (y * size + x) * 4;
       let t = 0;
-      if (blob > 0.78) t = Math.min(1, (blob - 0.78) / 0.16);
-      else if (vein > 0.74 && Math.abs(fbm(nx * 0.4, ny * 3.2, 104) - 0.5) < 0.08) {
-        t = 0.55 + (vein - 0.74) * 1.4;
+      if (blob > 0.7) t = Math.min(1, (blob - 0.7) / 0.22);
+      else if (vein > 0.7 && Math.abs(fbm(nx * 0.4, ny * 3.2, 104) - 0.5) < 0.1) {
+        t = 0.62 + (vein - 0.7) * 1.5;
       }
       if (t > 0) {
         const gcol = mixRgb(deep, gold, Math.min(1, t));

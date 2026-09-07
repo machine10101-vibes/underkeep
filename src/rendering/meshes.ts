@@ -887,6 +887,50 @@ function texturedMat(
 }
 
 export function floorMaterial(kind: TileKind, room: RoomType): THREE.MeshStandardMaterial {
+  if (kind === TileKind.Lava) {
+    return cachedMat('floor-lava', () =>
+      new THREE.MeshStandardMaterial({
+        color: 0xff4010,
+        roughness: 0.4,
+        metalness: 0.15,
+        emissive: 0xff2a00,
+        emissiveIntensity: 1.2,
+      })
+    );
+  }
+  if (kind === TileKind.Water) {
+    return cachedMat('floor-water', () =>
+      new THREE.MeshStandardMaterial({
+        color: 0x2a6088,
+        roughness: 0.2,
+        metalness: 0.45,
+        emissive: 0x143858,
+        emissiveIntensity: 0.45,
+      })
+    );
+  }
+  if (kind === TileKind.BridgeWood) {
+    return cachedMat('floor-bridge-wood', () =>
+      new THREE.MeshStandardMaterial({
+        color: 0x8a5a28,
+        roughness: 0.85,
+        metalness: 0.05,
+        emissive: 0x2a1808,
+        emissiveIntensity: 0.08,
+      })
+    );
+  }
+  if (kind === TileKind.BridgeStone) {
+    return cachedMat('floor-bridge-stone', () =>
+      new THREE.MeshStandardMaterial({
+        color: 0x6a7080,
+        roughness: 0.65,
+        metalness: 0.3,
+        emissive: 0x202428,
+        emissiveIntensity: 0.1,
+      })
+    );
+  }
   if (kind === TileKind.Heart) {
     return texturedMat('floor-heart', heartFloorTex(), {
       metalness: 0.3,
@@ -1058,6 +1102,14 @@ export function tileMaterial(kind: TileKind, fortified: boolean, _room: RoomType
       return floorMaterial(TileKind.Claimed, _room);
     case TileKind.Heart:
       return floorMaterial(TileKind.Heart, RoomType.None);
+    case TileKind.Lava:
+      return floorMaterial(TileKind.Lava, RoomType.None);
+    case TileKind.Water:
+      return floorMaterial(TileKind.Water, RoomType.None);
+    case TileKind.BridgeWood:
+      return floorMaterial(TileKind.BridgeWood, RoomType.None);
+    case TileKind.BridgeStone:
+      return floorMaterial(TileKind.BridgeStone, RoomType.None);
     default:
       return cachedMat('default', () => new THREE.MeshStandardMaterial({ color: 0x555555 }));
   }
@@ -1287,6 +1339,133 @@ export function makeGoldGlitter(): THREE.Group {
   return g;
 }
 
+
+/** Glowing lava pool floor — red/orange emissive, distinct from gold veins. */
+export function makeLavaMesh(): THREE.Group {
+  const g = new THREE.Group();
+  const crust = new THREE.Mesh(
+    new THREE.BoxGeometry(TILE_SIZE * 0.98, 0.18, TILE_SIZE * 0.98),
+    new THREE.MeshStandardMaterial({
+      color: 0x3a1208,
+      roughness: 0.85,
+      metalness: 0.05,
+      emissive: 0x4a1008,
+      emissiveIntensity: 0.35,
+    })
+  );
+  crust.position.y = 0.05;
+  crust.receiveShadow = true;
+  g.add(crust);
+  const glow = new THREE.Mesh(
+    new THREE.BoxGeometry(TILE_SIZE * 0.82, 0.08, TILE_SIZE * 0.82),
+    new THREE.MeshStandardMaterial({
+      color: 0xff5510,
+      roughness: 0.35,
+      metalness: 0.2,
+      emissive: 0xff3a00,
+      emissiveIntensity: 1.35,
+    })
+  );
+  glow.position.y = 0.14;
+  g.add(glow);
+  // Dark crust islands so it never reads as gold glitter
+  for (const [ox, oz, s] of [
+    [-0.45, -0.3, 0.35],
+    [0.4, 0.35, 0.28],
+    [0.1, -0.5, 0.22],
+    [-0.2, 0.45, 0.3],
+  ] as const) {
+    const island = new THREE.Mesh(
+      new THREE.BoxGeometry(s, 0.06, s * 0.85),
+      new THREE.MeshStandardMaterial({
+        color: 0x1a0a06,
+        roughness: 0.95,
+        emissive: 0x801800,
+        emissiveIntensity: 0.45,
+      })
+    );
+    island.position.set(ox, 0.17, oz);
+    g.add(island);
+  }
+  return g;
+}
+
+/** Cool water / moat tile. */
+export function makeWaterMesh(): THREE.Group {
+  const g = new THREE.Group();
+  const basin = new THREE.Mesh(
+    new THREE.BoxGeometry(TILE_SIZE * 0.98, 0.16, TILE_SIZE * 0.98),
+    new THREE.MeshStandardMaterial({
+      color: 0x1a3048,
+      roughness: 0.25,
+      metalness: 0.35,
+      emissive: 0x0a2038,
+      emissiveIntensity: 0.4,
+    })
+  );
+  basin.position.y = 0.04;
+  basin.receiveShadow = true;
+  g.add(basin);
+  const sheen = new THREE.Mesh(
+    new THREE.BoxGeometry(TILE_SIZE * 0.78, 0.04, TILE_SIZE * 0.78),
+    new THREE.MeshStandardMaterial({
+      color: 0x3a80b0,
+      roughness: 0.15,
+      metalness: 0.55,
+      emissive: 0x184868,
+      emissiveIntensity: 0.55,
+      transparent: true,
+      opacity: 0.92,
+    })
+  );
+  sheen.position.y = 0.12;
+  g.add(sheen);
+  return g;
+}
+
+/** Wooden or stone bridge planks over a hazard. */
+export function makeBridgeMesh(stone: boolean): THREE.Group {
+  const g = new THREE.Group();
+  // Dim lava/water glow under the gaps
+  const under = new THREE.Mesh(
+    new THREE.BoxGeometry(TILE_SIZE * 0.95, 0.1, TILE_SIZE * 0.95),
+    new THREE.MeshStandardMaterial({
+      color: stone ? 0x1a2838 : 0x4a1808,
+      roughness: 0.7,
+      metalness: 0.1,
+      emissive: stone ? 0x102030 : 0xc02800,
+      emissiveIntensity: stone ? 0.25 : 0.7,
+    })
+  );
+  under.position.y = 0.06;
+  g.add(under);
+  const plankMat = new THREE.MeshStandardMaterial({
+    color: stone ? 0x6a7080 : 0x8a5a28,
+    roughness: stone ? 0.65 : 0.82,
+    metalness: stone ? 0.35 : 0.08,
+    emissive: stone ? 0x202428 : 0x3a2010,
+    emissiveIntensity: 0.12,
+  });
+  for (let i = -2; i <= 2; i++) {
+    const plank = new THREE.Mesh(new THREE.BoxGeometry(TILE_SIZE * 0.92, 0.12, 0.28), plankMat);
+    plank.position.set(0, 0.2, i * 0.36);
+    plank.castShadow = true;
+    plank.receiveShadow = true;
+    g.add(plank);
+  }
+  // Side rails
+  const railMat = new THREE.MeshStandardMaterial({
+    color: stone ? 0x505868 : 0x5a3a18,
+    roughness: 0.75,
+    metalness: stone ? 0.3 : 0.05,
+  });
+  for (const ox of [-0.85, 0.85]) {
+    const rail = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.35, TILE_SIZE * 0.9), railMat);
+    rail.position.set(ox, 0.38, 0);
+    g.add(rail);
+  }
+  return g;
+}
 
 /** Wooden door mesh — closed slab or open leaf. */
 export function makeDoorMesh(state: DoorState): THREE.Group {

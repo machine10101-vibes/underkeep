@@ -4,9 +4,9 @@ Original-IP dungeon management game inspired by **Dungeon Keeper 2** (3D). Dark-
 
 ## Play online
 
-**https://machine10101-vibes.github.io/underkeep/?v=pass6.5**
+**https://machine10101-vibes.github.io/underkeep/?v=pass7.1**
 
-Pass 6.5: fog of war / unexplored + idle Scrabbler auto-fortify (keeps 6.4b Hand/group hardenings).
+Pass 7.1: lava hazards, wooden/stone bridges, Possession spell, payday wages (keeps FoW/Hand/dig/doors/combat).
 
 Works on desktop and phones (touch controls).
 
@@ -46,6 +46,9 @@ npm run preview
 | **Q** | Create Scrabbler (gold; cost scales) |
 | **E** | Speed Burst (mana) — haste all minions |
 | **R** | Lightning (mana) — strike nearest hero |
+| **T** | Heal (mana; Library research unlock) |
+| **P** | Possess (mana) — FP control one minion; Esc exits |
+| **B** / **N** | Wooden / Stone bridge over lava or water |
 
 ## Mobile / touch controls
 
@@ -75,6 +78,9 @@ Dropping a creature into a fight **stuns** them briefly (DK2-style).
 7. ~90s in, a **hero wave** marches toward the Heart — survive to win.
 8. **Fog of war** — unexplored tiles stay dark until dig/claim / LOS from claimed land.
 9. Idle Scrabblers **auto-fortify** soft earth walls adjacent to claimed territory (rock stays impassable).
+10. **Lava** burns non-resistant units; Scrabblers will not path across — build **wooden/stone bridges**.
+11. **Possess** a minion (mana) for temporary FP steering; Esc returns to Keeper view.
+12. **Payday** drains wages from the Treasury; empty coffers crash moods.
 
 ## Stack
 

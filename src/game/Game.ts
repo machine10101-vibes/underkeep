@@ -4,12 +4,16 @@ import { DungeonRenderer } from '../rendering/DungeonRenderer';
 import { HUD, MENTOR_LINES } from '../ui/HUD';
 import { Grid } from './Grid';
 import {
+  BRIDGE_STONE_COST,
+  BRIDGE_WOOD_COST,
   CREATURE_STATS,
   CreatureKind,
   DOOR_COST,
   DoorState,
   JobType,
   MarkType,
+  PAYDAY_INTERVAL,
+  POSSESS_COST,
   RALLY_COST,
   ROOM_COST,
   RoomType,
@@ -20,6 +24,8 @@ import {
   TrapType,
   Vec2,
   TileKind,
+  isFlyer,
+  isHeatResistant,
 } from './types';
 import {
   SaveData,
@@ -48,6 +54,18 @@ export class Game {
   private selected: Creature | null = null;
   /** Multi-select set (Pass 6.4). Includes primary `selected`. */
   private selectedGroup: Creature[] = [];
+  /** Possession — temporary FP follow of one minion. */
+  private possessed: Creature | null = null;
+  private possessCamBackup: {
+    tx: number;
+    tz: number;
+    cx: number;
+    cy: number;
+    cz: number;
+  } | null = null;
+  private possessArmed = false;
+  private lavaDmgAcc = 0;
+  private paydayToastCooldown = 0;
   private boxSelecting = false;
   private boxStartClient: { x: number; y: number } | null = null;
   private boxMoved = false;
@@ -248,6 +266,10 @@ export class Game {
     this.researchProgress = 0;
     this.researchRank = 0;
     this.healUnlocked = false;
+    this.exitPossession(true);
+    this.possessArmed = false;
+    this.lavaDmgAcc = 0;
+    this.paydayToastCooldown = 0;
     this.marksDirty = false;
     this.fogDirty = false;
     this.pendingStructuralRebuild = false;
@@ -598,13 +620,27 @@ export class Game {
       if (e.key.toLowerCase() === 'e') this.castSpell('speed');
       if (e.key.toLowerCase() === 'r') this.castSpell('lightning');
       if (e.key.toLowerCase() === 't') this.castSpell('heal');
+      if (e.key.toLowerCase() === 'p') this.castSpell('possess');
+      if (e.key.toLowerCase() === 'b') {
+        this.tool = 'bridgeWood';
+        this.hud.setActiveTool(this.tool);
+      }
+      if (e.key.toLowerCase() === 'n') {
+        this.tool = 'bridgeStone';
+        this.hud.setActiveTool(this.tool);
+      }
       if (e.key.toLowerCase() === ' ' && this.held) {
         e.preventDefault();
         this.dropHeld();
       }
       if (e.key === 'Escape') {
+        if (this.possessed) {
+          this.exitPossession();
+          return;
+        }
         this.cancelBoxSelect();
         this.clearSelection();
+        this.possessArmed = false;
       }
     });
     window.addEventListener('keyup', (e) => this.keys.delete(e.key.toLowerCase()));
@@ -943,11 +979,27 @@ export class Game {
   private handlePrimaryAt(tx: number, ty: number, hit: THREE.Vector3, shift = false): void {
     try {
       if (this.tool === 'select') {
+        if (this.possessed) {
+          // While possessing: click ground to move the vessel
+          this.possessMoveTo(tx, ty);
+          return;
+        }
         if (this.held) {
           this.dropHeldAt(tx, ty);
           return;
         }
         const c = this.creatureAt(tx, ty, hit);
+        // Armed Possess spell — click a minion to enter them
+        if (this.possessArmed && c && !c.isHero) {
+          this.possessArmed = false;
+          if (this.mana < POSSESS_COST) {
+            this.hud.say('Not enough mana to Possess.');
+            return;
+          }
+          this.mana -= POSSESS_COST;
+          this.enterPossession(c);
+          return;
+        }
         // Shift-click: toggle multi-select without Hand pick-up
         if (c && !c.isHero && shift) {
           this.toggleSelectCreature(c);
@@ -1047,7 +1099,15 @@ export class Game {
             ? 'Earth'
             : tile.kind === TileKind.Rock
               ? 'Rock'
-              : TileKind[tile.kind];
+              : tile.kind === TileKind.Lava
+                ? 'Lava'
+                : tile.kind === TileKind.Water
+                  ? 'Water'
+                  : tile.kind === TileKind.BridgeWood
+                    ? 'Wood Bridge'
+                    : tile.kind === TileKind.BridgeStone
+                      ? 'Stone Bridge'
+                      : TileKind[tile.kind];
       let tip = `(${tp.x},${tp.y}) ${kindLabel}${tile.fortified ? ' [fortified]' : ''}${room}${dig}`;
       if (this.tool === 'select') {
         const c = this.creatureAt(tp.x, tp.y);
@@ -1129,6 +1189,10 @@ export class Game {
         return 0xaaaaaa;
       case 'select':
         return 0xffcc66;
+      case 'bridgeWood':
+        return 0xc08040;
+      case 'bridgeStone':
+        return 0x8090a8;
       default:
         return 0x88ff66;
     }
@@ -1401,6 +1465,8 @@ export class Game {
         tile.mark = MarkType.Fortify;
         this.marksDirty = true;
       }
+    } else if (this.tool === 'bridgeWood' || this.tool === 'bridgeStone') {
+      this.placeBridge(x, y, this.tool === 'bridgeStone');
     } else if (this.tool === 'door') {
       if (this.grid.canPlaceDoor(x, y)) {
         if (tile.door === DoorState.None) {
@@ -1708,6 +1774,36 @@ export class Game {
         }
       }
       this.hud.say(healed ? MENTOR_LINES.heal : 'No wounds to mend — for now.');
+      return;
+    }
+    if (spell === 'possess') {
+      if (this.possessed) {
+        this.exitPossession();
+        return;
+      }
+      if (this.mana < POSSESS_COST) {
+        this.hud.say('Not enough mana to Possess.');
+        return;
+      }
+      // Prefer currently selected / held minion
+      const target =
+        (this.held && this.held.alive && !this.held.isHero ? this.held : null) ||
+        (this.selected && this.selected.alive && !this.selected.isHero ? this.selected : null);
+      if (target) {
+        this.mana -= POSSESS_COST;
+        if (this.held === target) {
+          // Drop from Hand into possession
+          target.held = false;
+          this.held = null;
+        }
+        this.enterPossession(target);
+        return;
+      }
+      // Arm click-to-possess
+      this.possessArmed = true;
+      this.hud.say(MENTOR_LINES.possessArm);
+      this.hud.sayNow('Possess armed — click a minion to ride their senses. Esc exits.');
+      return;
     }
   }
 
@@ -2444,6 +2540,205 @@ export class Game {
 
 
   /** QA/screenshot: Pass 6.5 fog of war and/or idle auto-fortify. */
+
+  /** QA/screenshot: lava + bridges + possess + payday (Pass 7.1). */
+  preparePass71Shot(focus: 'lava' | 'bridge' | 'possess' | 'payday' | 'both' = 'both'): void {
+    this.hud.hideOverlay();
+    this.exitPossession(true);
+    const hx = this.grid.heartPos.x;
+    const hy = this.grid.heartPos.y;
+    const claim = (x: number, y: number, room = RoomType.None) => {
+      const t = this.grid.get(x, y);
+      if (!t || t.kind === TileKind.Heart) return;
+      t.kind = TileKind.Claimed;
+      t.claimedProgress = 1;
+      t.room = room;
+      t.mark = MarkType.None;
+      t.digProgress = 0;
+      t.door = DoorState.None;
+      t.trap = TrapType.None;
+      t.rally = false;
+      t.fortified = false;
+      t.explored = true;
+      t.goldAmount = 0;
+    };
+
+    // Plaza
+    for (let y = hy - 2; y <= hy + 2; y++) {
+      for (let x = hx - 2; x <= hx + 3; x++) claim(x, y);
+    }
+    claim(hx + 2, hy, RoomType.Treasury);
+    claim(hx + 3, hy, RoomType.Treasury);
+    claim(hx + 2, hy + 1, RoomType.Lair);
+    claim(hx + 3, hy + 1, RoomType.Training);
+    claim(hx + 2, hy + 2, RoomType.Library);
+    claim(hx + 3, hy + 2, RoomType.Portal);
+    claim(hx - 2, hy + 1, RoomType.Hatchery);
+    claim(hx - 1, hy + 1, RoomType.Guard);
+
+    // Open claimed lip south of plaza (no gold wall blocking the lava view)
+    for (let x = hx - 1; x <= hx + 4; x++) {
+      claim(x, hy + 3);
+    }
+    // Lava river south of plaza — unmistakable vs gold
+    for (let x = hx - 1; x <= hx + 4; x++) {
+      for (let y = hy + 4; y <= hy + 6; y++) {
+        const t = this.grid.get(x, y);
+        if (!t || t.kind === TileKind.Heart) continue;
+        t.kind = TileKind.Lava;
+        t.room = RoomType.None;
+        t.goldAmount = 0;
+        t.fortified = false;
+        t.mark = MarkType.None;
+        t.explored = true;
+        t.digProgress = 0;
+      }
+    }
+    // Far bank claimed so bridges connect
+    for (let x = hx; x <= hx + 3; x++) {
+      claim(x, hy + 7);
+      claim(x, hy + 8);
+    }
+    // Gold vein nearby to prove lava ≠ gold
+    for (const [x, y] of [
+      [hx + 5, hy + 1],
+      [hx + 5, hy + 2],
+      [hx + 6, hy + 1],
+    ] as const) {
+      const g = this.grid.get(x, y);
+      if (!g) continue;
+      g.kind = TileKind.Gold;
+      g.goldAmount = 400;
+      g.explored = true;
+      g.fortified = false;
+      g.room = RoomType.None;
+    }
+    // Water pocket west
+    for (const [x, y] of [
+      [hx - 4, hy],
+      [hx - 4, hy + 1],
+      [hx - 5, hy],
+    ] as const) {
+      const w = this.grid.get(x, y);
+      if (!w) continue;
+      w.kind = TileKind.Water;
+      w.explored = true;
+      w.room = RoomType.None;
+      w.goldAmount = 0;
+    }
+    claim(hx - 3, hy);
+    claim(hx - 3, hy + 1);
+
+    // Pre-build one wood + one stone bridge over lava
+    const wood = this.grid.get(hx + 1, hy + 4);
+    if (wood) {
+      wood.kind = TileKind.BridgeWood;
+      wood.explored = true;
+    }
+    const stone = this.grid.get(hx + 2, hy + 5);
+    if (stone) {
+      stone.kind = TileKind.BridgeStone;
+      stone.explored = true;
+    }
+    // Leave a gap of open lava at hx+3, hy+4 for Scrabbler block visual
+
+    // Non-regression door/sentry/rally
+    claim(hx, hy - 1);
+    this.grid.get(hx, hy - 1)!.door = DoorState.Closed;
+    claim(hx - 1, hy - 2);
+    this.grid.get(hx - 1, hy - 2)!.trap = TrapType.Sentry;
+    this.grid.get(hx - 1, hy + 1)!.rally = true;
+
+    this.hatcheryFood = 6;
+    this.gold = focus === 'payday' ? 12 : 900;
+    this.mana = 80;
+    this.healUnlocked = true;
+    this.wageAcc = PAYDAY_INTERVAL - 1.2;
+
+    // Units
+    const workers = this.creatures.filter((c) => c.isWorker && c.alive);
+    while (workers.length < 3) workers.push(this.spawnCreature(CreatureKind.Scrabbler, hx, hy));
+    for (let i = 0; i < workers.length; i++) {
+      const w = workers[i];
+      const world = this.grid.tileToWorld(hx - 1 + (i % 2), hy);
+      w.x = hx - 1 + (i % 2);
+      w.y = hy;
+      w.wx = world.x;
+      w.wz = world.z;
+      w.job = JobType.Idle;
+      w.setPath(null);
+      w.held = false;
+      w.mood = 70;
+    }
+
+    let ember = this.creatures.find((c) => c.kind === CreatureKind.Emberling && c.alive);
+    if (!ember) ember = this.spawnCreature(CreatureKind.Emberling, hx + 1, hy + 3);
+    {
+      const world = this.grid.tileToWorld(hx + 1, hy + 3);
+      ember.x = hx + 1;
+      ember.y = hy + 3;
+      ember.wx = world.x;
+      ember.wz = world.z;
+      ember.job = JobType.Idle;
+      ember.setPath(null);
+      ember.mood = 75;
+    }
+
+    let rattler = this.creatures.find((c) => c.kind === CreatureKind.Rattlekin && c.alive);
+    if (!rattler) rattler = this.spawnCreature(CreatureKind.Rattlekin, hx, hy + 1);
+    rattler.mood = 70;
+    rattler.goldCarried = 0;
+
+    if (!this.creatures.some((c) => c.kind === CreatureKind.Gravemage && c.alive)) {
+      this.spawnCreature(CreatureKind.Gravemage, hx + 2, hy + 2);
+    }
+
+    this.grid.revealFromTerritory();
+    this.requestStructuralRebuild();
+    this.rebuild();
+    this.fogDirty = false;
+    this.marksDirty = false;
+
+    if (focus === 'possess') {
+      this.mana = Math.max(this.mana, POSSESS_COST + 10);
+      this.enterPossession(ember);
+      // Re-assert after any portal recruit toasts
+      setTimeout(() => {
+        try { this.hud.sayNow(MENTOR_LINES.possess); } catch { /* ignore */ }
+      }, 0);
+    }
+    if (focus === 'lava' || focus === 'bridge' || focus === 'both') {
+      this.hud.say(MENTOR_LINES.lava);
+      this.hud.say(MENTOR_LINES.bridgeWood);
+    }
+    if (focus === 'payday') {
+      this.gold = 8;
+      this.wageAcc = PAYDAY_INTERVAL;
+      this.payWages(0.01);
+      this.hud.sayNow(MENTOR_LINES.paydayFail);
+      this.hud.setTooltip('Payday — empty Treasury crashes moods');
+    } else if (focus === 'lava') {
+      const focusW = this.grid.tileToWorld(hx + 2, hy + 5);
+      this.camTarget.set(focusW.x, 0, focusW.z);
+      this.renderer.camera.position.set(focusW.x + 2, 16, focusW.z + 11);
+      this.hud.setTooltip('Lava hazards · bridges · gold vein contrast');
+    } else if (focus === 'bridge') {
+      const focusW = this.grid.tileToWorld(hx + 1, hy + 5);
+      this.camTarget.set(focusW.x, 0, focusW.z);
+      this.renderer.camera.position.set(focusW.x + 1, 14, focusW.z + 10);
+      this.hud.setTooltip('Wooden + stone bridges over lava');
+    } else if (focus === 'possess') {
+      this.hud.setTooltip('Possession — FP follow · WASD move · Esc exits');
+    } else {
+      const focusW = this.grid.tileToWorld(hx + 1, hy + 4);
+      this.camTarget.set(focusW.x, 0, focusW.z);
+      this.renderer.camera.position.set(focusW.x + 2, 18, focusW.z + 12);
+      this.hud.setTooltip('Pass 7.1 — lava · bridges · possess · payday');
+      this.hud.sayNow('Pass 7.1 live — lava burns, bridges span, Possess rides, payday bites.');
+    }
+    this.renderer.camera.lookAt(this.camTarget.x, 0, this.camTarget.z);
+  }
+
   preparePass65Shot(focus: 'fow' | 'fortify' | 'both' = 'both'): void {
     this.hud.hideOverlay();
     const hx = this.grid.heartPos.x;
@@ -2861,6 +3156,7 @@ export class Game {
         try { this.updateHeroWave(dt); } catch (e) { console.warn('[underkeep] heroes', e); }
         try { this.checkHeart(); } catch (e) { console.warn('[underkeep] heart', e); }
         try { this.payWages(dt); } catch (e) { console.warn('[underkeep] wages', e); }
+        try { this.updateHazards(dt); } catch (e) { console.warn('[underkeep] hazards', e); }
         this.saveAcc += dt;
         if (this.saveAcc >= 4) {
           this.saveAcc = 0;
@@ -2924,6 +3220,7 @@ export class Game {
       this.hud.setSpellAffordable('speed', this.mana >= SPEED_COST);
       this.hud.setSpellAffordable('lightning', this.mana >= LIGHTNING_COST);
       this.hud.setSpellAffordable('heal', this.healUnlocked && this.mana >= 30);
+      this.hud.setSpellAffordable('possess', this.possessed ? true : this.mana >= POSSESS_COST);
 
       // cleanup dead meshes periodically
       this.creatures = this.creatures.filter((c) => {
@@ -2949,20 +3246,225 @@ export class Game {
   private wageAcc = 0;
   private payWages(dt: number): void {
     this.wageAcc += dt;
-    if (this.wageAcc < 10) return;
+    if (this.paydayToastCooldown > 0) this.paydayToastCooldown -= dt;
+    if (this.wageAcc < PAYDAY_INTERVAL) return;
     this.wageAcc = 0;
     let due = 0;
+    const payees: Creature[] = [];
     for (const c of this.creatures) {
       if (!c.alive || c.isHero || c.isWorker) continue;
-      due += CREATURE_STATS[c.kind].goldWage;
+      const w = CREATURE_STATS[c.kind].goldWage;
+      if (w > 0) {
+        due += w;
+        payees.push(c);
+      }
     }
-    if (due > 0) {
-      this.gold = Math.max(0, this.gold - due);
+    if (due <= 0 || payees.length === 0) return;
+    if (this.gold >= due) {
+      this.gold -= due;
+      this.hud.say(MENTOR_LINES.payday.replace('%g', String(due)));
+      // Small mood bump for paid wages
+      for (const c of payees) this.safeMood(c, (Number.isFinite(c.mood) ? c.mood : 72) + 4);
+    } else {
+      // Empty / short Treasury — drain what remains, mood crash
+      this.gold = 0;
+      for (const c of payees) {
+        this.safeMood(c, (Number.isFinite(c.mood) ? c.mood : 72) - 32);
+        c.leaveWarned = true;
+      }
+      this.hud.sayNow(MENTOR_LINES.paydayFail);
+      this.paydayToastCooldown = 8;
+    }
+  }
+
+
+  private pathOptsFor(c: Creature): { forHero?: boolean; allowHazard?: boolean } {
+    return {
+      forHero: c.isHero,
+      allowHazard: c.isHero || isHeatResistant(c.kind) || isFlyer(c.kind),
+    };
+  }
+
+  private placeBridge(x: number, y: number, stone: boolean): void {
+    if (!this.grid.canPlaceBridge(x, y)) return;
+    const cost = stone ? BRIDGE_STONE_COST : BRIDGE_WOOD_COST;
+    if (this.gold < cost) {
+      this.hud.say(stone ? 'Need more gold for a stone bridge.' : 'Need more gold for a wooden bridge.');
+      return;
+    }
+    const tile = this.grid.get(x, y);
+    if (!tile) return;
+    this.gold -= cost;
+    tile.kind = stone ? TileKind.BridgeStone : TileKind.BridgeWood;
+    tile.goldAmount = 0;
+    tile.digProgress = 0;
+    tile.fortified = false;
+    tile.mark = MarkType.None;
+    tile.room = RoomType.None;
+    tile.explored = true;
+    this.requestStructuralRebuild();
+    this.fogDirty = true;
+    this.hud.say(stone ? MENTOR_LINES.bridgeStone : MENTOR_LINES.bridgeWood);
+    this.mentioneOnce('bridge', MENTOR_LINES.bridgeWood);
+    this.saveNow();
+  }
+
+  private enterPossession(c: Creature): void {
+    try {
+      if (!c || !c.alive || c.isHero) return;
+      if (this.possessed) this.exitPossession(true);
+      // Mana already spent when casting on selected; if armed-click, spend now
+      // (armed path spends here if not yet charged — castSpell spends when target known)
+      c.clampStats();
+      c.held = false;
+      c.stunTimer = 0;
+      c.setPath(null);
+      c.job = JobType.Idle;
+      c.jobTarget = null;
+      this.possessed = c;
+      this.selectCreature(c);
+      const cam = this.renderer.camera;
+      this.possessCamBackup = {
+        tx: this.camTarget.x,
+        tz: this.camTarget.z,
+        cx: cam.position.x,
+        cy: cam.position.y,
+        cz: cam.position.z,
+      };
+      this.hud.sayNow(MENTOR_LINES.possess);
+      this.refreshInspector();
+    } catch (err) {
+      console.warn('[underkeep] enterPossession failed', err);
+      this.possessed = null;
+    }
+  }
+
+  private exitPossession(silent = false): void {
+    try {
+      const c = this.possessed;
+      this.possessed = null;
+      this.possessArmed = false;
+      if (this.possessCamBackup) {
+        const b = this.possessCamBackup;
+        this.camTarget.set(b.tx, 0, b.tz);
+        this.renderer.camera.position.set(b.cx, b.cy, b.cz);
+        this.renderer.camera.lookAt(this.camTarget.x, 0, this.camTarget.z);
+        this.possessCamBackup = null;
+      }
+      if (c && c.alive) {
+        c.setPath(null);
+        c.job = JobType.Idle;
+      }
+      if (!silent) this.hud.say(MENTOR_LINES.possessEnd);
+      this.refreshInspector();
+    } catch (err) {
+      console.warn('[underkeep] exitPossession failed', err);
+      this.possessed = null;
+      this.possessCamBackup = null;
+    }
+  }
+
+  /** Direct tile step / path while possessing. */
+  private possessMoveTo(tx: number, ty: number): void {
+    const c = this.possessed;
+    if (!c || !c.alive) {
+      this.exitPossession(true);
+      return;
+    }
+    const allowHazard = !c.isWorker || isHeatResistant(c.kind) || isFlyer(c.kind);
+    if (!this.grid.isWalkable(tx, ty, { allowHazard }) && !(this.grid.get(tx, ty)?.kind === TileKind.Heart)) {
+      return;
+    }
+    const path = this.grid.findPath(c.x, c.y, tx, ty, {
+      allowHazard: !c.isWorker || isHeatResistant(c.kind) || isFlyer(c.kind),
+    });
+    if (path) {
+      c.setPath(path);
+      c.job = JobType.Wander;
+      c.jobTarget = { x: tx, y: ty };
+    }
+  }
+
+  /** Lava damages non-resistant / non-flyer units; water slows everyone lightly via path cost. */
+  private updateHazards(dt: number): void {
+    this.lavaDmgAcc += dt;
+    if (this.lavaDmgAcc < 0.45) return;
+    const tick = this.lavaDmgAcc;
+    this.lavaDmgAcc = 0;
+    for (const c of this.creatures) {
+      if (!c.alive || c.held) continue;
+      if (this.possessed === c) {
+        // still damaged while possessed
+      }
+      const t = this.grid.get(Math.round(c.x), Math.round(c.y));
+      if (!t) continue;
+      if (t.kind === TileKind.Lava) {
+        if (isHeatResistant(c.kind) || isFlyer(c.kind)) continue;
+        const dmg = 8 * tick;
+        c.takeDamage(dmg);
+        if (!c.alive) {
+          try {
+            this.renderer.spawnFx(new THREE.Vector3(c.wx, 0.6, c.wz), 0xff4400, 0.7);
+          } catch { /* ignore */ }
+          if (this.possessed === c) this.exitPossession();
+        } else if (Math.random() < 0.08) {
+          try {
+            this.renderer.spawnFx(new THREE.Vector3(c.wx, 0.4, c.wz), 0xff6622, 0.35);
+          } catch { /* ignore */ }
+        }
+      } else if (t.kind === TileKind.Water) {
+        // Water is a bridgeable moat — no damage tick (lava only).
+      }
     }
   }
 
   private updateCamera(dt: number): void {
     const cam = this.renderer.camera;
+    // Possession: FP-style follow + WASD steers the vessel
+    if (this.possessed && this.possessed.alive) {
+      const c = this.possessed;
+      const look = new THREE.Vector3(c.wx, 0.35, c.wz);
+      this.camTarget.lerp(look, Math.min(1, 8 * dt));
+      const want = new THREE.Vector3(
+        c.wx - Math.sin(c.facing) * 3.2,
+        2.55,
+        c.wz - Math.cos(c.facing) * 3.2
+      );
+      cam.position.lerp(want, Math.min(1, 6 * dt));
+      cam.lookAt(c.wx, 0.9, c.wz);
+      // WASD → facing-relative tile steps
+      const fx = Math.round(Math.sin(c.facing));
+      const fz = Math.round(Math.cos(c.facing));
+      let mx = 0;
+      let mz = 0;
+      if (this.keys.has('w') || this.keys.has('arrowup')) {
+        mx += fx;
+        mz += fz;
+      }
+      if (this.keys.has('s') || this.keys.has('arrowdown')) {
+        mx -= fx;
+        mz -= fz;
+      }
+      if (this.keys.has('a') || this.keys.has('arrowleft')) {
+        mx -= fz;
+        mz += fx;
+      }
+      if (this.keys.has('d') || this.keys.has('arrowright')) {
+        mx += fz;
+        mz -= fx;
+      }
+      if (mx !== 0 || mz !== 0) {
+        const tx = Math.round(c.x) + Math.sign(mx);
+        const ty = Math.round(c.y) + Math.sign(mz);
+        if (c.path.length === 0 || c.pathIndex >= c.path.length) {
+          this.possessMoveTo(tx, ty);
+        } else {
+          const goal = c.path[c.path.length - 1];
+          if (goal.x !== tx || goal.y !== ty) this.possessMoveTo(tx, ty);
+        }
+      }
+      return;
+    }
     const speed = 18;
     const forward = new THREE.Vector3();
     cam.getWorldDirection(forward);
@@ -3434,7 +3936,7 @@ export class Game {
         h.job = JobType.Fight;
         h.jobTarget = { x: minion.x, y: minion.y };
         if (Math.hypot(h.x - minion.x, h.y - minion.y) > 1.15) {
-          h.setPath(this.grid.findPath(h.x, h.y, minion.x, minion.y, { forHero: true }));
+          h.setPath(this.grid.findPath(h.x, h.y, minion.x, minion.y, { forHero: true, allowHazard: true }));
         } else h.setPath(null);
       } else {
         h.job = JobType.Fight;
@@ -3442,7 +3944,7 @@ export class Game {
         const hy = this.grid.heartPos.y;
         if (h.path.length === 0 || Math.random() < 0.045) {
           // path toward heart — closed doors block; walk claimed/dirt only
-          const path = this.grid.findPath(h.x, h.y, hx, hy, { forHero: true });
+          const path = this.grid.findPath(h.x, h.y, hx, hy, { forHero: true, allowHazard: true });
           if (path) h.setPath(path);
           else {
             // approach nearest walkable toward heart
@@ -3457,7 +3959,7 @@ export class Game {
                 best = { x: t.x, y: t.y };
               }
             }
-            if (best) h.setPath(this.grid.findPath(h.x, h.y, best.x, best.y, { forHero: true }));
+            if (best) h.setPath(this.grid.findPath(h.x, h.y, best.x, best.y, { forHero: true, allowHazard: true }));
           }
         }
       }

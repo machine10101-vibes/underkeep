@@ -8,6 +8,10 @@ export enum TileKind {
   Claimed = 4,   // claimed floor
   Heart = 5,     // dungeon heart
   Wall = 6,      // fortified wall (occupies earth/gold that became wall edge)
+  Lava = 7,      // hazard floor — damages non-resistant; Scrabblers avoid
+  Water = 8,     // hazard floor — moat; bridgeable
+  BridgeWood = 9,
+  BridgeStone = 10,
 }
 
 export enum RoomType {
@@ -108,6 +112,11 @@ export const ROOM_COST: Record<RoomType, number> = {
 export const DOOR_COST = 75;
 export const SENTRY_COST = 150;
 export const RALLY_COST = 40;
+export const BRIDGE_WOOD_COST = 60;
+export const BRIDGE_STONE_COST = 120;
+export const POSSESS_COST = 35;
+/** Payday interval (seconds). */
+export const PAYDAY_INTERVAL = 48;
 
 export const ROOM_NAMES: Record<RoomType, string> = {
   [RoomType.None]: 'None',
@@ -147,6 +156,17 @@ export type ToolMode =
   | 'guard'
   | 'door'
   | 'sentry'
-  | 'rally';
+  | 'rally'
+  | 'bridgeWood'
+  | 'bridgeStone';
 
-export type SpellId = 'createWorker' | 'speed' | 'lightning' | 'heal';
+export type SpellId = 'createWorker' | 'speed' | 'lightning' | 'heal' | 'possess';
+
+/** Emberling shrugs lava; Skitterwing flies over hazards. */
+export function isHeatResistant(kind: CreatureKind): boolean {
+  return kind === CreatureKind.Emberling;
+}
+
+export function isFlyer(kind: CreatureKind): boolean {
+  return kind === CreatureKind.Skitterwing;
+}

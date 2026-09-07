@@ -104,7 +104,17 @@ if (
     params.get('shot') === '6.5' ||
     params.get('shot') === '65' ||
     params.get('shot') === '6.5-fow' ||
-    params.get('shot') === '6.5-fortify')
+    params.get('shot') === '6.5-fortify' ||
+    params.get('shot') === '7.1' ||
+    params.get('shot') === '71' ||
+    params.get('shot') === '7.1-lava' ||
+    params.get('shot') === '71-lava' ||
+    params.get('shot') === '7.1-bridge' ||
+    params.get('shot') === '71-bridge' ||
+    params.get('shot') === '7.1-possess' ||
+    params.get('shot') === '71-possess' ||
+    params.get('shot') === '7.1-payday' ||
+    params.get('shot') === '71-payday')
 ) {
   // Auto-arrange evidence shots
   setTimeout(() => {
@@ -123,10 +133,16 @@ if (
       preparePass64Shot?: () => void;
       preparePass64bShot?: () => void;
       preparePass65Shot?: (focus?: 'fow' | 'fortify' | 'both') => void;
+      preparePass71Shot?: (focus?: 'lava' | 'bridge' | 'possess' | 'payday' | 'both') => void;
     };
     g.hud.hideOverlay();
     const shot = params.get('shot');
-    if (shot === '6.5-fortify') g.preparePass65Shot?.('fortify');
+    if (shot === '7.1-lava' || shot === '71-lava') g.preparePass71Shot?.('lava');
+    else if (shot === '7.1-bridge' || shot === '71-bridge') g.preparePass71Shot?.('bridge');
+    else if (shot === '7.1-possess' || shot === '71-possess') g.preparePass71Shot?.('possess');
+    else if (shot === '7.1-payday' || shot === '71-payday') g.preparePass71Shot?.('payday');
+    else if (shot === '7.1' || shot === '71') g.preparePass71Shot?.('both');
+    else if (shot === '6.5-fortify') g.preparePass65Shot?.('fortify');
     else if (shot === '6.5-fow') g.preparePass65Shot?.('fow');
     else if (shot === '6.5' || shot === '65') g.preparePass65Shot?.('both');
     else if (shot === '6.4b' || shot === '64b') g.preparePass64bShot?.();

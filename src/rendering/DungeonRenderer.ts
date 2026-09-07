@@ -15,6 +15,9 @@ import {
   makeGoldVeinGeo,
   makeHeartGeo,
   makeRockGeo,
+  makeLavaMesh,
+  makeWaterMesh,
+  makeBridgeMesh,
   makeDoorMesh,
   makeRallyFlagMesh,
   makeRoomDecal,
@@ -394,6 +397,47 @@ export class DungeonRenderer {
         );
         this.tileMeshes.set(key, mesh);
         // Marks drawn via markOverlay — avoid per-rebuild Plane/Edges allocations
+        continue;
+      }
+
+      // Hazard / bridge floors (before generic Claimed/Dirt)
+      if (tile.kind === TileKind.Lava) {
+        const lava = makeLavaMesh();
+        lava.position.set(w.x, 0, w.z);
+        lava.userData.tileX = tile.x;
+        lava.userData.tileY = tile.y;
+        lava.traverse((o) => {
+          o.userData.tileX = tile.x;
+          o.userData.tileY = tile.y;
+        });
+        this.gridGroup.add(lava);
+        this.tileMeshes.set(key, lava);
+        continue;
+      }
+      if (tile.kind === TileKind.Water) {
+        const water = makeWaterMesh();
+        water.position.set(w.x, 0, w.z);
+        water.userData.tileX = tile.x;
+        water.userData.tileY = tile.y;
+        water.traverse((o) => {
+          o.userData.tileX = tile.x;
+          o.userData.tileY = tile.y;
+        });
+        this.gridGroup.add(water);
+        this.tileMeshes.set(key, water);
+        continue;
+      }
+      if (tile.kind === TileKind.BridgeWood || tile.kind === TileKind.BridgeStone) {
+        const br = makeBridgeMesh(tile.kind === TileKind.BridgeStone);
+        br.position.set(w.x, 0, w.z);
+        br.userData.tileX = tile.x;
+        br.userData.tileY = tile.y;
+        br.traverse((o) => {
+          o.userData.tileX = tile.x;
+          o.userData.tileY = tile.y;
+        });
+        this.gridGroup.add(br);
+        this.tileMeshes.set(key, br);
         continue;
       }
 

@@ -1,6 +1,6 @@
 import { SpellId, ToolMode } from '../game/types';
 
-const ROOM_TOOLS: ToolMode[] = ['treasury', 'lair', 'hatchery', 'training', 'library', 'portal', 'guard', 'door', 'sentry', 'rally'];
+const ROOM_TOOLS: ToolMode[] = ['treasury', 'lair', 'hatchery', 'training', 'library', 'portal', 'guard', 'door', 'sentry', 'rally', 'bridgeWood', 'bridgeStone'];
 
 export class HUD {
   private goldEl: HTMLElement;
@@ -80,7 +80,7 @@ export class HUD {
       btn.addEventListener('click', () => {
         const spell = (btn as HTMLElement).dataset.spell as SpellId;
         this.onSpell?.(spell);
-        if (spell === 'speed' || spell === 'lightning') this.closeSheet('spells');
+        if (spell === 'speed' || spell === 'lightning' || spell === 'possess') this.closeSheet('spells');
       });
     });
     document.getElementById('overlay-btn')!.addEventListener('click', () => {
@@ -347,6 +347,14 @@ export const MENTOR_LINES = {
   attackHero: "Hunt them down! Fighters surge toward the heroes.",
   fog: "Beyond the torchlight — unexplored dark. Dig and claim to push the fog back.",
   autoFortify: "Idle Scrabblers reinforce soft earth walls on their own. Rock still laughs at them.",
+  lava: "Lava! It cooks the careless. Emberlings laugh; Scrabblers refuse the path — build a bridge.",
+  bridgeWood: "Wooden planks over the fire. Crude, fragrant, and gloriously flammable.",
+  bridgeStone: "Stone bridge — heavier gold, steadier nerves. The lava still sulks beneath.",
+  possess: "Possession! Ride a minion's senses. WASD to steer, Esc to return to the Keeper throne.",
+  possessArm: "Choose a vessel. Click any living minion to Possess them.",
+  possessEnd: "Back in the Keeper's seat. The vessel blinks, confused but intact.",
+  payday: "Payday! %g gold leaves the Treasury — wages keep moods from mutiny.",
+  paydayFail: "Payday failed — the Treasury is empty! Moods crash. Mint gold or expect desertions.",
   heroesSoon: "Footsteps in the dark… heroes approach. Fortify doors, set traps, rally fighters.",
   heroesImminent: "Steel at the gate! Heroes arrive any moment.",
   heroEngage: "Heroes clash with your minions — doors and traps earn their keep.",

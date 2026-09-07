@@ -71,7 +71,11 @@ Pass 8: DK2-reference visual depth pass — exposed cavern walls gain strata led
 Pass 5: WebGL context-loss recovery + incremental dig visuals (no full rebuild per chip), smoother creature facing/path follow, Dig/Mine plant-at-face + pickaxe cycle + gold haul to Treasury, Lair bed capacity/rest/heal, Hatchery food regen + hunger eat loop (workers + minions), mentor feedback.
 
 Pass 7.3: Prison capture, Torture→Thornwitch, Graveyard→Bonewretch, room-size efficiency.
-Pass 7.4: Temple prayer/mood/talisman, Combat Pit leveling, creature roster, flee/drag wounded to Lair. Gaps / later: richer pathing, audio, GLTF art upgrades.
+Pass 7.4: Temple prayer/mood/talisman, Combat Pit leveling, creature roster, flee/drag wounded to Lair.
+
+Pass 9 (play): Keeper marks beat chores — workers stay on tagged dig/claim, needs accrue over a real session instead of a demo spike, gold cannot be fortified, rooms/tools explain why they failed, first fighters arrive from a small Lair+Hatchery, heroes keep marching on the Heart.
+
+Gaps / later: richer pathing, audio, GLTF art upgrades.
 
 ## Visual north star (YT X35cKEjvgrc from 2:20)
 Feel targets only — original IP art:

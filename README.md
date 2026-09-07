@@ -4,9 +4,9 @@ Original-IP dungeon management game inspired by **Dungeon Keeper 2** (3D). Dark-
 
 ## Play online
 
-**https://machine10101-vibes.github.io/underkeep/?v=pass8**
+**https://machine10101-vibes.github.io/underkeep/?v=pass9**
 
-Pass 8 visuals on the live Pass 7.4 game: layered cavern walls, ritual Heart, crystal Portal, gothic HUD — plus Temple, Combat Pit, roster, Prison/Torture/Graveyard, lava, Possession, and payday.
+Pass 9 play: tagged earth is the order. Scrabblers dig, claim, and haul before chores; rooms and the Portal attract a working dungeon; heroes march on the Heart.
 
 Works on desktop and phones (touch controls).
 

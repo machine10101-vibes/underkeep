@@ -1588,19 +1588,22 @@ export class Game {
         tile.mark = MarkType.Dig;
         if (tile.digProgress <= 0) tile.digProgress = 0;
         this.marksDirty = true;
+      } else if (!this.lastPaint && (tile.kind === TileKind.Rock || tile.fortified)) {
+        this.hud.sayNow(MENTOR_LINES.cannotDig);
       }
     } else if (this.tool === 'claim') {
       if (tile.kind === TileKind.Dirt) {
         tile.mark = MarkType.Claim;
         this.marksDirty = true;
+      } else if (!this.lastPaint && tile.kind !== TileKind.Claimed && tile.kind !== TileKind.Heart) {
+        this.hud.sayNow(MENTOR_LINES.cannotClaim);
       }
     } else if (this.tool === 'fortify') {
-      if (
-        (tile.kind === TileKind.Earth || tile.kind === TileKind.Gold) &&
-        this.grid.hasAdjacentClaimed(x, y)
-      ) {
+      if (tile.kind === TileKind.Earth && this.grid.hasAdjacentClaimed(x, y)) {
         tile.mark = MarkType.Fortify;
         this.marksDirty = true;
+      } else if (!this.lastPaint && (tile.kind === TileKind.Gold || tile.kind === TileKind.Rock || tile.fortified)) {
+        this.hud.sayNow(MENTOR_LINES.cannotFortify);
       }
     } else if (this.tool === 'bridgeWood' || this.tool === 'bridgeStone') {
       this.placeBridge(x, y, this.tool === 'bridgeStone');
@@ -1681,8 +1684,16 @@ export class Game {
         combatPit: RoomType.CombatPit,
       };
       const room = roomMap[this.tool];
-      if (room && tile.kind === TileKind.Claimed && tile.room === RoomType.None) {
+      if (room) {
+        if (tile.kind !== TileKind.Claimed || tile.room !== RoomType.None) {
+          if (!this.lastPaint) this.hud.sayNow(MENTOR_LINES.cannotRoom);
+          return;
+        }
         const cost = ROOM_COST[room];
+        if (this.gold < cost) {
+          if (!this.lastPaint) this.hud.sayNow(MENTOR_LINES.needGold.replace('%g', String(cost)));
+          return;
+        }
         if (this.gold >= cost) {
           this.gold -= cost;
           tile.room = room;
@@ -1691,13 +1702,10 @@ export class Game {
           if (room === RoomType.Portal) this.mentioneOnce('portal', MENTOR_LINES.portal);
           if (room === RoomType.Lair) {
             this.mentioneOnce('lairBuilt', MENTOR_LINES.lairBuilt);
-            // Demo spike: weary + lightly hurt so beds fill within ~60s
-            this.spikeNeedsForRoom(RoomType.Lair);
           }
           if (room === RoomType.Hatchery) {
             this.mentioneOnce('hatcheryBuilt', MENTOR_LINES.hatcheryBuilt);
-            this.hatcheryFood = Math.max(this.hatcheryFood, 4);
-            this.spikeNeedsForRoom(RoomType.Hatchery);
+            this.hatcheryFood = Math.max(this.hatcheryFood, 6);
           }
           if (room === RoomType.Guard) {
             this.mentioneOnce('guardBuilt', MENTOR_LINES.guardBuilt);
@@ -4593,6 +4601,30 @@ export class Game {
       }
     }
 
+    // Player marks steal workers off chores (DK2: tagged earth is the order)
+    if (digMarks.length + claimMarks.length > 0) {
+      let stolen = false;
+      for (const w of workers) {
+        if (w.job === JobType.Flee || w.job === JobType.DragPrisoner || w.job === JobType.DragWounded) continue;
+        if (w.job === JobType.Dig || w.job === JobType.Mine || w.job === JobType.Claim || w.job === JobType.Haul) continue;
+        const desperate = w.hunger > 78 || w.sleepNeed > 82 || w.hp < w.maxHp * 0.4;
+        if ((w.job === JobType.Eat || w.job === JobType.Sleep) && desperate) continue;
+        if (
+          w.job === JobType.Fortify ||
+          w.job === JobType.Craft ||
+          w.job === JobType.Idle ||
+          w.job === JobType.Eat ||
+          w.job === JobType.Sleep
+        ) {
+          w.job = JobType.Idle;
+          w.jobTarget = null;
+          w.setPath(null);
+          stolen = true;
+        }
+      }
+      if (stolen) this.mentioneOnce('marksFirst', MENTOR_LINES.marksFirst);
+    }
+
     const idle = workers.filter(
       (w) => w.job === JobType.Idle || (w.job === JobType.Flee && w.fleeTimer <= 0)
     );
@@ -4600,20 +4632,6 @@ export class Game {
       w.job = JobType.Idle;
       w.jobTarget = null;
       let assigned = false;
-
-      // Needs beat new dig jobs when rooms exist
-      {
-        const hasHatch = this.grid.countRoom(RoomType.Hatchery) > 0;
-        const hasLair = this.grid.countRoom(RoomType.Lair) > 0;
-        const hungry = w.hunger > (hasHatch ? 26 : 55);
-        const tired = w.sleepNeed > (hasLair ? 30 : 70) || w.hp < w.maxHp * 0.65;
-        if (hungry && hasHatch && (this.hatcheryFood > 0 || w.hunger > 50)) {
-          if (this.assignEat(w)) continue;
-        }
-        if (tired && hasLair) {
-          if (this.assignSleep(w)) continue;
-        }
-      }
 
       // Haul gold to Treasury first when carrying a load
       if (w.goldCarried >= 40) {
@@ -4694,8 +4712,10 @@ export class Game {
       }
       if (assigned) continue;
 
-      // Workshop craft — idle Scrabblers manufacture door/sentry kits when under cap
+      // Workshop craft — only when the Keeper has no tagged earth/dirt waiting
       if (
+        digMarks.length === 0 &&
+        claimMarks.length === 0 &&
         this.grid.countRoom(RoomType.Workshop) > 0 &&
         (this.doorKits < KIT_CAP || this.sentryKits < KIT_CAP)
       ) {
@@ -4858,26 +4878,30 @@ export class Game {
       }
     }
 
-    // Scrabblers: always accrue needs (even while digging) so dig marks cannot starve rest/eat
+    // Scrabblers accrue needs slowly — they are workers first, guests second.
     for (const w of workers) {
       if (w.job === JobType.Flee || w.held) continue;
       const hasHatch = this.grid.countRoom(RoomType.Hatchery) > 0;
       const hasLair = this.grid.countRoom(RoomType.Lair) > 0;
-      // Faster when rooms exist so beta sees eat/rest within ~60–90s; milder otherwise
-      w.hunger = Math.min(100, w.hunger + (hasHatch ? 7.5 : 2.8) * dt);
-      w.sleepNeed = Math.min(100, w.sleepNeed + (hasLair ? 6.5 : 1.5) * dt);
+      w.hunger = Math.min(100, w.hunger + (hasHatch ? 0.85 : 0.45) * dt);
+      w.sleepNeed = Math.min(100, w.sleepNeed + (hasLair ? 0.7 : 0.35) * dt);
       if (w.job === JobType.Eat || w.job === JobType.Sleep) continue;
 
-      const hungry = w.hunger > (hasHatch ? 26 : 55);
-      const tired = w.sleepNeed > (hasLair ? 30 : 70) || w.hp < w.maxHp * 0.65;
-      if (!hungry && !tired) continue;
+      const onPlayerWork =
+        w.job === JobType.Dig ||
+        w.job === JobType.Mine ||
+        w.job === JobType.Claim ||
+        w.job === JobType.Haul ||
+        w.job === JobType.Fortify ||
+        w.job === JobType.DragPrisoner ||
+        w.job === JobType.DragWounded;
+      const desperate = w.hunger > 78 || w.sleepNeed > 82 || w.hp < w.maxHp * 0.4;
+      if (onPlayerWork && !desperate) continue;
 
-      // Prefer Hatchery / Lair over dig/claim/mine/haul until satisfied
-      if (
-        hungry &&
-        hasHatch &&
-        (this.hatcheryFood > 0 || w.hunger > 50)
-      ) {
+      const hungry = w.hunger > (hasHatch ? 62 : 80);
+      const tired = w.sleepNeed > (hasLair ? 68 : 85) || w.hp < w.maxHp * 0.4;
+      if (!hungry && !tired) continue;
+      if (hungry && hasHatch && (this.hatcheryFood > 0 || w.hunger > 70)) {
         this.assignEat(w);
       } else if (tired && hasLair) {
         this.assignSleep(w);
@@ -4929,12 +4953,12 @@ export class Game {
         continue;
       }
 
-      // Needs accumulate in real time; faster when Hatchery/Lair exist (demo-provable)
+      // Needs accumulate over a real session, not a screenshot window
       const hasHatch = this.grid.countRoom(RoomType.Hatchery) > 0;
       const hasLair = this.grid.countRoom(RoomType.Lair) > 0;
-      c.hunger = Math.min(100, c.hunger + (hasHatch ? 8.0 : 4.5) * dt);
-      c.sleepNeed = Math.min(100, c.sleepNeed + (hasLair ? 7.0 : 3.0) * dt);
-      c.trainNeed = Math.min(100, c.trainNeed + 2.2 * dt);
+      c.hunger = Math.min(100, c.hunger + (hasHatch ? 1.15 : 0.7) * dt);
+      c.sleepNeed = Math.min(100, c.sleepNeed + (hasLair ? 0.95 : 0.55) * dt);
+      c.trainNeed = Math.min(100, c.trainNeed + 1.1 * dt);
 
       // Already committed to eat/sleep/train/research — keep path
       // (Guard is re-asserted below so hunger/sleep can interrupt)
@@ -4981,10 +5005,10 @@ export class Game {
           continue;
         }
       }
-      if (c.hunger > (hasHatch ? 24 : 40) && hasHatch) {
+      if (c.hunger > (hasHatch ? 55 : 70) && hasHatch) {
         if (this.assignEat(c)) continue;
       }
-      if ((c.sleepNeed > (hasLair ? 28 : 50) || hurt) && hasLair) {
+      if ((c.sleepNeed > (hasLair ? 58 : 75) || hurt) && hasLair) {
         if (this.assignSleep(c)) continue;
       }
 
@@ -5271,21 +5295,12 @@ export class Game {
     return n;
   }
 
-  /** After placing Lair/Hatchery, spike needs so Scrabblers/minions seek rooms quickly (beta). */
+  /** Light tutorial nudge — one idle body visits a new room, the rest keep working. */
   private spikeNeedsForRoom(room: RoomType): void {
-    for (const c of this.creatures) {
-      if (!c.alive || c.isHero) continue;
-      if (room === RoomType.Hatchery) {
-        c.hunger = Math.max(c.hunger, 70);
-      }
-      if (room === RoomType.Lair) {
-        c.sleepNeed = Math.max(c.sleepNeed, 75);
-        // Light wound so HP regen is visible while resting
-        if (c.hp > c.maxHp * 0.55) {
-          c.hp = Math.min(c.hp, c.maxHp * 0.5);
-        }
-      }
-    }
+    const idle = this.creatures.find((c) => c.alive && !c.isHero && !c.held && c.job === JobType.Idle);
+    if (!idle) return;
+    if (room === RoomType.Hatchery) idle.hunger = Math.max(idle.hunger, 55);
+    if (room === RoomType.Lair) idle.sleepNeed = Math.max(idle.sleepNeed, 55);
   }
 
 
@@ -6000,6 +6015,25 @@ export class Game {
   }
 
   private updateHeroJob(c: Creature, dt: number): void {
+    // Keep marching if assignJobs missed a frame
+    if (c.path.length === 0 || c.pathIndex >= c.path.length) {
+      const hx0 = this.grid.heartPos.x;
+      const hy0 = this.grid.heartPos.y;
+      const foe = this.creatures.find(
+        (o) =>
+          o.alive &&
+          !o.isHero &&
+          !o.isWorker &&
+          !o.held &&
+          Math.hypot(o.x - c.x, o.y - c.y) < 8
+      );
+      const gx = foe ? foe.x : hx0;
+      const gy = foe ? foe.y : hy0;
+      if (Math.hypot(c.x - gx, c.y - gy) > 1.2) {
+        const path = this.grid.findPath(c.x, c.y, gx, gy, { forHero: true, allowHazard: true });
+        if (path) c.setPath(path);
+      }
+    }
     // damage heart if adjacent
     const hx = this.grid.heartPos.x;
     const hy = this.grid.heartPos.y;
@@ -6160,8 +6194,8 @@ export class Game {
       this.announceSpecies(CreatureKind.Skitterwing, MENTOR_LINES.skitterwing);
       return;
     }
-    // Rattlekin — Lair + Hatchery composition
-    if (!this.attracted.rattlekin && lair >= 4 && hatch >= 2) {
+    // Rattlekin — a small Lair + Hatchery is enough for the first fighter
+    if (!this.attracted.rattlekin && lair >= 2 && hatch >= 1) {
       this.spawnCreature(CreatureKind.Rattlekin, sx, sy);
       this.attracted.rattlekin = true;
       this.portalCooldown = 10;
@@ -6169,7 +6203,7 @@ export class Game {
       return;
     }
     // Emberling — Training + Lair + gold reserves
-    if (!this.attracted.emberling && train >= 4 && lair >= 6 && this.gold >= 200) {
+    if (!this.attracted.emberling && train >= 2 && lair >= 3 && this.gold >= 200) {
       this.spawnCreature(CreatureKind.Emberling, sx, sy);
       this.attracted.emberling = true;
       this.portalCooldown = 12;
@@ -6177,7 +6211,7 @@ export class Game {
       return;
     }
     // Gravemage — Library + Lair (researchers)
-    if (!this.attracted.gravemage && library >= 4 && lair >= 4) {
+    if (!this.attracted.gravemage && library >= 2 && lair >= 2) {
       this.spawnCreature(CreatureKind.Gravemage, sx, sy);
       this.attracted.gravemage = true;
       this.portalCooldown = 12;
@@ -6186,7 +6220,7 @@ export class Game {
     }
 
     // Periodic extras while composition remains attractive
-    if (this.attracted.rattlekin && lair >= 4 && hatch >= 2 && Math.random() < 0.12) {
+    if (this.attracted.rattlekin && lair >= 2 && hatch >= 1 && Math.random() < 0.12) {
       const count = this.creatures.filter((c) => c.alive && c.kind === CreatureKind.Rattlekin).length;
       if (count < 4) {
         this.spawnCreature(CreatureKind.Rattlekin, sx, sy);

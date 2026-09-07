@@ -4299,6 +4299,19 @@ export class Game {
     // Vault-full: workers sitting on the Heart with leftover gold must resume Dig.
     this.gold = this.vaultCap();
     const heartW = this.grid.tileToWorld(hx, hy);
+    const retagGold = (x: number, y: number) => {
+      const t = this.grid.get(x, y);
+      if (!t || t.kind === TileKind.Heart || t.kind === TileKind.Claimed) return;
+      t.kind = TileKind.Gold;
+      t.goldAmount = 420;
+      t.mark = MarkType.Dig;
+      t.fortified = false;
+      t.digProgress = 0;
+      t.room = RoomType.None;
+    };
+    retagGold(hx + 3, hy);
+    retagGold(hx + 3, hy + 1);
+    retagGold(hx + 4, hy);
     for (const w of this.creatures) {
       if (!w.alive || !w.isWorker) continue;
       w.goldCarried = Math.max(w.goldCarried, 80);
@@ -4310,10 +4323,6 @@ export class Game {
       w.wx = heartW.x;
       w.wz = heartW.z;
     }
-    this.tool = 'dig';
-    this.lastPaint = null;
-    this.applyTool(hx + 3, hy);
-    this.applyTool(hx + 3, hy + 1);
     for (let i = 0; i < 24; i++) this.update(0.05);
     const afterVault = this.creatures.filter((c) => c.alive && c.isWorker);
     const stuckHaul = afterVault.filter((w) => w.job === JobType.Haul).length;

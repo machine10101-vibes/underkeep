@@ -1584,11 +1584,12 @@ export class Game {
     if (!tile) return;
 
     if (this.tool === 'dig') {
-      if (this.grid.isDiggable(x, y)) {
+      if (tile.kind === TileKind.Earth || tile.kind === TileKind.Gold) {
+        if (tile.fortified) tile.fortified = false;
         tile.mark = MarkType.Dig;
         if (tile.digProgress <= 0) tile.digProgress = 0;
         this.marksDirty = true;
-      } else if (!this.lastPaint && (tile.kind === TileKind.Rock || tile.fortified)) {
+      } else if (!this.lastPaint && tile.kind === TileKind.Rock) {
         this.hud.sayNow(MENTOR_LINES.cannotDig);
       }
     } else if (this.tool === 'claim') {
@@ -4826,8 +4827,8 @@ export class Game {
         assigned = true;
         break;
       }
-      // Pass 6.5: idle Scrabblers auto-fortify soft earth walls next to claimed land (rock stays impassable)
-      if (!assigned) {
+      // Auto-fortify only after the opening excavate — never brick the starting gold
+      if (!assigned && this.time >= 40 && digMarks.length === 0 && claimMarks.length === 0) {
         let best: Vec2 | null = null;
         let bestD = 999;
         // Scan claimed/heart neighbors only — O(frontier) instead of full map

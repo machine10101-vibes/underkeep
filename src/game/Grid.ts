@@ -301,8 +301,11 @@ export class Grid {
 
   isDiggable(x: number, y: number): boolean {
     const t = this.get(x, y);
-    if (!t || t.fortified) return false;
-    return t.kind === TileKind.Earth || t.kind === TileKind.Gold;
+    if (!t) return false;
+    if (t.kind !== TileKind.Earth && t.kind !== TileKind.Gold) return false;
+    // Player Dig marks tear down auto-fortified earth so the opening excavation can happen
+    if (t.fortified && t.mark !== MarkType.Dig) return false;
+    return true;
   }
 
   countClaimed(): number {

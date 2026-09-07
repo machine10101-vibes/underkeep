@@ -302,18 +302,43 @@ export function gemVeinTex(): THREE.CanvasTexture {
 }
 
 export function goldVeinTex(): THREE.CanvasTexture {
-  // Bright yellow-gold veins — unmistakable vs earth at overview zoom
-  return paintNoise(64, {
-    seed: 66,
-    base: [196, 128, 22],
-    dark: [96, 48, 8],
-    light: [255, 228, 96],
-    scale: 3.8,
-    contrast: 1.62,
-    veins: { color: [255, 244, 120], scale: 1.15, thresh: 0.38, seed: 99 },
-    speck: 0.22,
-    speckColor: [255, 252, 190],
-  });
+  // Dirt wall with gold chunks — not a solid gold cube
+  const key = 'gold-in-dirt-v4|64';
+  const hit = texCache.get(key);
+  if (hit) return hit;
+  const earth = earthTex();
+  const src = earth.image as HTMLCanvasElement;
+  const size = src.width;
+  const { canvas, ctx, data } = makeCanvas(size);
+  const sctx = src.getContext('2d', { willReadFrequently: true })!;
+  const srcData = sctx.getImageData(0, 0, size, size);
+  data.data.set(srcData.data);
+  const gold: [number, number, number] = [242, 186, 58];
+  const deep: [number, number, number] = [168, 96, 18];
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      const nx = (x / size) * 6.2;
+      const ny = (y / size) * 6.2;
+      const blob = fbm(nx, ny, 77);
+      const vein = fbm(nx * 2.8, ny * 0.55, 91);
+      const i = (y * size + x) * 4;
+      let t = 0;
+      if (blob > 0.78) t = Math.min(1, (blob - 0.78) / 0.16);
+      else if (vein > 0.74 && Math.abs(fbm(nx * 0.4, ny * 3.2, 104) - 0.5) < 0.08) {
+        t = 0.55 + (vein - 0.74) * 1.4;
+      }
+      if (t > 0) {
+        const gcol = mixRgb(deep, gold, Math.min(1, t));
+        data.data[i] = gcol[0] | 0;
+        data.data[i + 1] = gcol[1] | 0;
+        data.data[i + 2] = gcol[2] | 0;
+      }
+    }
+  }
+  ctx.putImageData(data, 0, 0);
+  const tex = toTexture(canvas, 1);
+  texCache.set(key, tex);
+  return tex;
 }
 
 export function heartFloorTex(): THREE.CanvasTexture {

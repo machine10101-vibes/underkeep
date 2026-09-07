@@ -422,7 +422,7 @@ export class DungeonRenderer {
       }
 
       if (isDiggableKind(tile.kind)) {
-        const geo = tile.kind === TileKind.Gold || tile.kind === TileKind.Gem ? makeGoldVeinGeo() : makeWallGeo();
+        const geo = tile.kind === TileKind.Gem ? makeGoldVeinGeo() : makeWallGeo();
         const mesh = new THREE.Mesh(geo, tileMaterial(tile.kind, false, tile.room));
         mesh.position.set(w.x, 0, w.z);
         mesh.rotation.y = this.tileRotation(tile.x, tile.y);

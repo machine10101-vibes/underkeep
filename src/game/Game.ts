@@ -4589,6 +4589,161 @@ export class Game {
     };
   }
 
+  /** Full loop audit used by the playtest harness. */
+  runPlaytestAudit(): {
+    unmarkedStaySolid: boolean;
+    noTunnelJob: boolean;
+    markedGetsDug: boolean;
+    workersNoRest: boolean;
+    minionNotDigging: boolean;
+    minionSeeksBed: boolean;
+    noAutoFortify: boolean;
+    slapCostsHp: boolean;
+    portalStillGated: boolean;
+  } {
+    this.hud.hideOverlay();
+    const hx = this.grid.heartPos.x;
+    const hy = this.grid.heartPos.y;
+    for (const t of this.grid.tiles) {
+      if (t.mark === MarkType.Dig || t.mark === MarkType.Fortify) t.mark = MarkType.None;
+    }
+    const wall = this.grid.get(hx + 3, hy);
+    const buried = this.grid.get(hx + 4, hy);
+    if (wall && wall.kind !== TileKind.Heart) {
+      wall.kind = TileKind.Earth;
+      wall.mark = MarkType.None;
+      wall.fortified = false;
+      wall.digProgress = 0;
+      wall.room = RoomType.None;
+    }
+    if (buried && buried.kind !== TileKind.Heart) {
+      buried.kind = TileKind.Gold;
+      buried.goldAmount = 400;
+      buried.mark = MarkType.Dig;
+      buried.fortified = false;
+      buried.digProgress = 0;
+      buried.room = RoomType.None;
+    }
+    for (const w of this.creatures) {
+      if (!w.alive || !w.isWorker) continue;
+      w.job = JobType.Idle;
+      w.jobTarget = null;
+      w.setPath(null);
+    }
+    for (let i = 0; i < 80; i++) this.update(0.05);
+    const wallAfter = this.grid.get(hx + 3, hy);
+    const unmarkedStaySolid = !!wallAfter && wallAfter.kind === TileKind.Earth && wallAfter.digProgress === 0;
+    const noTunnelJob = !this.creatures.some(
+      (c) =>
+        c.alive &&
+        c.isWorker &&
+        (c.job === JobType.Dig || c.job === JobType.Mine) &&
+        c.jobTarget &&
+        c.jobTarget.x === hx + 3 &&
+        c.jobTarget.y === hy
+    );
+
+    if (wallAfter) wallAfter.mark = MarkType.Dig;
+    for (const w of this.creatures) {
+      if (!w.alive || !w.isWorker) continue;
+      w.job = JobType.Idle;
+      w.jobTarget = null;
+      w.setPath(null);
+    }
+    for (let i = 0; i < 80; i++) this.update(0.05);
+    const wallDug = this.grid.get(hx + 3, hy);
+    const markedGetsDug = !!wallDug && (wallDug.kind === TileKind.Dirt || wallDug.digProgress > 0);
+
+    const workersNoRest = this.creatures
+      .filter((c) => c.alive && c.isWorker)
+      .every((w) => w.hunger === 0 && w.sleepNeed === 0 && w.job !== JobType.Eat && w.job !== JobType.Sleep);
+
+    const lairTile = this.grid.get(hx + 1, hy);
+    if (lairTile && lairTile.kind !== TileKind.Heart) {
+      lairTile.kind = TileKind.Claimed;
+      lairTile.room = RoomType.Lair;
+      lairTile.claimedProgress = 1;
+    }
+    const spawn = this.grid.tileToWorld(hx, hy);
+    void spawn;
+    const fighter = this.spawnCreature(CreatureKind.Rattlekin, hx, hy + 1);
+    this.seatNewMinion(fighter);
+    for (let i = 0; i < 20; i++) this.update(0.05);
+    const minionNotDigging = !this.creatures.some(
+      (c) => c.alive && !c.isWorker && !c.isHero && (c.job === JobType.Dig || c.job === JobType.Mine)
+    );
+    const minionSeeksBed =
+      fighter.job === JobType.Sleep ||
+      fighter.bedKey !== null ||
+      (fighter.jobTarget !== null && this.grid.get(fighter.jobTarget.x, fighter.jobTarget.y)?.room === RoomType.Lair);
+
+    const earth = this.grid.get(hx - 3, hy);
+    const fortBefore = !!earth?.fortified;
+    if (earth && earth.kind === TileKind.Earth) {
+      earth.mark = MarkType.None;
+      earth.fortified = false;
+    }
+    for (let i = 0; i < 40; i++) this.update(0.05);
+    const noAutoFortify = !!earth && earth.kind === TileKind.Earth && !earth.fortified;
+    void fortBefore;
+
+    const worker = this.creatures.find((c) => c.alive && c.isWorker);
+    let slapCostsHp = false;
+    if (worker) {
+      const hp = worker.hp;
+      this.slap(worker);
+      slapCostsHp = worker.hp < hp && worker.hp >= 1;
+    }
+
+    const portalStillGated = this.grid.countRoom(RoomType.Portal) === 9;
+
+    return {
+      unmarkedStaySolid,
+      noTunnelJob,
+      markedGetsDug,
+      workersNoRest,
+      minionNotDigging,
+      minionSeeksBed,
+      noAutoFortify,
+      slapCostsHp,
+      portalStillGated,
+    };
+  }
+
+  /** QA/screenshot: dirt-with-ore gold + marked-only dig. */
+  preparePass109Shot(): void {
+    this.hud.hideOverlay();
+    const hx = this.grid.heartPos.x;
+    const hy = this.grid.heartPos.y;
+    for (const t of this.grid.tiles) {
+      if (t.kind === TileKind.Claimed || t.kind === TileKind.Heart) t.explored = true;
+    }
+    for (let i = 0; i < 5; i++) {
+      const g = this.grid.get(hx - 1 + i, hy + 3);
+      if (!g) continue;
+      g.kind = TileKind.Gold;
+      g.goldAmount = 380;
+      g.fortified = false;
+      g.explored = true;
+      g.mark = i < 3 ? MarkType.Dig : MarkType.None;
+      g.room = RoomType.None;
+    }
+    const earth = this.grid.get(hx + 3, hy);
+    if (earth && earth.kind !== TileKind.Heart) {
+      earth.kind = TileKind.Earth;
+      earth.mark = MarkType.None;
+      earth.explored = true;
+    }
+    this.rebuild();
+    this.updateMinimap();
+    const focus = this.grid.tileToWorld(hx + 1, hy + 2);
+    this.camTarget.set(focus.x, 0, focus.z);
+    this.renderer.camera.position.set(focus.x + 4.5, 16, focus.z + 13);
+    this.renderer.camera.lookAt(this.camTarget);
+    this.hud.setTooltip('Gold sits in the dirt — Scrabblers chip only tagged blocks');
+    this.hud.sayNow(MENTOR_LINES.digTaggedOnly);
+  }
+
   /** QA/screenshot: the map Portal — buried blot, then claimed gateway. */
   preparePass108Shot(focus: 'buried' | 'claimed' | 'both' = 'both'): void {
     this.hud.hideOverlay();
@@ -5372,6 +5527,12 @@ export class Game {
       if (t.mark === MarkType.Claim && t.kind === TileKind.Dirt) claimMarks.push({ x: t.x, y: t.y });
       if (t.mark === MarkType.Fortify && !t.fortified) fortMarks.push({ x: t.x, y: t.y });
     }
+    if (
+      digMarks.length > 0 &&
+      !digMarks.some((m) => this.grid.findDiggableFace(m.x, m.y))
+    ) {
+      this.mentioneOnce('digTaggedOnly', MENTOR_LINES.digTaggedOnly);
+    }
 
     const claimedTargets = new Set<string>();
     const activeDig = this.grid.activeDigWorkKeys();
@@ -5537,11 +5698,13 @@ export class Game {
         .map((m) => ({ m, d: Math.abs(m.x - w.x) + Math.abs(m.y - w.y) }))
         .sort((a, b) => a.d - b.d);
       for (const { m } of digSorted) {
-        const face = this.grid.findDiggableFace(m.x, m.y) ?? (this.grid.isReachableSolid(m.x, m.y) ? m : null);
+        const face = this.grid.findDiggableFace(m.x, m.y);
         if (!face) continue;
+        const faceTile = this.grid.get(face.x, face.y);
+        if (!faceTile || faceTile.mark !== MarkType.Dig) continue;
         const key = `${face.x},${face.y}`;
         if (claimedTargets.has(key)) continue;
-        const tile = this.grid.get(face.x, face.y)!;
+        const tile = faceTile;
         const path = this.grid.findPathAdjacent(w.x, w.y, face.x, face.y);
         if (!path) continue;
         w.job = tile.kind === TileKind.Gold || tile.kind === TileKind.Gem ? JobType.Mine : JobType.Dig;
@@ -5644,6 +5807,16 @@ export class Game {
     // non-worker jobs: eat / sleep / train / fight / pray
     for (const c of this.creatures) {
       if (!c.alive || c.isWorker || c.isHero || c.held || c.stunTimer > 0 || c.knockedOut || c === this.possessed) continue;
+      if (
+        c.job === JobType.Dig ||
+        c.job === JobType.Mine ||
+        c.job === JobType.Claim ||
+        c.job === JobType.Fortify
+      ) {
+        c.job = JobType.Idle;
+        c.jobTarget = null;
+        c.setPath(null);
+      }
 
       // Sticky attack-move orders (Pass 6.4) — engage heroes en route, keep destination
       if (c.job === JobType.AttackMove && c.jobTarget) {
@@ -6374,6 +6547,12 @@ export class Game {
     }
 
     if (c.job === JobType.Dig || c.job === JobType.Mine) {
+      if (t.mark !== MarkType.Dig) {
+        c.job = JobType.Idle;
+        c.jobTarget = null;
+        c.setPath(null);
+        return;
+      }
       if (!arrived && c.pathIndex < c.path.length) return;
       // Must stand on an orthogonal neighbor (planted at dig face)
       const manhattan = Math.abs(c.x - t.x) + Math.abs(c.y - t.y);
@@ -6962,6 +7141,17 @@ export class Game {
     }
   }
 
+  private seatNewMinion(c: Creature): void {
+    if (this.grid.countRoom(RoomType.Lair) > 0) this.assignSleep(c);
+  }
+
+  private admitThroughPortal(kind: CreatureKind, sx: number, sy: number, line: string): Creature {
+    const c = this.spawnCreature(kind, sx, sy);
+    this.announceSpecies(kind, line);
+    this.seatNewMinion(c);
+    return c;
+  }
+
   private announceSpecies(kind: CreatureKind, mentorLine: string): void {
     const names: Record<string, string> = {
       skitterwing: 'Skitterwing',
@@ -7021,34 +7211,30 @@ export class Game {
 
     // Skitterwing — claimed Portal is enough (DK2: Firefly/Goblin scout)
     if (!this.attracted.skitterwing && portals >= 1) {
-      this.spawnCreature(CreatureKind.Skitterwing, sx, sy);
+      this.admitThroughPortal(CreatureKind.Skitterwing, sx, sy, MENTOR_LINES.skitterwing);
       this.attracted.skitterwing = true;
       this.portalCooldown = 8;
-      this.announceSpecies(CreatureKind.Skitterwing, MENTOR_LINES.skitterwing);
       return;
     }
     // Rattlekin — a small Lair + Hatchery is enough for the first fighter
     if (!this.attracted.rattlekin && lair >= 2 && hatch >= 1) {
-      this.spawnCreature(CreatureKind.Rattlekin, sx, sy);
+      this.admitThroughPortal(CreatureKind.Rattlekin, sx, sy, MENTOR_LINES.rattlekin);
       this.attracted.rattlekin = true;
       this.portalCooldown = 10;
-      this.announceSpecies(CreatureKind.Rattlekin, MENTOR_LINES.rattlekin);
       return;
     }
     // Emberling — Training + Lair + gold reserves
     if (!this.attracted.emberling && train >= 2 && lair >= 3 && this.gold >= 200) {
-      this.spawnCreature(CreatureKind.Emberling, sx, sy);
+      this.admitThroughPortal(CreatureKind.Emberling, sx, sy, MENTOR_LINES.emberling);
       this.attracted.emberling = true;
       this.portalCooldown = 12;
-      this.announceSpecies(CreatureKind.Emberling, MENTOR_LINES.emberling);
       return;
     }
     // Gravemage — Library + Lair (researchers)
     if (!this.attracted.gravemage && library >= 2 && lair >= 2) {
-      this.spawnCreature(CreatureKind.Gravemage, sx, sy);
+      this.admitThroughPortal(CreatureKind.Gravemage, sx, sy, MENTOR_LINES.gravemage);
       this.attracted.gravemage = true;
       this.portalCooldown = 12;
-      this.announceSpecies(CreatureKind.Gravemage, MENTOR_LINES.gravemage);
       return;
     }
 
@@ -7056,7 +7242,7 @@ export class Game {
     if (this.attracted.rattlekin && lair >= 2 && hatch >= 1 && Math.random() < 0.12) {
       const count = this.creatures.filter((c) => c.alive && c.kind === CreatureKind.Rattlekin).length;
       if (count < 4) {
-        this.spawnCreature(CreatureKind.Rattlekin, sx, sy);
+        this.seatNewMinion(this.spawnCreature(CreatureKind.Rattlekin, sx, sy));
         this.portalCooldown = 22;
         this.hud.sayNow('A Rattlekin has entered the Underkeep.');
         return;
@@ -7065,7 +7251,7 @@ export class Game {
     if (this.attracted.gravemage && library >= 4 && Math.random() < 0.1) {
       const count = this.creatures.filter((c) => c.alive && c.kind === CreatureKind.Gravemage).length;
       if (count < 2) {
-        this.spawnCreature(CreatureKind.Gravemage, sx, sy);
+        this.seatNewMinion(this.spawnCreature(CreatureKind.Gravemage, sx, sy));
         this.portalCooldown = 28;
         this.hud.sayNow('A Gravemage has entered the Underkeep.');
         return;
@@ -7074,7 +7260,7 @@ export class Game {
     if (this.attracted.emberling && train >= 4 && treasury >= 2 && Math.random() < 0.08) {
       const count = this.creatures.filter((c) => c.alive && c.kind === CreatureKind.Emberling).length;
       if (count < 2) {
-        this.spawnCreature(CreatureKind.Emberling, sx, sy);
+        this.seatNewMinion(this.spawnCreature(CreatureKind.Emberling, sx, sy));
         this.portalCooldown = 30;
         this.hud.sayNow('An Emberling has entered the Underkeep.');
       }

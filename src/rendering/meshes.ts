@@ -300,17 +300,17 @@ export function makeWallFaceDetail(kind: TileKind, fortified = false): THREE.Gro
       : isGem
         ? 'wall-face-gem-v8'
         : isGold
-          ? 'wall-face-gold-v8'
+          ? 'wall-face-gold-v9'
           : isRock
             ? 'wall-face-rock-v8'
             : 'wall-face-earth-v8',
     () =>
       new THREE.MeshStandardMaterial({
-        color: fortified ? 0x918a82 : isGem ? 0x2aa090 : isGold ? 0xa66b24 : isRock ? 0x707784 : 0x9b6030,
-        metalness: fortified ? 0.32 : isGem ? 0.55 : isGold ? 0.35 : 0.06,
+        color: fortified ? 0x918a82 : isGem ? 0x2aa090 : isGold ? 0x9b6030 : isRock ? 0x707784 : 0x9b6030,
+        metalness: fortified ? 0.32 : isGem ? 0.55 : isGold ? 0.08 : 0.06,
         roughness: fortified ? 0.58 : isGem ? 0.22 : 0.88,
-        emissive: isGem ? 0x146858 : isGold ? 0x6a3908 : 0x080604,
-        emissiveIntensity: isGem ? 0.45 : isGold ? 0.3 : 0.04,
+        emissive: isGem ? 0x146858 : isGold ? 0x2a1806 : 0x080604,
+        emissiveIntensity: isGem ? 0.45 : isGold ? 0.08 : 0.04,
       })
   );
   const stoneGeo = cachedGeo('wall-face-stone-v8', () => new THREE.DodecahedronGeometry(0.24, 0));
@@ -348,22 +348,29 @@ export function makeWallFaceDetail(kind: TileKind, fortified = false): THREE.Gro
   }
 
   if (isGold) {
-    const crystalMat = cachedMat('wall-face-crystal-v8', () =>
+    const nuggetMat = cachedMat('wall-face-nugget-v9', () =>
       new THREE.MeshStandardMaterial({
-        color: 0xffd54a,
-        emissive: 0xffa510,
-        emissiveIntensity: 1.1,
-        metalness: 0.82,
-        roughness: 0.18,
+        color: 0xe8b43a,
+        emissive: 0x6a4008,
+        emissiveIntensity: 0.35,
+        metalness: 0.55,
+        roughness: 0.42,
       })
     );
-    const crystalGeo = cachedGeo('wall-face-crystal-v8', () => new THREE.OctahedronGeometry(0.14, 0));
-    for (let i = 0; i < 4; i++) {
-      const crystal = new THREE.Mesh(crystalGeo, crystalMat);
-      crystal.position.set(-0.48 + i * 0.31, 0.72 + (i % 2) * 0.48, 1.0);
-      crystal.scale.set(0.75, 1.8 + i * 0.15, 0.55);
-      crystal.rotation.z = (i - 1.5) * 0.2;
-      g.add(crystal);
+    const nuggetGeo = cachedGeo('wall-face-nugget-v9', () => new THREE.DodecahedronGeometry(0.11, 0));
+    const spots = [
+      [-0.42, 0.78, 0.98],
+      [0.18, 1.22, 0.96],
+      [0.48, 0.62, 0.99],
+      [-0.12, 1.72, 0.94],
+    ];
+    for (const [x, y, z] of spots) {
+      const nugget = new THREE.Mesh(nuggetGeo, nuggetMat);
+      nugget.position.set(x, y, z);
+      nugget.scale.set(1.1, 0.7, 0.55);
+      nugget.rotation.set(x * 2, y, z * 3);
+      nugget.castShadow = true;
+      g.add(nugget);
     }
   }
 
@@ -1400,12 +1407,12 @@ export function tileMaterial(kind: TileKind, fortified: boolean, _room: RoomType
         vertexColors: true,
       });
     case TileKind.Gold:
-      return texturedMat('gold-v3', goldVeinTex(), {
-        metalness: 0.88,
-        roughness: 0.2,
-        emissive: 0xe0a018,
-        emissiveIntensity: 0.95,
-        bump: 0.08,
+      return texturedMat('gold-v4', goldVeinTex(), {
+        metalness: 0.18,
+        roughness: 0.82,
+        emissive: 0x4a2808,
+        emissiveIntensity: 0.22,
+        bump: 0.14,
         vertexColors: true,
       });
     case TileKind.Gem:
@@ -1945,41 +1952,27 @@ export function makeGemGlitter(): THREE.Group {
 export function makeGoldGlitter(): THREE.Group {
   const g = new THREE.Group();
   const mat = new THREE.MeshStandardMaterial({
-    color: 0xfff0a0,
-    emissive: 0xffd040,
-    emissiveIntensity: 1.65,
-    metalness: 0.98,
-    roughness: 0.1,
+    color: 0xe0b040,
+    emissive: 0x5a3808,
+    emissiveIntensity: 0.4,
+    metalness: 0.58,
+    roughness: 0.4,
   });
   const spots = [
-    [0.35, 1.7, 0.2],
-    [-0.4, 1.35, -0.3],
-    [0.1, 2.0, -0.45],
-    [-0.25, 1.9, 0.4],
-    [0.45, 1.1, 0.35],
-    [-0.5, 2.15, 0.05],
-    [0.0, 2.35, 0.15],
-    [0.55, 1.55, -0.2],
+    [0.42, 1.15, 0.55],
+    [-0.48, 0.85, -0.4],
+    [0.18, 1.85, -0.52],
+    [-0.28, 1.45, 0.58],
+    [0.52, 0.62, -0.15],
+    [-0.12, 2.05, 0.22],
   ];
   for (const [x, y, z] of spots) {
-    const s = new THREE.Mesh(new THREE.OctahedronGeometry(0.11 + (Math.abs(x) % 0.05), 0), mat);
+    const s = new THREE.Mesh(new THREE.DodecahedronGeometry(0.1, 0), mat);
     s.position.set(x, y, z);
+    s.scale.set(1.15, 0.65, 0.7);
+    s.rotation.set(x * 3, y, z * 2);
     g.add(s);
   }
-  // Vertical glitter streak — brighter for overview readability
-  const streak = new THREE.Mesh(
-    new THREE.BoxGeometry(0.14, 1.85, 0.14),
-    new THREE.MeshStandardMaterial({
-      color: 0xffe070,
-      emissive: 0xffb020,
-      emissiveIntensity: 1.35,
-      metalness: 0.95,
-      roughness: 0.15,
-    })
-  );
-  streak.position.set(0.15, 1.45, -0.1);
-  streak.rotation.z = 0.2;
-  g.add(streak);
   return g;
 }
 

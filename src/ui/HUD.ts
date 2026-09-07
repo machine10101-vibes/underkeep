@@ -558,6 +558,7 @@ export const MENTOR_LINES = {
   cannotFortify: "Fortify soft earth beside your land — never gold, never rock.",
   cannotRoom: "Rooms sit on claimed flagstones that are still empty.",
   marksFirst: "Your marks come first. Scrabblers drop chores and go to the tagged earth.",
+  digTaggedOnly: "Scrabblers chip only what you tag. Mark a path of earth if the block is buried.",
   portal: "The Portal hums. Hungry things beyond the veil hear its song.",
   skitterwing: "A Skitterwing flutters in. Fragile, but it sees what you cannot.",
   rattlekin: "Rattlekin arrive — bony enthusiasm and questionable hygiene.",

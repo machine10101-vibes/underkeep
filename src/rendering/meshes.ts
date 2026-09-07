@@ -57,13 +57,13 @@ function applyBaseAo(geo: THREE.BufferGeometry, baseY: number, height: number, s
 
 /** Shared gold/brass trim — the DK2-style ownership frame on claimed land. */
 function claimedGoldMat(): THREE.MeshStandardMaterial {
-  return cachedMat('claimed-gold-trim-v7', () =>
+  return cachedMat('claimed-gold-trim-v8', () =>
     new THREE.MeshStandardMaterial({
-      color: 0xf0c44a,
-      metalness: 0.88,
-      roughness: 0.26,
-      emissive: 0xa07014,
-      emissiveIntensity: 0.55,
+      color: 0xd8aa48,
+      metalness: 0.82,
+      roughness: 0.32,
+      emissive: 0x6a3c0c,
+      emissiveIntensity: 0.28,
     })
   );
 }
@@ -111,7 +111,7 @@ export function makeClaimedFloorMesh(room: RoomType): THREE.Group {
     [RoomType.Portal]: 0xa050d0,
     [RoomType.Guard]: 0x708090,
   };
-  const slabColor = roomTint[room] ?? 0xb4aa98;
+  const slabColor = roomTint[room] ?? 0xc2b5a0;
   const slabEmissive =
     room === RoomType.None
       ? 0x222018
@@ -145,8 +145,8 @@ export function makeClaimedFloorMesh(room: RoomType): THREE.Group {
       metalness: room === RoomType.Treasury ? 0.48 : room === RoomType.Portal ? 0.35 : 0.16,
       roughness: room === RoomType.Treasury ? 0.38 : 0.62,
       emissive: slabEmissive,
-      emissiveIntensity: room === RoomType.None ? 0.1 : 0.24,
-      map: room === RoomType.None ? claimedStoneTex() : undefined,
+      emissiveIntensity: room === RoomType.None ? 0.2 : 0.2,
+      map: room === RoomType.None ? claimedStoneTex() : null,
     })
   );
 
@@ -275,7 +275,7 @@ export function makeWallFaceDetail(kind: TileKind, fortified = false): THREE.Gro
     fortified ? 'wall-face-fort-v8' : isGold ? 'wall-face-gold-v8' : isRock ? 'wall-face-rock-v8' : 'wall-face-earth-v8',
     () =>
       new THREE.MeshStandardMaterial({
-        color: fortified ? 0x777068 : isGold ? 0x8a5518 : isRock ? 0x585c66 : 0x77441f,
+        color: fortified ? 0x918a82 : isGold ? 0xa66b24 : isRock ? 0x707784 : 0x9b6030,
         metalness: fortified ? 0.32 : isGold ? 0.35 : 0.06,
         roughness: fortified ? 0.58 : 0.88,
         emissive: isGold ? 0x6a3908 : 0x080604,
@@ -1414,6 +1414,7 @@ export function makeRoomProps(room: RoomType, variant = 0): THREE.Group | null {
     g.userData.portalAnimated = true;
     g.userData.portalRing = ring;
     g.userData.portalCore = core;
+    g.scale.setScalar(1.18);
   } else if (room === RoomType.Guard) {
     const wood = new THREE.MeshStandardMaterial({ color: 0x5a4030, roughness: 0.8 });
     const steel = new THREE.MeshStandardMaterial({

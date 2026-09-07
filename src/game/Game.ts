@@ -2751,7 +2751,7 @@ export class Game {
     this.rebuild();
     const focus = this.grid.tileToWorld(hx + 1, hy + 1);
     this.camTarget.set(focus.x, 0, focus.z);
-    this.renderer.camera.position.set(focus.x + 4.5, 25, focus.z + 15.5);
+    this.renderer.camera.position.set(focus.x + 4.5, 19.5, focus.z + 15.5);
     this.renderer.camera.lookAt(this.camTarget);
     this.hud.setTooltip('Layered cavern walls · ritual Heart · crystal Portal · airborne ash');
     this.hud.sayNow('The Underkeep gains depth: carved strata, ritual iron, crystal fire.');

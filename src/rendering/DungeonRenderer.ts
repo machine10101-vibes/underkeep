@@ -148,11 +148,11 @@ export class DungeonRenderer {
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = coarse ? THREE.BasicShadowMap : THREE.PCFSoftShadowMap;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    this.renderer.toneMappingExposure = 1.48;
+    this.renderer.toneMappingExposure = 1.28;
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
 
     // Warm dungeon lighting — still bright enough that PBR tiles read on mobile
-    const amb = new THREE.AmbientLight(0xe0d4c0, 0.95);
+    const amb = new THREE.AmbientLight(0xe0d4c0, 0.8);
     this.scene.add(amb);
     const hemi = new THREE.HemisphereLight(0xffe8cc, 0x3a2838, 0.72);
     hemi.position.set(0, 40, 0);
@@ -382,6 +382,7 @@ export class DungeonRenderer {
       if (tile.kind === TileKind.Rock) {
         const mesh = new THREE.Mesh(makeRockGeo(), tileMaterial(TileKind.Rock, false, tile.room));
         mesh.position.set(w.x, 0, w.z);
+        mesh.rotation.y = this.tileRotation(tile.x, tile.y);
         mesh.castShadow = true;
         mesh.receiveShadow = true;
         mesh.userData.tileX = tile.x;
@@ -397,6 +398,7 @@ export class DungeonRenderer {
       if (tile.fortified) {
         const mesh = makeFortifiedWallMesh();
         mesh.position.set(w.x, 0, w.z);
+        mesh.rotation.y = this.tileRotation(tile.x, tile.y);
         mesh.userData.tileX = tile.x;
         mesh.userData.tileY = tile.y;
         mesh.traverse((o) => {
@@ -414,6 +416,7 @@ export class DungeonRenderer {
         const geo = tile.kind === TileKind.Gold ? makeGoldVeinGeo() : makeWallGeo();
         const mesh = new THREE.Mesh(geo, tileMaterial(tile.kind, false, tile.room));
         mesh.position.set(w.x, 0, w.z);
+        mesh.rotation.y = this.tileRotation(tile.x, tile.y);
         // Visual chip/shrink while diggers work (digProgress 0→1)
         const dig = Math.max(0, Math.min(0.95, tile.digProgress || 0));
         const s = 1 - dig * 0.7;
@@ -569,9 +572,15 @@ export class DungeonRenderer {
       const neighbor = grid.get(x + dx, y + dy);
       if (!neighbor || grid.isSolid(neighbor.x, neighbor.y)) continue;
       const detail = makeWallFaceDetail(kind, fortified);
-      detail.rotation.y = ry;
+      // Compensate for per-tile quarter turns used to break texture repetition.
+      detail.rotation.y = ry - parent.rotation.y;
       parent.add(detail);
     }
+  }
+
+  private tileRotation(x: number, y: number): number {
+    const quarter = Math.abs(x * 7 + y * 13) % 4;
+    return quarter * Math.PI * 0.5;
   }
 
   /** Lightweight dig/claim/fortify tags — no terrain rebuild required. */

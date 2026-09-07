@@ -4644,13 +4644,19 @@ export class Game {
     );
 
     if (wallAfter) wallAfter.mark = MarkType.Dig;
+    const stand = this.grid.tileToWorld(hx + 2, hy);
     for (const w of this.creatures) {
       if (!w.alive || !w.isWorker) continue;
       w.job = JobType.Idle;
       w.jobTarget = null;
+      w.goldCarried = 0;
       w.setPath(null);
+      w.x = hx + 2;
+      w.y = hy;
+      w.wx = stand.x;
+      w.wz = stand.z;
     }
-    for (let i = 0; i < 80; i++) this.update(0.05);
+    for (let i = 0; i < 160; i++) this.update(0.05);
     const wallDug = this.grid.get(hx + 3, hy);
     const markedGetsDug = !!wallDug && (wallDug.kind === TileKind.Dirt || wallDug.digProgress > 0);
 

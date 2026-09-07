@@ -628,6 +628,7 @@ export class Grid {
   revealFromTerritory(): boolean {
     let changed = false;
     for (const t of this.tiles) {
+      if (t.room === RoomType.Portal && t.kind !== TileKind.Claimed) continue;
       if (
         t.kind !== TileKind.Claimed &&
         t.kind !== TileKind.Heart &&

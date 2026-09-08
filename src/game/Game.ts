@@ -4777,7 +4777,7 @@ export class Game {
       g.goldAmount = 380;
       g.fortified = false;
       g.explored = true;
-      g.mark = i === 1 ? MarkType.Dig : MarkType.None;
+      g.mark = MarkType.None;
       g.room = RoomType.None;
     }
     const earth = this.grid.get(hx + 3, hy);
@@ -4788,9 +4788,9 @@ export class Game {
     }
     this.rebuild();
     this.updateMinimap();
-    const focus = this.grid.tileToWorld(hx + 1, hy + 2);
-    this.camTarget.set(focus.x, 0, focus.z);
-    this.renderer.camera.position.set(focus.x + 4.5, 16, focus.z + 13);
+    const gold = this.grid.tileToWorld(hx + 1, hy + 3);
+    this.camTarget.set(gold.x, 1.15, gold.z);
+    this.renderer.camera.position.set(gold.x - 1.2, 7.2, gold.z - 8.4);
     this.renderer.camera.lookAt(this.camTarget);
     this.hud.setTooltip('Gold nuggets in the dirt — Scrabblers chip only tagged blocks');
     this.hud.sayNow(MENTOR_LINES.digTaggedOnly);

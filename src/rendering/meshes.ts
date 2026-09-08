@@ -548,7 +548,7 @@ export function makeHeartGeo(): THREE.Group {
 }
 
 /** Shared so flicker in DungeonRenderer stays locked to the torch PointLight. */
-export const TORCH_LIGHT = { intensity: 7.6, distance: 26, decay: 1.15 } as const;
+export const TORCH_LIGHT = { intensity: 22, distance: 34, decay: 1.0 } as const;
 
 export function makeTorchMesh(withLight = true): THREE.Group {
   const g = new THREE.Group();
@@ -571,7 +571,7 @@ export function makeTorchMesh(withLight = true): THREE.Group {
     new THREE.MeshStandardMaterial({
       color: 0xffcc66,
       emissive: 0xff8800,
-      emissiveIntensity: 2.4,
+      emissiveIntensity: 3.1,
       roughness: 1,
     })
   );
@@ -579,8 +579,8 @@ export function makeTorchMesh(withLight = true): THREE.Group {
   g.add(flame);
 
   const glow = new THREE.Mesh(
-    new THREE.SphereGeometry(0.11, 6, 6),
-    new THREE.MeshBasicMaterial({ color: 0xff9940, transparent: true, opacity: 0.78 })
+    new THREE.SphereGeometry(0.14, 6, 6),
+    new THREE.MeshBasicMaterial({ color: 0xffaa55, transparent: true, opacity: 0.88 })
   );
   glow.position.y = 1.82;
   g.add(glow);

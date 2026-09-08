@@ -4849,6 +4849,12 @@ export class Game {
     this.hud.setTooltip('Torchlight pools — warmer and farther along the walls');
   }
 
+  /** QA/screenshot: torch pools after the light-count hiccup fix. */
+  preparePass1014Shot(): void {
+    this.preparePass1013Shot();
+    this.hud.setTooltip('Fewer torch lights, no bloom — cavern stays lit without the hiccup');
+  }
+
   /** QA/screenshot: the map Portal — buried blot, then claimed gateway. */
   preparePass108Shot(focus: 'buried' | 'claimed' | 'both' = 'both'): void {
     this.hud.hideOverlay();

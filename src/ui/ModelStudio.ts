@@ -28,6 +28,7 @@ import {
   makeRoomProps,
   makeSentryTrapMesh,
   makeTorchMesh,
+  makeWallFaceDetail,
   makeWallGeo,
   makeWaterMesh,
   poseScrabblerPickaxe,
@@ -61,14 +62,18 @@ function solidTile(kind: TileKind): THREE.Group {
   const geo =
     kind === TileKind.Rock
       ? makeRockGeo()
-      : kind === TileKind.Gold || kind === TileKind.Gem
+      : kind === TileKind.Gem
         ? makeGoldVeinGeo()
         : makeWallGeo();
   const mesh = new THREE.Mesh(geo, tileMaterial(kind, false, RoomType.None));
   mesh.castShadow = true;
   mesh.receiveShadow = true;
   g.add(mesh);
-  if (kind === TileKind.Gold) g.add(makeGoldGlitter());
+  if (kind === TileKind.Gold) {
+    const face = makeWallFaceDetail(TileKind.Gold);
+    face.position.z = 0;
+    g.add(face);
+  }
   if (kind === TileKind.Gem) g.add(makeGemGlitter());
   return g;
 }

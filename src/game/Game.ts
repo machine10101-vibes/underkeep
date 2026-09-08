@@ -152,6 +152,7 @@ export class Game {
   /** Lair bed occupancy: "x,y" -> creature id */
   private bedOwners = new Map<string, number>();
   private contextRecoveryShown = false;
+  private contextRecoveryTimer: number | null = null;
   /** Mark paint without structural rebuild (overlay only). */
   private marksDirty = false;
   /** Fog reveal without structural rebuild. */
@@ -243,25 +244,62 @@ export class Game {
   }
 
   handleContextLost(): void {
-    if (this.contextRecoveryShown) return;
-    this.contextRecoveryShown = true;
-    this.hud.showOverlay(
-      'Graphics hiccup',
-      'The dungeon view lost its WebGL context (often after heavy digging). Reload to restore — your save is kept.',
-      'Reload Dungeon'
-    );
-    this.hud.onOverlayContinue = () => {
-      location.reload();
-    };
+    if (this.contextRecoveryTimer) return;
+    this.hud.sayNow('The cavern flickered. Holding the dungeon together…');
+    this.contextRecoveryTimer = window.setTimeout(() => {
+      this.contextRecoveryTimer = null;
+      if (!this.renderer.contextLost) return;
+      if (this.contextRecoveryShown) return;
+      this.contextRecoveryShown = true;
+      const prevNew = this.hud.onNewGame;
+      const prevCont = this.hud.onOverlayContinue;
+      this.hud.showOverlay(
+        'Graphics hiccup',
+        'The dungeon view stumbled. Your save is kept. Resume to keep playing — reload only if the cavern stays dark.',
+        'Resume',
+        'Reload Dungeon'
+      );
+      this.hud.onOverlayContinue = () => {
+        this.hud.onNewGame = prevNew;
+        this.hud.onOverlayContinue = prevCont;
+        this.tryResumeGraphics();
+      };
+      this.hud.onNewGame = () => {
+        this.hud.onNewGame = prevNew;
+        this.hud.onOverlayContinue = prevCont;
+        location.reload();
+      };
+    }, 2200);
   }
 
   private handleContextRestored(): void {
+    if (this.contextRecoveryTimer) {
+      window.clearTimeout(this.contextRecoveryTimer);
+      this.contextRecoveryTimer = null;
+    }
     this.contextRecoveryShown = false;
+    this.renderer.softenAfterHiccup();
     this.gridDirty = true;
     this.rebuild();
     this.syncAllEntityMeshes();
-    this.hud.say('The Underkeep re-solidifies. Dig on, Keeper.');
     this.hud.hideOverlay();
+    this.hud.sayNow('The Underkeep holds. Dig on, Keeper.');
+  }
+
+  private tryResumeGraphics(): void {
+    this.renderer.contextLost = false;
+    try {
+      this.renderer.softenAfterHiccup();
+      this.renderer.reinitPipeline();
+      this.rebuild();
+      this.syncAllEntityMeshes();
+      this.contextRecoveryShown = false;
+      this.hud.hideOverlay();
+      this.hud.sayNow('The Underkeep holds. Dig on, Keeper.');
+    } catch (err) {
+      console.error('[underkeep] resume graphics failed', err);
+      location.reload();
+    }
   }
 
   /** True when dungeon has heart + diggable earth + ≥1 Scrabbler, or match ended. */
@@ -330,6 +368,10 @@ export class Game {
     this.foodRegenAcc = 0;
     this.bedOwners.clear();
     this.contextRecoveryShown = false;
+    if (this.contextRecoveryTimer) {
+      window.clearTimeout(this.contextRecoveryTimer);
+      this.contextRecoveryTimer = null;
+    }
     this.researchProgress = 0;
     this.researchRank = 0;
     this.healUnlocked = false;
@@ -4750,7 +4792,7 @@ export class Game {
     this.camTarget.set(focus.x, 0, focus.z);
     this.renderer.camera.position.set(focus.x + 4.5, 16, focus.z + 13);
     this.renderer.camera.lookAt(this.camTarget);
-    this.hud.setTooltip('Gold sits in the dirt — Scrabblers chip only tagged blocks');
+    this.hud.setTooltip('Gold nuggets in the dirt — Scrabblers chip only tagged blocks');
     this.hud.sayNow(MENTOR_LINES.digTaggedOnly);
   }
 

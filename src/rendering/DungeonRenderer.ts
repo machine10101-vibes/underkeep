@@ -25,6 +25,7 @@ import {
   makeRoomProps,
   makeSentryTrapMesh,
   makeTorchMesh,
+  TORCH_LIGHT,
   makeWallGeo,
   makeFortifiedWallMesh,
   makeWallFaceDetail,
@@ -1098,7 +1099,7 @@ export class DungeonRenderer {
       const phase = this.clock * 6.4 + t.position.x * 1.7 + t.position.z * 0.9;
       const flicker = 1 + Math.sin(phase) * 0.1 + Math.sin(phase * 1.73 + 0.4) * 0.05;
       if (t.torchLight) {
-        t.torchLight.intensity = 3.6 * flicker;
+        t.torchLight.intensity = TORCH_LIGHT.intensity * flicker;
       }
       if (t.flame) {
         t.flame.scale.setScalar(0.94 + Math.sin(phase * 1.15) * 0.07);

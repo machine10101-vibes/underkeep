@@ -4832,6 +4832,23 @@ export class Game {
     this.hud.setTooltip('Tagged soil uses the gold edge — ore cubes keep their chunks');
   }
 
+  /** QA/screenshot: brighter wall-torch pools around the Heart plaza. */
+  preparePass1013Shot(): void {
+    this.hud.hideOverlay();
+    const hx = this.grid.heartPos.x;
+    const hy = this.grid.heartPos.y;
+    for (const t of this.grid.tiles) {
+      if (t.kind === TileKind.Claimed || t.kind === TileKind.Heart) t.explored = true;
+    }
+    this.rebuild();
+    this.updateMinimap();
+    const focus = this.grid.tileToWorld(hx, hy);
+    this.camTarget.set(focus.x, 1.1, focus.z);
+    this.renderer.camera.position.set(focus.x + 3.5, 16, focus.z + 11);
+    this.renderer.camera.lookAt(this.camTarget);
+    this.hud.setTooltip('Torchlight pools — warmer and farther along the walls');
+  }
+
   /** QA/screenshot: the map Portal — buried blot, then claimed gateway. */
   preparePass108Shot(focus: 'buried' | 'claimed' | 'both' = 'both'): void {
     this.hud.hideOverlay();

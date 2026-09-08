@@ -12,6 +12,7 @@ import {
   makeCreatureMesh,
   makeFloorGeo,
   makeGemGlitter,
+  makeGoldTopNuggets,
   makeGoldVeinGeo,
   makeHeartGeo,
   makeRockGeo,
@@ -427,6 +428,7 @@ export class DungeonRenderer {
           o.userData.tileY = tile.y;
         });
         this.addExposedWallFaces(grid, tile.x, tile.y, mesh, tile.kind, true);
+        if (tile.kind === TileKind.Gold) mesh.add(makeGoldTopNuggets());
         this.gridGroup.add(mesh);
         this.addEdge(w.x, w.z, 2.5, this.edgeMat);
         this.tileMeshes.set(key, mesh);
@@ -449,6 +451,7 @@ export class DungeonRenderer {
         mesh.userData.tileX = tile.x;
         mesh.userData.tileY = tile.y;
         this.addExposedWallFaces(grid, tile.x, tile.y, mesh, tile.kind, false);
+        if (tile.kind === TileKind.Gold && dig < 0.85) mesh.add(makeGoldTopNuggets());
         this.gridGroup.add(mesh);
         if (tile.kind === TileKind.Gem && dig < 0.85) {
           const glitter = makeGemGlitter();

@@ -4796,6 +4796,18 @@ export class Game {
     this.hud.sayNow(MENTOR_LINES.digTaggedOnly);
   }
 
+  /** QA/screenshot: gold ore from the keeper overview (top of the cubes). */
+  preparePass1011Shot(): void {
+    this.preparePass109Shot();
+    const hx = this.grid.heartPos.x;
+    const hy = this.grid.heartPos.y;
+    const gold = this.grid.tileToWorld(hx + 1, hy + 3);
+    this.camTarget.set(gold.x, 1.2, gold.z);
+    this.renderer.camera.position.set(gold.x + 4, 22, gold.z + 14);
+    this.renderer.camera.lookAt(this.camTarget);
+    this.hud.setTooltip('Gold chunks on the cube tops — same ore from the keeper view');
+  }
+
   /** QA/screenshot: the map Portal — buried blot, then claimed gateway. */
   preparePass108Shot(focus: 'buried' | 'claimed' | 'both' = 'both'): void {
     this.hud.hideOverlay();

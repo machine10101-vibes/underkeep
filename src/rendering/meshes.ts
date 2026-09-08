@@ -348,16 +348,8 @@ export function makeWallFaceDetail(kind: TileKind, fortified = false): THREE.Gro
   }
 
   if (isGold) {
-    const nuggetMat = cachedMat('wall-face-nugget-v11', () =>
-      new THREE.MeshStandardMaterial({
-        color: 0xffd24a,
-        emissive: 0xc87810,
-        emissiveIntensity: 0.85,
-        metalness: 0.7,
-        roughness: 0.28,
-      })
-    );
-    const nuggetGeo = cachedGeo('wall-face-nugget-v11', () => new THREE.DodecahedronGeometry(0.16, 0));
+    const nuggetMat = goldNuggetMat();
+    const nuggetGeo = goldNuggetGeo();
     const spots = [
       [-0.5, 0.62, 1.0],
       [0.08, 1.08, 1.02],
@@ -384,6 +376,51 @@ export function makeWallFaceDetail(kind: TileKind, fortified = false): THREE.Gro
       brace.position.set(x, 1.08, 0.98);
       g.add(brace);
     }
+  }
+  return g;
+}
+
+function goldNuggetMat(): THREE.MeshStandardMaterial {
+  return cachedMat('wall-face-nugget-v11', () =>
+    new THREE.MeshStandardMaterial({
+      color: 0xffd24a,
+      emissive: 0xc87810,
+      emissiveIntensity: 0.85,
+      metalness: 0.7,
+      roughness: 0.28,
+    })
+  );
+}
+
+function goldNuggetGeo(): THREE.BufferGeometry {
+  return cachedGeo('wall-face-nugget-v11', () => new THREE.DodecahedronGeometry(0.16, 0));
+}
+
+/**
+ * Same ore chunks as the exposed wall face, sitting on the cube lid.
+ * Overview / isometric cameras see the top first.
+ */
+export function makeGoldTopNuggets(): THREE.Group {
+  const g = new THREE.Group();
+  const nuggetMat = goldNuggetMat();
+  const nuggetGeo = goldNuggetGeo();
+  // Wall geo top is ~2.42 after translate; keep chunks inside the tapered lid.
+  const spots = [
+    [-0.42, 2.44, -0.22],
+    [0.08, 2.46, 0.16],
+    [0.46, 2.43, -0.32],
+    [-0.18, 2.48, 0.44],
+    [0.34, 2.45, 0.36],
+    [-0.48, 2.42, 0.12],
+    [0.06, 2.47, -0.48],
+  ];
+  for (const [x, y, z] of spots) {
+    const nugget = new THREE.Mesh(nuggetGeo, nuggetMat);
+    nugget.position.set(x, y, z);
+    nugget.scale.set(1.7, 0.85, 1.7);
+    nugget.rotation.set(x * 2, y, z * 3);
+    nugget.castShadow = true;
+    g.add(nugget);
   }
   return g;
 }

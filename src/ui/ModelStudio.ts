@@ -17,6 +17,7 @@ import {
   makeGemGlitter,
   makeGoldBag,
   makeGoldGlitter,
+  makeGoldTopNuggets,
   makeGoldVeinGeo,
   makeHealthFlower,
   makeHeartGeo,
@@ -73,6 +74,7 @@ function solidTile(kind: TileKind): THREE.Group {
     const face = makeWallFaceDetail(TileKind.Gold);
     face.position.z = 0;
     g.add(face);
+    g.add(makeGoldTopNuggets());
   }
   if (kind === TileKind.Gem) g.add(makeGemGlitter());
   return g;

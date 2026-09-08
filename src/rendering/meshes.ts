@@ -20,7 +20,7 @@ import {
 } from './textures';
 
 const geoCache = new Map<string, THREE.BufferGeometry>();
-const matCache = new Map<string, THREE.MeshStandardMaterial>();
+const matCache = new Map<string, THREE.Material>();
 
 function cachedGeo(key: string, factory: () => THREE.BufferGeometry): THREE.BufferGeometry {
   let g = geoCache.get(key);
@@ -31,8 +31,8 @@ function cachedGeo(key: string, factory: () => THREE.BufferGeometry): THREE.Buff
   return g;
 }
 
-function cachedMat(key: string, factory: () => THREE.MeshStandardMaterial): THREE.MeshStandardMaterial {
-  let m = matCache.get(key);
+function cachedMat<T extends THREE.Material>(key: string, factory: () => T): T {
+  let m = matCache.get(key) as T | undefined;
   if (!m) {
     m = factory();
     matCache.set(key, m);
@@ -348,24 +348,21 @@ export function makeWallFaceDetail(kind: TileKind, fortified = false): THREE.Gro
   }
 
   if (isGold) {
-    const nuggetMat = goldNuggetMat();
-    const nuggetGeo = goldNuggetGeo();
-    const spots = [
-      [-0.5, 0.62, 1.0],
-      [0.08, 1.08, 1.02],
-      [0.52, 0.55, 1.0],
-      [-0.22, 1.68, 0.98],
-      [0.4, 1.48, 1.01],
-      [-0.05, 0.38, 1.0],
-    ];
-    for (const [x, y, z] of spots) {
-      const nugget = new THREE.Mesh(nuggetGeo, nuggetMat);
-      nugget.position.set(x, y, z);
-      nugget.scale.set(1.7, 1.05, 0.85);
-      nugget.rotation.set(x * 2, y, z * 3);
-      nugget.castShadow = true;
-      g.add(nugget);
-    }
+    g.add(
+      stampGoldNuggets(
+        [
+          [-0.5, 0.62, 1.0],
+          [0.08, 1.08, 1.02],
+          [0.52, 0.55, 1.0],
+          [-0.22, 1.68, 0.98],
+          [0.4, 1.48, 1.01],
+          [-0.05, 0.38, 1.0],
+        ],
+        1.7,
+        1.05,
+        0.85
+      )
+    );
   }
 
   if (fortified) {
@@ -380,15 +377,15 @@ export function makeWallFaceDetail(kind: TileKind, fortified = false): THREE.Gro
   return g;
 }
 
-function goldNuggetMat(): THREE.MeshStandardMaterial {
-  return cachedMat('wall-face-nugget-v11', () =>
-    new THREE.MeshStandardMaterial({
-      color: 0xffd24a,
-      emissive: 0xc87810,
-      emissiveIntensity: 0.85,
-      metalness: 0.7,
-      roughness: 0.28,
-    })
+function goldNuggetMat(): THREE.MeshLambertMaterial {
+  return cachedMat(
+    'wall-face-nugget-v12',
+    () =>
+      new THREE.MeshLambertMaterial({
+        color: 0xffd24a,
+        emissive: 0xc87810,
+        emissiveIntensity: 0.85,
+      })
   );
 }
 
@@ -400,29 +397,44 @@ function goldNuggetGeo(): THREE.BufferGeometry {
  * Same ore chunks as the exposed wall face, sitting on the cube lid.
  * Overview / isometric cameras see the top first.
  */
-export function makeGoldTopNuggets(): THREE.Group {
-  const g = new THREE.Group();
-  const nuggetMat = goldNuggetMat();
-  const nuggetGeo = goldNuggetGeo();
+export function makeGoldTopNuggets(): THREE.InstancedMesh {
   // Wall geo top is ~2.42 after translate; keep chunks inside the tapered lid.
-  const spots = [
-    [-0.42, 2.44, -0.22],
-    [0.08, 2.46, 0.16],
-    [0.46, 2.43, -0.32],
-    [-0.18, 2.48, 0.44],
-    [0.34, 2.45, 0.36],
-    [-0.48, 2.42, 0.12],
-    [0.06, 2.47, -0.48],
-  ];
-  for (const [x, y, z] of spots) {
-    const nugget = new THREE.Mesh(nuggetGeo, nuggetMat);
-    nugget.position.set(x, y, z);
-    nugget.scale.set(1.7, 0.85, 1.7);
-    nugget.rotation.set(x * 2, y, z * 3);
-    nugget.castShadow = true;
-    g.add(nugget);
+  return stampGoldNuggets(
+    [
+      [-0.42, 2.44, -0.22],
+      [0.08, 2.46, 0.16],
+      [0.46, 2.43, -0.32],
+      [-0.18, 2.48, 0.44],
+      [0.34, 2.45, 0.36],
+      [-0.48, 2.42, 0.12],
+      [0.06, 2.47, -0.48],
+    ],
+    1.7,
+    0.85,
+    1.7
+  );
+}
+
+const nuggetDummy = new THREE.Object3D();
+
+function stampGoldNuggets(
+  spots: Array<[number, number, number]>,
+  sx: number,
+  sy: number,
+  sz: number
+): THREE.InstancedMesh {
+  const mesh = new THREE.InstancedMesh(goldNuggetGeo(), goldNuggetMat(), spots.length);
+  for (let i = 0; i < spots.length; i++) {
+    const [x, y, z] = spots[i];
+    nuggetDummy.position.set(x, y, z);
+    nuggetDummy.scale.set(sx, sy, sz);
+    nuggetDummy.rotation.set(x * 2, y, z * 3);
+    nuggetDummy.updateMatrix();
+    mesh.setMatrixAt(i, nuggetDummy.matrix);
   }
-  return g;
+  mesh.instanceMatrix.needsUpdate = true;
+  mesh.castShadow = true;
+  return mesh;
 }
 
 /** Thin top-edge outline so diggable blocks read on mobile */
@@ -547,8 +559,10 @@ export function makeHeartGeo(): THREE.Group {
   return group;
 }
 
-/** Shared so flicker in DungeonRenderer stays locked to the torch PointLight. */
-export const TORCH_LIGHT = { intensity: 22, distance: 34, decay: 1.0 } as const;
+/** Few real PointLights — 12×22 + bloom was the last WebGL context-loss hiccup. */
+export const TORCH_LIGHT = { intensity: 16, distance: 26, decay: 1.15 } as const;
+export const TORCH_LIGHT_CAP = 4;
+export const TORCH_LIGHT_CAP_SAFE = 2;
 
 export function makeTorchMesh(withLight = true): THREE.Group {
   const g = new THREE.Group();
@@ -585,13 +599,8 @@ export function makeTorchMesh(withLight = true): THREE.Group {
   glow.position.y = 1.82;
   g.add(glow);
 
-  if (withLight) {
-    const light = new THREE.PointLight(0xffaa55, TORCH_LIGHT.intensity, TORCH_LIGHT.distance, TORCH_LIGHT.decay);
-    light.position.y = 1.9;
-    light.castShadow = false;
-    g.add(light);
-    (g as THREE.Group & { torchLight?: THREE.PointLight }).torchLight = light;
-  }
+  // Real PointLights live in a small camera-nearest pool on DungeonRenderer.
+  // Attaching one per torch (12 × high intensity) + bloom lost the WebGL context.
 
   (g as THREE.Group & { flame?: THREE.Mesh }).flame = flame;
   return g;

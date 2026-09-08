@@ -26,6 +26,8 @@ import {
   makeSentryTrapMesh,
   makeTorchMesh,
   TORCH_LIGHT,
+  TORCH_LIGHT_CAP,
+  TORCH_LIGHT_CAP_SAFE,
   makeWallGeo,
   makeFortifiedWallMesh,
   makeWallFaceDetail,
@@ -77,13 +79,16 @@ export class DungeonRenderer {
   readonly scene: THREE.Scene;
   readonly camera: THREE.PerspectiveCamera;
   readonly renderer: THREE.WebGLRenderer;
-  private composer: EffectComposer;
-  private bloomPass: UnrealBloomPass;
+  private composer: EffectComposer | null = null;
+  private bloomPass: UnrealBloomPass | null = null;
   private gridGroup = new THREE.Group();
   private entityGroup = new THREE.Group();
   private fxGroup = new THREE.Group();
   private tileMeshes = new Map<string, THREE.Object3D>();
-  private torches: Array<THREE.Group & { flame?: THREE.Mesh; torchLight?: THREE.PointLight }> = [];
+  private torches: Array<THREE.Group & { flame?: THREE.Mesh }> = [];
+  private torchLightPool: THREE.PointLight[] = [];
+  private torchLightCap = TORCH_LIGHT_CAP;
+  private torchLightScratch = new THREE.Vector3();
   private portals: THREE.Group[] = [];
   private heartGroup: (THREE.Group & {
     heartCore?: THREE.Mesh;
@@ -100,8 +105,8 @@ export class DungeonRenderer {
   private rockEdgeMat: THREE.LineBasicMaterial;
   /** WebGL context lost — skip composer until restored/re-inited. */
   contextLost = false;
-  private useComposer = true;
-  private preferBloom = true;
+  private useComposer = false;
+  private preferBloom = false;
   private renderFails = 0;
   onContextLost: (() => void) | null = null;
   onContextRestored: (() => void) | null = null;
@@ -162,9 +167,9 @@ export class DungeonRenderer {
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
 
     // Dim global fill so Heart / torch / gold lights own the scene
-    const amb = new THREE.AmbientLight(0x8a6a50, 0.32);
+    const amb = new THREE.AmbientLight(0x8a6a50, 0.4);
     this.scene.add(amb);
-    const hemi = new THREE.HemisphereLight(0xffc898, 0x181018, 0.28);
+    const hemi = new THREE.HemisphereLight(0xffc898, 0x181018, 0.36);
     hemi.position.set(0, 40, 0);
     this.scene.add(hemi);
 
@@ -280,19 +285,9 @@ export class DungeonRenderer {
     this.goldHoard.visible = false;
     this.scene.add(this.goldHoard);
 
-    this.composer = new EffectComposer(this.renderer);
-    this.composer.addPass(new RenderPass(this.scene, this.camera));
-    // Cap bloom so non-emissive earth/floors stay visible
-    // Keep bloom subtle — high strength was crushing non-emissive tiles to black
-    const isCoarse = typeof window !== 'undefined' && window.matchMedia?.('(pointer: coarse)').matches;
-    this.bloomPass = new UnrealBloomPass(
-      new THREE.Vector2(1, 1),
-      isCoarse ? 0.1 : 0.16,
-      0.42,
-      0.88
-    );
-    this.composer.addPass(this.bloomPass);
-    this.composer.addPass(new ShaderPass(ColorGradeShader));
+    // Bloom + many PointLights lost the WebGL context. Direct render stays playable.
+    this.useComposer = false;
+    this.preferBloom = false;
 
     this.onResize();
     window.addEventListener('resize', () => this.onResize());
@@ -324,8 +319,10 @@ export class DungeonRenderer {
   softenAfterHiccup(): void {
     this.preferBloom = false;
     this.useComposer = false;
+    this.torchLightCap = TORCH_LIGHT_CAP_SAFE;
     this.basePixelRatio = Math.min(this.basePixelRatio, 1);
     this.renderer.setPixelRatio(this.basePixelRatio);
+    this.syncTorchLightPool();
   }
 
   /** Rebuild composer / sizes after context restore. */
@@ -348,6 +345,7 @@ export class DungeonRenderer {
       this.useComposer = true;
     } else {
       this.useComposer = false;
+      this.composer = null;
     }
     this.renderFails = 0;
     this.onResize();
@@ -359,7 +357,7 @@ export class DungeonRenderer {
     this.camera.aspect = w / h;
     this.camera.updateProjectionMatrix();
     this.renderer.setSize(w, h);
-    this.composer.setSize(w, h);
+    this.composer?.setSize(w, h);
   }
 
   /** Dispose non-shared GPU resources (room props, marks, glitter). Shared cached geos/mats stay. */
@@ -593,12 +591,7 @@ export class DungeonRenderer {
       }
 
       if (tile.torch) {
-        // Denser warm pools — more real lights
-        const withLight = this.torches.filter((x) => x.torchLight).length < 12;
-        const torch = makeTorchMesh(withLight) as THREE.Group & {
-          flame?: THREE.Mesh;
-          torchLight?: THREE.PointLight;
-        };
+        const torch = makeTorchMesh(false) as THREE.Group & { flame?: THREE.Mesh };
         let ox = 0.65;
         let oz = 0;
         const neighbors: Array<[number, number, number, number]> = [
@@ -622,6 +615,47 @@ export class DungeonRenderer {
     }
     this.syncMarkOverlay(grid);
     this.syncFogOverlay(grid);
+    this.syncTorchLightPool();
+  }
+
+  /** Keep only a handful of real PointLights — one per torch + bloom lost the context. */
+  private syncTorchLightPool(): void {
+    while (this.torchLightPool.length < this.torchLightCap) {
+      const light = new THREE.PointLight(0xffaa55, TORCH_LIGHT.intensity, TORCH_LIGHT.distance, TORCH_LIGHT.decay);
+      light.castShadow = false;
+      this.scene.add(light);
+      this.torchLightPool.push(light);
+    }
+    while (this.torchLightPool.length > this.torchLightCap) {
+      const light = this.torchLightPool.pop()!;
+      this.scene.remove(light);
+      light.dispose();
+    }
+  }
+
+  private placeTorchLights(): void {
+    this.syncTorchLightPool();
+    const cam = this.camera.position;
+    if (this.torches.length > 1) {
+      this.torches.sort(
+        (a, b) => a.position.distanceToSquared(cam) - b.position.distanceToSquared(cam)
+      );
+    }
+    for (let i = 0; i < this.torchLightPool.length; i++) {
+      const light = this.torchLightPool[i];
+      const torch = this.torches[i];
+      if (!torch) {
+        light.visible = false;
+        continue;
+      }
+      light.visible = true;
+      this.torchLightScratch.set(0, 1.9, 0);
+      torch.localToWorld(this.torchLightScratch);
+      light.position.copy(this.torchLightScratch);
+      const phase = this.clock * 6.4 + torch.position.x * 1.7 + torch.position.z * 0.9;
+      const flicker = 1 + Math.sin(phase) * 0.1 + Math.sin(phase * 1.73 + 0.4) * 0.05;
+      light.intensity = TORCH_LIGHT.intensity * flicker;
+    }
   }
 
   private addExposedWallFaces(
@@ -1095,12 +1129,9 @@ export class DungeonRenderer {
         core.scale.setScalar(pulse);
       }
     }
+    this.placeTorchLights();
     for (const t of this.torches) {
       const phase = this.clock * 6.4 + t.position.x * 1.7 + t.position.z * 0.9;
-      const flicker = 1 + Math.sin(phase) * 0.1 + Math.sin(phase * 1.73 + 0.4) * 0.05;
-      if (t.torchLight) {
-        t.torchLight.intensity = TORCH_LIGHT.intensity * flicker;
-      }
       if (t.flame) {
         t.flame.scale.setScalar(0.94 + Math.sin(phase * 1.15) * 0.07);
       }
@@ -1159,7 +1190,7 @@ export class DungeonRenderer {
   render(): void {
     if (this.contextLost) return;
     try {
-      if (this.useComposer) {
+      if (this.useComposer && this.composer) {
         this.composer.render();
       } else {
         this.renderer.render(this.scene, this.camera);

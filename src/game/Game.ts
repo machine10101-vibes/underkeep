@@ -4808,6 +4808,30 @@ export class Game {
     this.hud.setTooltip('Gold chunks on the cube tops — same ore from the keeper view');
   }
 
+  /** QA/screenshot: unmarked gold (no lid border) + tagged soil (gold edge, no red square). */
+  preparePass1012Shot(): void {
+    this.preparePass1011Shot();
+    const hx = this.grid.heartPos.x;
+    const hy = this.grid.heartPos.y;
+    for (let i = -1; i <= 3; i++) {
+      const soil = this.grid.get(hx - 3, hy + i);
+      if (!soil || soil.kind === TileKind.Heart) continue;
+      soil.kind = TileKind.Earth;
+      soil.goldAmount = 0;
+      soil.fortified = false;
+      soil.explored = true;
+      soil.mark = MarkType.Dig;
+      soil.room = RoomType.None;
+    }
+    this.rebuild();
+    this.updateMinimap();
+    const focus = this.grid.tileToWorld(hx - 1, hy + 2);
+    this.camTarget.set(focus.x, 1.2, focus.z);
+    this.renderer.camera.position.set(focus.x + 5, 22, focus.z + 14);
+    this.renderer.camera.lookAt(this.camTarget);
+    this.hud.setTooltip('Tagged soil uses the gold edge — ore cubes keep their chunks');
+  }
+
   /** QA/screenshot: the map Portal — buried blot, then claimed gateway. */
   preparePass108Shot(focus: 'buried' | 'claimed' | 'both' = 'both'): void {
     this.hud.hideOverlay();

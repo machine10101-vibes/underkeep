@@ -461,12 +461,15 @@ export class DungeonRenderer {
           this.gridGroup.add(glitter);
         }
         const edgeH = 2.35 * sy + mesh.position.y;
-        this.addEdge(
-          w.x,
-          w.z,
-          Math.max(0.4, edgeH),
-          tile.kind === TileKind.Gem ? this.goldEdgeMat : this.earthEdgeMat
-        );
+        // Gold reads from its chunks — no default lid outline. Tagged soil gets the gold edge in the mark overlay.
+        if (tile.kind !== TileKind.Gold) {
+          this.addEdge(
+            w.x,
+            w.z,
+            Math.max(0.4, edgeH),
+            tile.kind === TileKind.Gem ? this.goldEdgeMat : this.earthEdgeMat
+          );
+        }
         this.tileMeshes.set(key, mesh);
         // Marks drawn via markOverlay — avoid per-rebuild Plane/Edges allocations
         continue;

@@ -12,7 +12,6 @@ import {
   makeCreatureMesh,
   makeFloorGeo,
   makeGemGlitter,
-  makeGoldGlitter,
   makeGoldVeinGeo,
   makeHeartGeo,
   makeRockGeo,
@@ -100,6 +99,7 @@ export class DungeonRenderer {
   /** WebGL context lost — skip composer until restored/re-inited. */
   contextLost = false;
   private useComposer = true;
+  private preferBloom = true;
   private renderFails = 0;
   onContextLost: (() => void) | null = null;
   onContextRestored: (() => void) | null = null;
@@ -319,6 +319,14 @@ export class DungeonRenderer {
     }, false);
   }
 
+  /** After a hiccup: stay playable — no bloom, lower DPR. */
+  softenAfterHiccup(): void {
+    this.preferBloom = false;
+    this.useComposer = false;
+    this.basePixelRatio = Math.min(this.basePixelRatio, 1);
+    this.renderer.setPixelRatio(this.basePixelRatio);
+  }
+
   /** Rebuild composer / sizes after context restore. */
   reinitPipeline(): void {
     const size = new THREE.Vector2();
@@ -326,16 +334,20 @@ export class DungeonRenderer {
     this.renderer.setClearColor(CAVERN_VOID, 1);
     this.composer = new EffectComposer(this.renderer);
     this.composer.addPass(new RenderPass(this.scene, this.camera));
-    const isCoarse = typeof window !== 'undefined' && window.matchMedia?.('(pointer: coarse)').matches;
-    this.bloomPass = new UnrealBloomPass(
-      new THREE.Vector2(size.x || 1, size.y || 1),
-      isCoarse ? 0.1 : 0.16,
-      0.42,
-      0.88
-    );
-    this.composer.addPass(this.bloomPass);
-    this.composer.addPass(new ShaderPass(ColorGradeShader));
-    this.useComposer = true;
+    if (this.preferBloom) {
+      const isCoarse = typeof window !== 'undefined' && window.matchMedia?.('(pointer: coarse)').matches;
+      this.bloomPass = new UnrealBloomPass(
+        new THREE.Vector2(size.x || 1, size.y || 1),
+        isCoarse ? 0.1 : 0.16,
+        0.42,
+        0.88
+      );
+      this.composer.addPass(this.bloomPass);
+      this.composer.addPass(new ShaderPass(ColorGradeShader));
+      this.useComposer = true;
+    } else {
+      this.useComposer = false;
+    }
     this.renderFails = 0;
     this.onResize();
   }
@@ -438,8 +450,8 @@ export class DungeonRenderer {
         mesh.userData.tileY = tile.y;
         this.addExposedWallFaces(grid, tile.x, tile.y, mesh, tile.kind, false);
         this.gridGroup.add(mesh);
-        if ((tile.kind === TileKind.Gold || tile.kind === TileKind.Gem) && dig < 0.85) {
-          const glitter = tile.kind === TileKind.Gem ? makeGemGlitter() : makeGoldGlitter();
+        if (tile.kind === TileKind.Gem && dig < 0.85) {
+          const glitter = makeGemGlitter();
           glitter.position.set(w.x, mesh.position.y, w.z);
           glitter.scale.set(s, sy, s);
           glitter.userData.glitterFor = key;

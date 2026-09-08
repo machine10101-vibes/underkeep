@@ -302,37 +302,59 @@ export function gemVeinTex(): THREE.CanvasTexture {
 }
 
 export function goldVeinTex(): THREE.CanvasTexture {
-  // Dirt wall with gold chunks — not a solid gold cube
-  const key = 'gold-in-dirt-v5|64';
+  // Dirt cube with large embedded gold nuggets — must read at overview zoom
+  const key = 'gold-in-dirt-v6|128';
   const hit = texCache.get(key);
   if (hit) return hit;
-  const earth = earthTex();
+  const size = 128;
+  const earth = paintNoise(size, {
+    seed: 11,
+    base: [186, 118, 48],
+    dark: [98, 48, 18],
+    light: [228, 162, 82],
+    scale: 5.8,
+    contrast: 1.55,
+    speck: 0.06,
+    speckColor: [150, 86, 32],
+    cracks: true,
+    borderDark: 0.07,
+  });
   const src = earth.image as HTMLCanvasElement;
-  const size = src.width;
   const { canvas, ctx, data } = makeCanvas(size);
   const sctx = src.getContext('2d', { willReadFrequently: true })!;
-  const srcData = sctx.getImageData(0, 0, size, size);
-  data.data.set(srcData.data);
-  const gold: [number, number, number] = [242, 186, 58];
-  const deep: [number, number, number] = [168, 96, 18];
+  data.data.set(sctx.getImageData(0, 0, size, size).data);
+  const bright: [number, number, number] = [255, 214, 72];
+  const mid: [number, number, number] = [230, 158, 28];
+  const rim: [number, number, number] = [120, 62, 10];
+  const nuggets: Array<{ x: number; y: number; r: number }> = [
+    { x: 28, y: 34, r: 18 },
+    { x: 92, y: 48, r: 22 },
+    { x: 54, y: 88, r: 16 },
+    { x: 110, y: 102, r: 14 },
+    { x: 18, y: 100, r: 12 },
+    { x: 72, y: 22, r: 13 },
+  ];
   for (let y = 0; y < size; y++) {
     for (let x = 0; x < size; x++) {
-      const nx = (x / size) * 6.2;
-      const ny = (y / size) * 6.2;
-      const blob = fbm(nx, ny, 77);
-      const vein = fbm(nx * 2.8, ny * 0.55, 91);
-      const i = (y * size + x) * 4;
       let t = 0;
-      if (blob > 0.7) t = Math.min(1, (blob - 0.7) / 0.22);
-      else if (vein > 0.7 && Math.abs(fbm(nx * 0.4, ny * 3.2, 104) - 0.5) < 0.1) {
-        t = 0.62 + (vein - 0.7) * 1.5;
+      for (const n of nuggets) {
+        const dx = x - n.x;
+        const dy = y - n.y;
+        const wobble = (hash2(x, y, 19) - 0.5) * n.r * 0.35;
+        const d = Math.sqrt(dx * dx + dy * dy) + wobble;
+        if (d < n.r) t = Math.max(t, 1 - d / n.r);
       }
-      if (t > 0) {
-        const gcol = mixRgb(deep, gold, Math.min(1, t));
-        data.data[i] = gcol[0] | 0;
-        data.data[i + 1] = gcol[1] | 0;
-        data.data[i + 2] = gcol[2] | 0;
-      }
+      const nx = (x / size) * 5;
+      const ny = (y / size) * 5;
+      const stripe = Math.abs(fbm(nx * 0.35 + ny * 1.8, ny * 0.2, 88) - 0.5);
+      if (stripe < 0.055) t = Math.max(t, 0.85);
+      if (t <= 0.12) continue;
+      const i = (y * size + x) * 4;
+      const edge = t < 0.32;
+      const gcol = edge ? rim : mixRgb(mid, bright, Math.min(1, (t - 0.32) / 0.68));
+      data.data[i] = gcol[0] | 0;
+      data.data[i + 1] = gcol[1] | 0;
+      data.data[i + 2] = gcol[2] | 0;
     }
   }
   ctx.putImageData(data, 0, 0);

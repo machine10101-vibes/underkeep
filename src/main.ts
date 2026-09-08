@@ -162,7 +162,9 @@ if (
     params.get('shot') === '10.10' ||
     params.get('shot') === '1010' ||
     params.get('shot') === '10.11' ||
-    params.get('shot') === '1011')
+    params.get('shot') === '1011' ||
+    params.get('shot') === '10.12' ||
+    params.get('shot') === '1012')
 ) {
   // Auto-arrange evidence shots
   setTimeout(() => {
@@ -192,10 +194,12 @@ if (
       preparePass108Shot?: (focus?: 'buried' | 'claimed' | 'both') => void;
       preparePass109Shot?: () => void;
       preparePass1011Shot?: () => void;
+      preparePass1012Shot?: () => void;
     };
     g.hud.hideOverlay();
     const shot = params.get('shot');
-    if (shot === '10.11' || shot === '1011') g.preparePass1011Shot?.();
+    if (shot === '10.12' || shot === '1012') g.preparePass1012Shot?.();
+    else if (shot === '10.11' || shot === '1011') g.preparePass1011Shot?.();
     else if (shot === '10.10' || shot === '1010' || shot === '10.9' || shot === '109') g.preparePass109Shot?.();
     else if (shot === '10.8-buried') g.preparePass108Shot?.('buried');
     else if (shot === '10.8-claimed' || shot === '10.8' || shot === '108') g.preparePass108Shot?.('claimed');

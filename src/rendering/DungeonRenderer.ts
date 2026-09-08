@@ -4,7 +4,7 @@ import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
 import { ShaderPass } from 'three/examples/jsm/postprocessing/ShaderPass.js';
 import { Grid } from '../game/Grid';
-import { DoorState, RoomType, TILE_SIZE, TileKind, TrapType, isDiggableKind } from '../game/types';
+import { DoorState, MarkType, RoomType, TILE_SIZE, TileKind, TrapType, isDiggableKind } from '../game/types';
 import {
   floorMaterial,
   makeBlockEdgeGeo,
@@ -115,7 +115,6 @@ export class DungeonRenderer {
   private dirLight: THREE.DirectionalLight | null = null;
   private markOverlay = new THREE.Group();
   private markPlaneGeo = new THREE.PlaneGeometry(TILE_SIZE * 0.7, TILE_SIZE * 0.7);
-  private digWireGeo = new THREE.EdgesGeometry(new THREE.BoxGeometry(TILE_SIZE * 0.92, 2.2, TILE_SIZE * 0.92));
   /** Fog of war — one InstancedMesh (shared geo/mat); no per-tile mesh storms. */
   private fogOverlay = new THREE.Group();
   private fogBoxGeo = new THREE.BoxGeometry(TILE_SIZE * 1.05, 4.4, TILE_SIZE * 1.05);
@@ -466,7 +465,7 @@ export class DungeonRenderer {
           w.x,
           w.z,
           Math.max(0.4, edgeH),
-          tile.kind === TileKind.Gem ? this.goldEdgeMat : tile.kind === TileKind.Gold ? this.goldEdgeMat : this.earthEdgeMat
+          tile.kind === TileKind.Gem ? this.goldEdgeMat : this.earthEdgeMat
         );
         this.tileMeshes.set(key, mesh);
         // Marks drawn via markOverlay — avoid per-rebuild Plane/Edges allocations
@@ -665,12 +664,22 @@ export class DungeonRenderer {
       const w = grid.tileToWorld(tile.x, tile.y);
       const dig = Math.max(0, Math.min(0.95, tile.digProgress || 0));
       const sy = 1 - dig * 0.85;
+      if (tile.mark === MarkType.Dig) {
+        // Gold top-edge instead of a red square so marked soil still reads after paint.
+        const edgeH = isDiggableKind(tile.kind)
+          ? Math.max(0.4, 2.35 * sy - dig * 1.15)
+          : 0.22;
+        const line = new THREE.Line(makeBlockEdgeGeo(edgeH), this.goldEdgeMat);
+        line.position.set(w.x, 0, w.z);
+        this.markOverlay.add(line);
+        continue;
+      }
       const yBase =
         isDiggableKind(tile.kind)
           ? Math.max(0.5, 2.42 * sy - dig * 1.15)
           : 0.2;
       const markMat = new THREE.MeshBasicMaterial({
-        color: tile.mark === 1 ? 0xff3322 : tile.mark === 2 ? 0x44aaff : 0xccccaa,
+        color: tile.mark === MarkType.Claim ? 0x44aaff : 0xccccaa,
         transparent: true,
         opacity: 0.7,
         depthWrite: false,
@@ -680,14 +689,6 @@ export class DungeonRenderer {
       mark.rotation.x = -Math.PI / 2;
       mark.position.set(w.x, yBase, w.z);
       this.markOverlay.add(mark);
-      if (tile.mark === 1 && isDiggableKind(tile.kind)) {
-        const wireMat = new THREE.LineBasicMaterial({ color: 0xff4422, transparent: true, opacity: 0.85 });
-        wireMat.userData.disposeMat = true;
-        const wire = new THREE.LineSegments(this.digWireGeo, wireMat);
-        wire.position.set(w.x, 1.1 * sy - dig * 1.15, w.z);
-        wire.scale.set(1, Math.max(0.25, sy), 1);
-        this.markOverlay.add(wire);
-      }
     }
   }
 

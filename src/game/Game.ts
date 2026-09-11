@@ -5040,6 +5040,12 @@ export class Game {
     this.hud.setTooltip('Holds — fists on the tools, elbows in the swing, bow in the left hand');
   }
 
+  /** QA/screenshot: species-true bodies — beetle, dragonfly, skull, salamander, mage, witch, wretch, knight, archer. */
+  preparePass1021Shot(): void {
+    this.preparePass1016Shot();
+    this.hud.setTooltip('Minions and heroes — beetle, dragonfly, skull, salamander, mage, witch, wretch, knight, archer');
+  }
+
   /** QA/screenshot: the map Portal — buried blot, then claimed gateway. */
   preparePass108Shot(focus: 'buried' | 'claimed' | 'both' = 'both'): void {
     this.hud.hideOverlay();

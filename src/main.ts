@@ -301,3 +301,24 @@ if (game && params.get('smoke') === '1') {
     document.title = `smoke:${ok ? 'ok' : 'fail'}`;
   }, 600);
 }
+
+if (game && params.get('audit') === '1') {
+  setTimeout(() => {
+    const g = game as unknown as {
+      hud: { hideOverlay: () => void };
+      runPlaytestAudit?: () => Record<string, boolean>;
+    };
+    g.hud.hideOverlay();
+    const result = g.runPlaytestAudit?.() ?? { error: true };
+    let el = document.getElementById('smoke-result');
+    if (!el) {
+      el = document.createElement('pre');
+      el.id = 'smoke-result';
+      el.setAttribute('data-audit', '1');
+      document.body.appendChild(el);
+    }
+    el.textContent = JSON.stringify(result);
+    const ok = Object.values(result).every((v) => v === true);
+    document.title = `audit:${ok ? 'ok' : 'fail'}`;
+  }, 600);
+}

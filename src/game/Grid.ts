@@ -752,7 +752,7 @@ export class Grid {
     ] as const) {
       const ax = tx + dx;
       const ay = ty + dy;
-      if (!this.isWalkable(ax, ay)) continue;
+      if (!this.isWalkable(ax, ay, { allowHazard: !!opts?.allowHazard })) continue;
       if (opts?.forHero && this.blocksHero(ax, ay)) continue;
       const p = this.findPath(sx, sy, ax, ay, opts);
       if (p && (!best || p.length < best.length)) best = p;

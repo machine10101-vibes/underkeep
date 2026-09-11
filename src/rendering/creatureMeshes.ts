@@ -719,12 +719,12 @@ function dressHeroKnight(g: THREE.Group, bodyMat: THREE.MeshStandardMaterial): v
       fore.add(shield);
     } else {
       const sword = new THREE.Group();
-      part(sword, new THREE.CylinderGeometry(0.018, 0.022, 0.14, 6), mat({ color: 0x6a4820, roughness: 0.55 }), 0, 0, 0);
-      part(sword, new THREE.BoxGeometry(0.2, 0.035, 0.045), steel, 0, 0.08, 0);
-      part(sword, new THREE.BoxGeometry(0.045, 0.55, 0.08), steel, 0, 0.38, 0);
-      part(sword, new THREE.ConeGeometry(0.04, 0.12, 4), steel, 0, 0.7, 0);
-      sword.position.set(0.05, -0.16, 0.1);
-      sword.rotation.set(0.85, 0.4, -0.55);
+      part(sword, new THREE.CylinderGeometry(0.018, 0.022, 0.12, 6), mat({ color: 0x6a4820, roughness: 0.55 }), 0, 0, 0, Math.PI / 2, 0, 0);
+      part(sword, new THREE.BoxGeometry(0.18, 0.035, 0.04), steel, 0, 0, 0.08);
+      part(sword, new THREE.BoxGeometry(0.05, 0.08, 0.52), steel, 0, 0.02, 0.36);
+      part(sword, new THREE.ConeGeometry(0.04, 0.12, 4), steel, 0, 0.02, 0.66, Math.PI / 2, 0, 0);
+      sword.position.set(0.03, -0.18, 0.06);
+      sword.rotation.set(-0.55, 0.35, -0.25);
       markHeld(sword, 'sword');
       fore.userData.carry = true;
       fore.add(sword);

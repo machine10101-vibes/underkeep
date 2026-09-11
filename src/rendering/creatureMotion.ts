@@ -165,8 +165,8 @@ export function walkBob(kind: CreatureKind, s: CreatureMotionState): number {
 }
 
 function defaultGait(limb: string): number {
-  if (limb === 'legL' || limb === 'armR') return 0;
-  if (limb === 'legR' || limb === 'armL') return 1;
+  if (limb === 'legL' || limb === 'armR' || limb === 'foreR') return 0;
+  if (limb === 'legR' || limb === 'armL' || limb === 'foreL') return 1;
   return 0;
 }
 
@@ -191,7 +191,8 @@ export function poseCreatureLimbs(root: THREE.Object3D, kind: CreatureKind, s: C
 
   root.traverse((ch) => {
     const limb = ch.userData.walkLimb as string | undefined;
-    if (!limb) return;
+    const tool = ch.userData.heldTool as string | undefined;
+    if (!limb && !tool) return;
     const base = ch.userData.baseRot as { x: number; y: number; z: number } | undefined;
     if (!base) return;
     if (lock) {
@@ -199,13 +200,18 @@ export function poseCreatureLimbs(root: THREE.Object3D, kind: CreatureKind, s: C
       return;
     }
 
-    const gait = (ch.userData.gait as number | undefined) ?? defaultGait(limb);
+    const gait = (ch.userData.gait as number | undefined) ?? defaultGait(limb ?? '');
     const phase = gait * Math.PI;
+    const isFore = limb === 'foreL' || limb === 'foreR';
+    const lag = isFore ? 0.42 : 0;
+    const carry = !!ch.userData.carry;
     let dx = 0;
     let dy = 0;
     let dz = 0;
 
-    if (kind === CreatureKind.Skitterwing && (limb === 'armL' || limb === 'armR' || limb === 'wingH')) {
+    if (!limb) {
+      /* held tool — strike flick only */
+    } else if (kind === CreatureKind.Skitterwing && (limb === 'armL' || limb === 'armR' || limb === 'wingH')) {
       const flap = Math.sin(s.time * 24 + phase) * (limb === 'wingH' ? 0.7 : 0.98) + (moving ? 0.16 : 0.04);
       dx = flap;
     } else if (kind === CreatureKind.Emberling) {
@@ -222,62 +228,67 @@ export function poseCreatureLimbs(root: THREE.Object3D, kind: CreatureKind, s: C
         dx += 0.12;
         dz += Math.sin(t) * 0.12;
       }
-    } else if (kind === CreatureKind.Scrabbler) {
-      dx = Math.sin(t * 1.2 + phase) * (moving ? 0.88 : 0.1);
-    } else if (kind === CreatureKind.Gravemage) {
-      dx = Math.sin(t + phase) * (moving ? 0.14 : 0.035);
-    } else if (kind === CreatureKind.HeroKnight) {
-      dx = Math.sin(t + phase) * (moving ? 0.55 : 0.04);
-    } else if (kind === CreatureKind.HeroArcher) {
-      dx = Math.sin(t + phase) * (moving ? 0.5 : 0.05);
-    } else if (kind === CreatureKind.Thornwitch) {
-      dx = Math.sin(t + phase) * (moving ? 0.48 : 0.06);
-      if (limb === 'legL' || limb === 'legR') dy += Math.sin(t * 0.5) * (moving ? 0.12 : 0.03);
-    } else if (kind === CreatureKind.Rattlekin) {
-      dx = Math.sin(t + phase) * (moving ? 0.64 : 0.07);
-      if (moving) dz += Math.sin(t * 3 + phase) * 0.055;
     } else {
-      dx = Math.sin(t + phase) * (moving ? 0.5 : 0.06);
+      let amp = 0.06;
+      if (kind === CreatureKind.Scrabbler) amp = moving ? 0.88 : 0.1;
+      else if (kind === CreatureKind.Gravemage) amp = moving ? 0.16 : 0.04;
+      else if (kind === CreatureKind.HeroKnight) amp = moving ? 0.52 : 0.04;
+      else if (kind === CreatureKind.HeroArcher) amp = moving ? 0.46 : 0.05;
+      else if (kind === CreatureKind.Thornwitch) amp = moving ? 0.46 : 0.06;
+      else if (kind === CreatureKind.Rattlekin) amp = moving ? 0.62 : 0.07;
+      else amp = moving ? 0.5 : 0.06;
+      if (carry) amp *= 0.28;
+      if (isFore) amp *= 0.55;
+      const swing = Math.sin(t * (kind === CreatureKind.Scrabbler ? 1.2 : 1) + phase + lag);
+      dx = swing * amp;
+      dz += Math.cos(t + phase + lag) * amp * 0.2;
+      if (kind === CreatureKind.Thornwitch && (limb === 'legL' || limb === 'legR')) {
+        dy += Math.sin(t * 0.5) * (moving ? 0.12 : 0.03);
+      }
+      if (kind === CreatureKind.Rattlekin && moving) dz += Math.sin(t * 3 + phase) * 0.04;
     }
 
     if (p.wind + p.hit + p.follow > 0.01) {
       if (kind === CreatureKind.Scrabbler && (limb === 'armR' || limb === 'armL')) {
         dx += -p.wind * 0.2 - p.hit * 0.45 - p.follow * 0.12;
       }
-      if (kind === CreatureKind.Rattlekin && limb === 'armR') {
-        dx += p.wind * 1.05 - p.hit * 1.85 - p.follow * 0.55;
-        dz += p.wind * -0.15 + p.hit * 0.4;
+      if (kind === CreatureKind.Rattlekin && (limb === 'armR' || limb === 'foreR')) {
+        const k = limb === 'foreR' ? 0.55 : 1;
+        dx += (p.wind * 1.05 - p.hit * 1.85 - p.follow * 0.55) * k;
+        dz += (p.wind * -0.15 + p.hit * 0.4) * k;
       }
-      if (kind === CreatureKind.Rattlekin && limb === 'armL') {
-        dx += p.hit * 0.25;
-        dz += p.hit * 0.2;
+      if (kind === CreatureKind.Rattlekin && (limb === 'armL' || limb === 'foreL')) {
+        dx += p.hit * 0.22;
+        dz += p.hit * 0.18;
       }
-      if (kind === CreatureKind.HeroKnight && limb === 'armR') {
-        dx += p.wind * 0.95 - p.hit * 1.75 - p.follow * 0.45;
-        dz += -p.wind * 0.12 - p.hit * 0.28;
+      if (kind === CreatureKind.HeroKnight && (limb === 'armR' || limb === 'foreR')) {
+        const k = limb === 'foreR' ? 0.6 : 1;
+        dx += (p.wind * 0.95 - p.hit * 1.75 - p.follow * 0.45) * k;
+        dz += (-p.wind * 0.12 - p.hit * 0.28) * k;
       }
-      if (kind === CreatureKind.HeroKnight && limb === 'armL') {
+      if (kind === CreatureKind.HeroKnight && (limb === 'armL' || limb === 'foreL')) {
         dz += p.wind * 0.12 + p.hit * 0.48 + p.follow * 0.18;
         dx += p.hit * 0.18;
       }
-      if (kind === CreatureKind.HeroArcher && limb === 'armL') {
-        dz += -p.wind * 1.15 - p.hit * 0.25 + p.follow * 0.35;
-        dx += -p.wind * 0.2;
+      if (kind === CreatureKind.HeroArcher && (limb === 'armL' || limb === 'foreL')) {
+        dz += p.wind * 0.35 + p.hit * 0.2;
+        dx += -p.wind * 0.12 - p.hit * 0.08;
       }
-      if (kind === CreatureKind.HeroArcher && limb === 'armR') {
-        dx += -p.wind * 0.25 - p.hit * 1.15 - p.follow * 0.2;
-        dz += p.wind * 0.35 + p.hit * 0.15;
+      if (kind === CreatureKind.HeroArcher && (limb === 'armR' || limb === 'foreR')) {
+        dz += -p.wind * 1.2 + p.hit * 0.55 + p.follow * 0.15;
+        dx += -p.wind * 0.18 - p.hit * 0.4;
       }
-      if (kind === CreatureKind.Thornwitch && limb === 'armR') {
-        dy += -p.wind * 0.85 + p.hit * 1.65 + p.follow * 0.35;
-        dx += -p.wind * 0.2 - p.hit * 0.7;
-        dz += p.hit * 0.35;
+      if (kind === CreatureKind.Thornwitch && (limb === 'armR' || limb === 'foreR')) {
+        const k = limb === 'foreR' ? 0.7 : 1;
+        dy += (-p.wind * 0.85 + p.hit * 1.65 + p.follow * 0.35) * k;
+        dx += (-p.wind * 0.2 - p.hit * 0.7) * k;
+        dz += p.hit * 0.35 * k;
       }
-      if (kind === CreatureKind.Gravemage && limb === 'armR') {
+      if (kind === CreatureKind.Gravemage && (limb === 'armR' || limb === 'foreR')) {
         dx += -p.wind * 0.55 - p.hit * 1.15 - p.follow * 0.25;
         dy += p.wind * 0.45 + p.hit * 0.2;
       }
-      if (kind === CreatureKind.Gravemage && limb === 'armL') {
+      if (kind === CreatureKind.Gravemage && (limb === 'armL' || limb === 'foreL')) {
         dx += p.hit * 0.2;
         dy += p.wind * 0.15;
       }
@@ -293,6 +304,22 @@ export function poseCreatureLimbs(root: THREE.Object3D, kind: CreatureKind, s: C
       }
       if (kind === CreatureKind.Skitterwing && (limb === 'armL' || limb === 'armR' || limb === 'wingH')) {
         dx += p.wind * 0.25 + p.hit * 0.55 + p.follow * 0.15;
+      }
+    }
+
+    if (tool && p.wind + p.hit + p.follow > 0.01) {
+      if (tool === 'cleaver' || tool === 'sword') {
+        dx += p.wind * 0.12 - p.hit * 0.28;
+        dy += p.hit * 0.1;
+      } else if (tool === 'whip') {
+        dy += -p.wind * 0.35 + p.hit * 0.85;
+      } else if (tool === 'staff') {
+        dx += -p.hit * 0.2;
+        dy += p.wind * 0.15;
+      } else if (tool === 'bow') {
+        dy += p.wind * 0.08;
+      } else if (tool === 'arrow') {
+        dz += -p.wind * 0.25 + p.hit * 0.4;
       }
     }
 

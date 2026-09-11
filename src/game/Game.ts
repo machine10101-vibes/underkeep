@@ -5043,6 +5043,7 @@ export class Game {
   /** QA/screenshot: species-true bodies — beetle, dragonfly, skull, salamander, mage, witch, wretch, knight, archer. */
   preparePass1021Shot(): void {
     this.preparePass1016Shot();
+    this.hud.hideOverlay();
     this.hud.setTooltip('Minions and heroes — beetle, dragonfly, skull, salamander, mage, witch, wretch, knight, archer');
   }
 

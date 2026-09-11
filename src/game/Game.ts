@@ -512,6 +512,11 @@ export class Game {
           sleepNeed: c.sleepNeed,
           trainNeed: c.trainNeed,
           isHero: c.isHero,
+          job: c.job,
+          mood: c.mood,
+          knockedOut: c.knockedOut,
+          isPrisoner: c.isPrisoner,
+          convertProgress: c.convertProgress,
         })),
       attracted: { ...this.attracted },
       researchProgress: this.researchProgress,
@@ -530,6 +535,7 @@ export class Game {
       doorKits: this.doorKits,
       sentryKits: this.sentryKits,
       goldEver: this.goldEver,
+      heartHp: this.heartHp,
       cam: {
         tx: this.camTarget.x,
         tz: this.camTarget.z,
@@ -586,6 +592,7 @@ export class Game {
     this.doorKits = data.doorKits ?? 0;
     this.sentryKits = data.sentryKits ?? 0;
     this.goldEver = data.goldEver ?? Math.max(data.gold, 600);
+    this.heartHp = Math.max(0, Math.min(HEART_MAX_HP, data.heartHp ?? HEART_MAX_HP));
     // Mid-wave-clear saves from pre-7.2: count a finished first wave
     if (
       this.heroWaveSpawned &&
@@ -621,7 +628,12 @@ export class Game {
       c.hunger = sc.hunger ?? 0;
       c.sleepNeed = sc.sleepNeed ?? 0;
       c.trainNeed = sc.trainNeed ?? 0;
-      c.mood = 72;
+      c.mood = Number.isFinite(sc.mood) ? (sc.mood as number) : 72;
+      c.knockedOut = !!sc.knockedOut;
+      c.isPrisoner = !!sc.isPrisoner;
+      c.convertProgress = sc.convertProgress ?? 0;
+      const jobs = Object.values(JobType) as string[];
+      if (sc.job && jobs.includes(sc.job)) c.job = sc.job as JobType;
       c.clampStats();
       c.syncMesh(this.time);
     }
@@ -679,7 +691,7 @@ export class Game {
     this.marksDirty = false;
     this.fogDirty = false;
     this.pendingStructuralRebuild = false;
-    this.rebuildCooldown = 0.22;
+    this.rebuildCooldown = 0.1;
   }
 
   /** Structural terrain change — coalesced to avoid context-loss during dig/claim storms. */
@@ -868,13 +880,14 @@ export class Game {
           this.handlePrimaryAt(tp.x, tp.y, hit, e.shiftKey);
           return;
         }
-        // Dig/Claim/rooms: wait for click vs drag so a second click can unmark
-        this.pendingPaintTile = { x: tp.x, y: tp.y };
+        // Paint the first tile immediately so a click feels instant; drag continues the stroke
+        this.paint = true;
+        this.paintStroke = null;
+        this.lastPaint = null;
+        this.paintToward(tp);
+        this.pendingPaintTile = null;
         this.paintStartClient = { x: e.clientX, y: e.clientY };
         this.paintMoved = false;
-        this.paint = false;
-        this.lastPaint = null;
-        this.paintStroke = null;
       }
     });
 
@@ -934,17 +947,12 @@ export class Game {
           this.updateMarquee(this.boxStartClient.x, this.boxStartClient.y, e.clientX, e.clientY);
         }
       }
-      if (this.pendingPaintTile && this.tool !== 'select' && this.paintStartClient) {
+      if (this.paintStartClient && this.tool !== 'select') {
         const pdx = e.clientX - this.paintStartClient.x;
         const pdy = e.clientY - this.paintStartClient.y;
-        if (Math.hypot(pdx, pdy) > 7) {
-          this.paint = true;
-          this.paintMoved = true;
-          this.paintToward(this.pendingPaintTile);
-          this.pendingPaintTile = null;
-        }
+        if (Math.hypot(pdx, pdy) > 7) this.paintMoved = true;
       }
-      if (this.paint && this.tool !== 'select') {
+      if (this.paint && this.paintMoved && this.tool !== 'select') {
         const tp = this.pointerToTile(e, canvas);
         if (!tp) return;
         this.paintToward(tp);
@@ -953,8 +961,8 @@ export class Game {
         try {
           const hit = this.pointerToWorld(e, canvas);
           if (hit && Number.isFinite(hit.x) && Number.isFinite(hit.z)) {
-            this.held.wx += (hit.x - this.held.wx) * 0.42;
-            this.held.wz += (hit.z - this.held.wz) * 0.42;
+            this.held.wx += (hit.x - this.held.wx) * 0.62;
+            this.held.wz += (hit.z - this.held.wz) * 0.62;
           }
         } catch (err) {
           console.warn('[underkeep] held follow failed', err);
@@ -1104,8 +1112,8 @@ export class Game {
         try {
           const hit = this.pointerToWorld(p, canvas);
           if (hit && Number.isFinite(hit.x) && Number.isFinite(hit.z)) {
-            this.held.wx += (hit.x - this.held.wx) * 0.42;
-            this.held.wz += (hit.z - this.held.wz) * 0.42;
+            this.held.wx += (hit.x - this.held.wx) * 0.62;
+            this.held.wz += (hit.z - this.held.wz) * 0.62;
           }
         } catch { /* ignore held follow */ }
         this.updatePointerHover(p, canvas);
@@ -1254,7 +1262,7 @@ export class Game {
         // Empty tile with selection → attack-move / rally attack
         if (this.selectedGroup.some((x) => x.alive && !x.held)) {
           const walk =
-            this.grid.isWalkable(tx, ty) || this.grid.get(tx, ty)?.kind === TileKind.Heart;
+            this.grid.isWalkable(tx, ty, { allowHazard: true }) || this.grid.get(tx, ty)?.kind === TileKind.Heart;
           if (walk) {
             this.issueAttackMove(tx, ty, false);
             return;
@@ -1395,6 +1403,20 @@ export class Game {
           tip += ` · ${c.kind} mood ${Math.floor(c.mood)} · eff ${Math.round(c.workEfficiency() * 100)}%`;
         } else if (this.held) {
           tip += ' · drop here';
+        } else if (this.selectedGroup.some((x) => x.alive && !x.held)) {
+          tip += ' · click to attack-move';
+        }
+      } else if (this.tool === 'dig') {
+        if (isDiggableKind(tile.kind)) tip += tile.mark === MarkType.Dig ? ' · click to unmark' : ' · click to mark Dig';
+        else if (tile.kind === TileKind.Rock) tip += ' · cannot dig';
+      } else if (this.tool === 'claim') {
+        if (tile.kind === TileKind.Dirt) tip += tile.mark === MarkType.Claim ? ' · click to unmark' : ' · click to claim';
+        else if (tile.kind !== TileKind.Claimed && tile.kind !== TileKind.Heart) tip += ' · need dug dirt';
+      } else if (this.tool === 'fortify') {
+        if (tile.kind === TileKind.Earth && this.grid.hasAdjacentClaimed(tp.x, tp.y)) {
+          tip += tile.mark === MarkType.Fortify ? ' · click to unmark' : ' · click to fortify';
+        } else if (tile.kind === TileKind.Gold || tile.kind === TileKind.Gem || tile.kind === TileKind.Rock) {
+          tip += ' · cannot fortify';
         }
       }
       this.hud.setTooltip(tip);
@@ -1634,7 +1656,7 @@ export class Game {
             if (c.bedKey) this.releaseBed(c);
             c.job = JobType.Wander;
             c.jobTarget = { x: tx, y: ty };
-            c.setPath(this.grid.findPath(c.x, c.y, tx, ty));
+            c.setPath(this.pathFor(c, tx, ty));
           } catch (err) {
             console.warn('[underkeep] move order unit failed', err);
           }
@@ -1652,18 +1674,13 @@ export class Game {
           i++;
           let dx = tx + ox;
           let dy = ty + oy;
-          if (!this.grid.isWalkable(dx, dy)) {
+          if (!this.grid.isWalkable(dx, dy, this.pathOptsFor(c))) {
             dx = tx;
             dy = ty;
           }
           c.job = JobType.AttackMove;
           c.jobTarget = { x: dx, y: dy };
-          const path = this.grid.findPath(
-            Number.isFinite(c.x) ? c.x : dx,
-            Number.isFinite(c.y) ? c.y : dy,
-            dx,
-            dy
-          );
+          const path = this.pathFor(c, dx, dy);
           if (path) c.setPath(path);
           else c.setPath(null);
           this.safeMood(c, (Number.isFinite(c.mood) ? c.mood : 72) + 3);
@@ -1859,7 +1876,7 @@ export class Game {
           if (this.isMusterFighter(c)) {
             c.job = JobType.Guard;
             c.jobTarget = { x, y };
-            const path = this.grid.findPath(c.x, c.y, x, y);
+            const path = this.pathFor(c, x, y);
             if (path) c.setPath(path);
           }
         }
@@ -2253,7 +2270,7 @@ export class Game {
   }
 
   private attractedCount(): number {
-    return this.creatures.filter((c) => c.alive && !c.isHero && !c.isWorker).length;
+    return this.creatures.filter((c) => c.alive && !c.isHero && !c.isWorker && !c.isPrisoner).length;
   }
 
   private portalCap(): number {
@@ -2352,7 +2369,7 @@ export class Game {
       if (this.isMusterFighter(c)) {
         c.job = JobType.Guard;
         c.jobTarget = { x, y };
-        const path = this.grid.findPath(c.x, c.y, x, y);
+        const path = this.pathFor(c, x, y);
         if (path) c.setPath(path);
       }
     }
@@ -3853,7 +3870,7 @@ export class Game {
       hauler.job = JobType.DragWounded;
       hauler.jobTarget = { x: wounded.x, y: wounded.y };
       hauler.workTimer = 0;
-      const path = this.grid.findPath(hauler.x, hauler.y, wounded.x, wounded.y);
+      const path = this.pathFor(hauler, wounded.x, wounded.y);
       if (path) hauler.setPath(path);
     }
 
@@ -3869,7 +3886,7 @@ export class Game {
       fleer.job = JobType.Flee;
       fleer.fleeTimer = 3;
       fleer.jobTarget = { x: hx + 3, y: hy + 1 };
-      const path = this.grid.findPath(fleer.x, fleer.y, hx + 3, hy + 1);
+      const path = this.pathFor(fleer, hx + 3, hy + 1);
       if (path) fleer.setPath(path);
     }
 
@@ -4053,7 +4070,7 @@ export class Game {
       w.job = JobType.DragPrisoner;
       w.jobTarget = { x: ko.x, y: ko.y };
       w.workTimer = 0;
-      w.setPath(this.grid.findPath(w.x, w.y, ko.x, ko.y));
+      w.setPath(this.pathFor(w, ko.x, ko.y));
     }
 
     this.grid.revealFromTerritory();
@@ -4642,6 +4659,9 @@ export class Game {
     noAutoFortify: boolean;
     slapCostsHp: boolean;
     portalStillGated: boolean;
+    fortifyCancelStops: boolean;
+    flyerPathsHazard: boolean;
+    heartHpSaved: boolean;
   } {
     this.hud.hideOverlay();
     const hx = this.grid.heartPos.x;
@@ -4749,6 +4769,58 @@ export class Game {
 
     const portalStillGated = this.grid.countRoom(RoomType.Portal) === 9;
 
+    let fortifyCancelStops = false;
+    if (earth && earth.kind === TileKind.Earth && worker) {
+      earth.mark = MarkType.Fortify;
+      earth.fortified = false;
+      worker.job = JobType.Fortify;
+      worker.jobTarget = { x: earth.x, y: earth.y };
+      worker.workTimer = 0.9;
+      worker.setPath(null);
+      earth.mark = MarkType.None;
+      for (let i = 0; i < 20; i++) this.update(0.05);
+      fortifyCancelStops = worker.job !== JobType.Fortify && !earth.fortified;
+    }
+
+    const lavaA = this.grid.get(hx + 2, hy + 2);
+    const lavaB = this.grid.get(hx + 3, hy + 2);
+    const far = this.grid.get(hx + 4, hy + 2);
+    let flyerPathsHazard = false;
+    if (lavaA && lavaB && far) {
+      const prevA = { kind: lavaA.kind, room: lavaA.room, fortified: lavaA.fortified };
+      const prevB = { kind: lavaB.kind, room: lavaB.room, fortified: lavaB.fortified };
+      const prevF = { kind: far.kind, room: far.room, fortified: far.fortified };
+      lavaA.kind = TileKind.Lava;
+      lavaA.fortified = false;
+      lavaA.room = RoomType.None;
+      lavaB.kind = TileKind.Lava;
+      lavaB.fortified = false;
+      lavaB.room = RoomType.None;
+      far.kind = TileKind.Claimed;
+      far.fortified = false;
+      const flyer = this.spawnCreature(CreatureKind.Skitterwing, hx + 1, hy + 2);
+      const blocked = this.grid.findPath(flyer.x, flyer.y, far.x, far.y);
+      const open = this.grid.findPath(flyer.x, flyer.y, far.x, far.y, { allowHazard: true });
+      flyerPathsHazard = !blocked && !!open && open.length > 1;
+      flyer.alive = false;
+      flyer.mesh.visible = false;
+      lavaA.kind = prevA.kind;
+      lavaA.room = prevA.room;
+      lavaA.fortified = prevA.fortified;
+      lavaB.kind = prevB.kind;
+      lavaB.room = prevB.room;
+      lavaB.fortified = prevB.fortified;
+      far.kind = prevF.kind;
+      far.room = prevF.room;
+      far.fortified = prevF.fortified;
+    }
+
+    const hpBefore = this.heartHp;
+    this.heartHp = 321;
+    const packed = this.buildSave();
+    const heartHpSaved = packed.heartHp === 321;
+    this.heartHp = hpBefore;
+
     return {
       unmarkedStaySolid,
       noTunnelJob,
@@ -4759,6 +4831,9 @@ export class Game {
       noAutoFortify,
       slapCostsHp,
       portalStillGated,
+      fortifyCancelStops,
+      flyerPathsHazard,
+      heartHpSaved,
     };
   }
 
@@ -5408,6 +5483,21 @@ export class Game {
     };
   }
 
+  /** Path that respects flyer / lava-walker / hero rules. */
+  private pathFor(c: Creature, tx: number, ty: number): Vec2[] | null {
+    const sx = Number.isFinite(c.x) ? c.x : tx;
+    const sy = Number.isFinite(c.y) ? c.y : ty;
+    if (!Number.isFinite(tx) || !Number.isFinite(ty)) return null;
+    return this.grid.findPath(sx, sy, tx, ty, this.pathOptsFor(c));
+  }
+
+  private pathAdjacentFor(c: Creature, tx: number, ty: number): Vec2[] | null {
+    const sx = Number.isFinite(c.x) ? c.x : tx;
+    const sy = Number.isFinite(c.y) ? c.y : ty;
+    if (!Number.isFinite(tx) || !Number.isFinite(ty)) return null;
+    return this.grid.findPathAdjacent(sx, sy, tx, ty, this.pathOptsFor(c));
+  }
+
   private placeBridge(x: number, y: number, stone: boolean): void {
     if (!this.grid.canPlaceBridge(x, y)) return;
     const cost = stone ? BRIDGE_STONE_COST : BRIDGE_WOOD_COST;
@@ -5588,7 +5678,7 @@ export class Game {
       }
       return;
     }
-    const accel = 36;
+    const accel = 48;
     const forward = new THREE.Vector3();
     cam.getWorldDirection(forward);
     forward.y = 0;
@@ -5601,9 +5691,9 @@ export class Game {
     if (this.keys.has('d') || this.keys.has('arrowright')) wish.add(right);
     if (wish.lengthSq() > 0) {
       wish.normalize().multiplyScalar(accel);
-      this.camVel.lerp(wish, 1 - Math.exp(-10 * dt));
+      this.camVel.lerp(wish, 1 - Math.exp(-14 * dt));
     } else {
-      this.camVel.multiplyScalar(Math.exp(-8 * dt));
+      this.camVel.multiplyScalar(Math.exp(-10 * dt));
     }
     if (this.camVel.lengthSq() > 1e-6) {
       const step = this.camVel.clone().multiplyScalar(dt);
@@ -5673,7 +5763,7 @@ export class Game {
           w.job = JobType.Fight;
           w.jobTarget = { x: threat.x, y: threat.y };
           if (Math.hypot(w.x - threat.x, w.y - threat.y) > 1.2) {
-            const path = this.grid.findPath(w.x, w.y, threat.x, threat.y);
+            const path = this.pathFor(w, threat.x, threat.y);
             if (path) w.setPath(path);
           } else {
             w.setPath(null);
@@ -5696,7 +5786,7 @@ export class Game {
             }
           }
         }
-        if (best) w.setPath(this.grid.findPath(w.x, w.y, best.x, best.y));
+        if (best) w.setPath(this.pathFor(w, best.x, best.y));
         continue;
       }
     }
@@ -5707,7 +5797,7 @@ export class Game {
     for (const t of this.grid.tiles) {
       if (t.mark === MarkType.Dig && this.grid.isDiggable(t.x, t.y)) digMarks.push({ x: t.x, y: t.y });
       if (t.mark === MarkType.Claim && t.kind === TileKind.Dirt) claimMarks.push({ x: t.x, y: t.y });
-      if (t.mark === MarkType.Fortify && !t.fortified) fortMarks.push({ x: t.x, y: t.y });
+      if (t.mark === MarkType.Fortify && !t.fortified && t.kind === TileKind.Earth) fortMarks.push({ x: t.x, y: t.y });
     }
     if (
       digMarks.length > 0 &&
@@ -5726,6 +5816,14 @@ export class Game {
       if ((w.job === JobType.Dig || w.job === JobType.Mine) && w.jobTarget) {
         const key = `${w.jobTarget.x},${w.jobTarget.y}`;
         if (!activeDig.has(key) || !this.grid.isDiggable(w.jobTarget.x, w.jobTarget.y)) {
+          w.job = JobType.Idle;
+          w.jobTarget = null;
+          w.setPath(null);
+        }
+      }
+      if (w.job === JobType.Fortify && w.jobTarget) {
+        const ft = this.grid.get(w.jobTarget.x, w.jobTarget.y);
+        if (!ft || ft.mark !== MarkType.Fortify || ft.kind !== TileKind.Earth || ft.fortified) {
           w.job = JobType.Idle;
           w.jobTarget = null;
           w.setPath(null);
@@ -5775,7 +5873,7 @@ export class Game {
         const treasury = this.grid.tiles.find((t) => t.room === RoomType.Treasury);
         const tx = treasury?.x ?? this.grid.heartPos.x;
         const ty = treasury?.y ?? this.grid.heartPos.y;
-        const path = this.grid.findPath(w.x, w.y, tx, ty);
+        const path = this.pathFor(w, tx, ty);
         if (path) {
           w.job = JobType.Haul;
           w.jobTarget = { x: tx, y: ty };
@@ -5805,7 +5903,7 @@ export class Game {
             )
         );
         if (ko) {
-          const path = this.grid.findPath(w.x, w.y, ko.x, ko.y);
+          const path = this.pathFor(w, ko.x, ko.y);
           if (path) {
             w.job = JobType.DragPrisoner;
             w.jobTarget = { x: ko.x, y: ko.y };
@@ -5836,7 +5934,7 @@ export class Game {
             )
         );
         if (wounded) {
-          const path = this.grid.findPath(w.x, w.y, wounded.x, wounded.y);
+          const path = this.pathFor(w, wounded.x, wounded.y);
           if (path) {
             w.job = JobType.DragWounded;
             w.jobTarget = { x: wounded.x, y: wounded.y };
@@ -5861,7 +5959,7 @@ export class Game {
         if (shop) {
           const crafters = workers.filter((c) => c.job === JobType.Craft).length;
           if (crafters < Math.max(1, Math.min(3, this.grid.countRoom(RoomType.Workshop)))) {
-            const path = this.grid.findPath(w.x, w.y, shop.x, shop.y);
+            const path = this.pathFor(w, shop.x, shop.y);
             if (path) {
               w.job = JobType.Craft;
               w.jobTarget = shop;
@@ -5887,7 +5985,7 @@ export class Game {
         const key = `${face.x},${face.y}`;
         if (claimedTargets.has(key)) continue;
         const tile = faceTile;
-        const path = this.grid.findPathAdjacent(w.x, w.y, face.x, face.y);
+        const path = this.pathAdjacentFor(w, face.x, face.y);
         if (!path) continue;
         w.job = tile.kind === TileKind.Gold || tile.kind === TileKind.Gem ? JobType.Mine : JobType.Dig;
         w.jobTarget = face;
@@ -5905,7 +6003,7 @@ export class Game {
       for (const { m } of claimSorted) {
         const key = `${m.x},${m.y}`;
         if (claimedTargets.has(key)) continue;
-        const path = this.grid.findPath(w.x, w.y, m.x, m.y);
+        const path = this.pathFor(w, m.x, m.y);
         if (!path) continue;
         w.job = JobType.Claim;
         w.jobTarget = m;
@@ -5921,7 +6019,7 @@ export class Game {
         const key = `${m.x},${m.y}`;
         if (claimedTargets.has(key)) continue;
         if (!this.grid.isReachableSolid(m.x, m.y)) continue;
-        const path = this.grid.findPathAdjacent(w.x, w.y, m.x, m.y);
+        const path = this.pathAdjacentFor(w, m.x, m.y);
         if (!path) continue;
         w.job = JobType.Fortify;
         w.jobTarget = m;
@@ -5950,7 +6048,7 @@ export class Game {
           }
         }
         if (best) {
-          const path = this.grid.findPath(w.x, w.y, best.x, best.y);
+          const path = this.pathFor(w, best.x, best.y);
           if (path) {
             const ct = this.grid.get(best.x, best.y)!;
             if (ct.mark !== MarkType.Claim) {
@@ -5971,7 +6069,7 @@ export class Game {
         const treasury = this.grid.tiles.find((t) => t.room === RoomType.Treasury);
         const tx = treasury?.x ?? this.grid.heartPos.x;
         const ty = treasury?.y ?? this.grid.heartPos.y;
-        const path = this.grid.findPath(w.x, w.y, tx, ty);
+        const path = this.pathFor(w, tx, ty);
         if (path) {
           w.job = JobType.Haul;
           w.jobTarget = { x: tx, y: ty };
@@ -6008,7 +6106,7 @@ export class Game {
         if (enemy) {
           if (c.bedKey) this.releaseBed(c);
           if (Math.hypot(c.x - enemy.x, c.y - enemy.y) > 1.2) {
-            const path = this.grid.findPath(c.x, c.y, enemy.x, enemy.y);
+            const path = this.pathFor(c, enemy.x, enemy.y);
             if (path) c.setPath(path);
           } else {
             c.setPath(null);
@@ -6017,23 +6115,23 @@ export class Game {
           const tx = c.jobTarget.x;
           const ty = c.jobTarget.y;
           if (c.x !== tx || c.y !== ty) {
-            const path = this.grid.findPath(c.x, c.y, tx, ty);
+            const path = this.pathFor(c, tx, ty);
             if (path) c.setPath(path);
           }
         }
         continue;
       }
 
-      // fight if hero near
+      // Fight if a hero is in the keep — stay on them instead of dropping at 10 tiles
       const enemy = this.creatures.find(
-        (h) => h.alive && h.isHero && Math.hypot(h.x - c.x, h.y - c.y) < 10
+        (h) => h.alive && h.isHero && !h.knockedOut && !h.isPrisoner && Math.hypot(h.x - c.x, h.y - c.y) < 16
       );
       if (enemy) {
         if (c.bedKey) this.releaseBed(c);
         c.job = JobType.Fight;
         c.jobTarget = { x: enemy.x, y: enemy.y };
         if (Math.hypot(c.x - enemy.x, c.y - enemy.y) > 1.2) {
-          const path = this.grid.findPath(c.x, c.y, enemy.x, enemy.y);
+          const path = this.pathFor(c, enemy.x, enemy.y);
           if (path) c.setPath(path);
         } else {
           c.setPath(null);
@@ -6065,13 +6163,26 @@ export class Game {
           if (!this.bedOwners.has(key)) this.bedOwners.set(key, c.id);
         }
         if (c.path.length === 0 && c.jobTarget) {
-          const path = this.grid.findPath(c.x, c.y, c.jobTarget.x, c.jobTarget.y);
+          const path = this.pathFor(c, c.jobTarget.x, c.jobTarget.y);
           if (path) c.setPath(path);
         }
         continue;
       }
 
       if (c.job === JobType.Fight) {
+        const foe = this.creatures.find(
+          (h) => h.alive && h.isHero && !h.knockedOut && !h.isPrisoner
+        );
+        if (foe) {
+          c.jobTarget = { x: foe.x, y: foe.y };
+          if (Math.hypot(c.x - foe.x, c.y - foe.y) > 1.2) {
+            const path = this.pathFor(c, foe.x, foe.y);
+            if (path) c.setPath(path);
+          } else {
+            c.setPath(null);
+          }
+          continue;
+        }
         c.job = JobType.Idle;
       }
       // Drop Guard only when re-evaluating (may re-assign immediately)
@@ -6089,7 +6200,7 @@ export class Game {
           c.job = JobType.Flee;
           c.fleeTimer = 4;
           c.jobTarget = bed;
-          c.setPath(this.grid.findPath(c.x, c.y, bed.x, bed.y));
+          c.setPath(this.pathFor(c, bed.x, bed.y));
           this.mentioneOnce('fleeLair', MENTOR_LINES.fleeLair);
           continue;
         }
@@ -6114,7 +6225,7 @@ export class Game {
         if (t) {
           c.job = JobType.Pray;
           c.jobTarget = t;
-          c.setPath(this.grid.findPath(c.x, c.y, t.x, t.y));
+          c.setPath(this.pathFor(c, t.x, t.y));
           continue;
         }
       }
@@ -6125,7 +6236,7 @@ export class Game {
         if (t) {
           c.job = JobType.Research;
           c.jobTarget = t;
-          c.setPath(this.grid.findPath(c.x, c.y, t.x, t.y));
+          c.setPath(this.pathFor(c, t.x, t.y));
           continue;
         }
       }
@@ -6142,7 +6253,7 @@ export class Game {
         if (t) {
           c.job = JobType.Train;
           c.jobTarget = t;
-          c.setPath(this.grid.findPath(c.x, c.y, t.x, t.y));
+          c.setPath(this.pathFor(c, t.x, t.y));
           continue;
         }
       }
@@ -6158,7 +6269,7 @@ export class Game {
         if (t) {
           c.job = JobType.Train;
           c.jobTarget = t;
-          c.setPath(this.grid.findPath(c.x, c.y, t.x, t.y));
+          c.setPath(this.pathFor(c, t.x, t.y));
           continue;
         }
       }
@@ -6173,7 +6284,7 @@ export class Game {
         c.job = JobType.Guard;
         c.jobTarget = { x: rallyTile.x, y: rallyTile.y };
         if (c.x !== rallyTile.x || c.y !== rallyTile.y) {
-          c.setPath(this.grid.findPath(c.x, c.y, rallyTile.x, rallyTile.y));
+          c.setPath(this.pathFor(c, rallyTile.x, rallyTile.y));
         } else {
           c.setPath(null);
         }
@@ -6187,7 +6298,7 @@ export class Game {
           c.job = JobType.Guard;
           c.jobTarget = t;
           if (c.x !== t.x || c.y !== t.y) {
-            c.setPath(this.grid.findPath(c.x, c.y, t.x, t.y));
+            c.setPath(this.pathFor(c, t.x, t.y));
           } else {
             c.setPath(null);
           }
@@ -6206,7 +6317,7 @@ export class Game {
         if (t) {
           c.job = JobType.Train;
           c.jobTarget = t;
-          c.setPath(this.grid.findPath(c.x, c.y, t.x, t.y));
+          c.setPath(this.pathFor(c, t.x, t.y));
           continue;
         }
       }
@@ -6221,7 +6332,7 @@ export class Game {
         if (t) {
           c.job = JobType.Train;
           c.jobTarget = t;
-          c.setPath(this.grid.findPath(c.x, c.y, t.x, t.y));
+          c.setPath(this.pathFor(c, t.x, t.y));
           continue;
         }
       }
@@ -6231,7 +6342,7 @@ export class Game {
           if (den) {
             c.job = JobType.Gamble;
             c.jobTarget = den;
-            c.setPath(this.grid.findPath(c.x, c.y, den.x, den.y));
+            c.setPath(this.pathFor(c, den.x, den.y));
             this.mentioneOnce('gambling', MENTOR_LINES.gambling);
             continue;
           }
@@ -6241,13 +6352,13 @@ export class Game {
           const lair = this.findFreeOrOwnedBed(c);
           if (lair) {
             c.job = JobType.Wander;
-            c.setPath(this.grid.findPath(c.x, c.y, lair.x, lair.y));
+            c.setPath(this.pathFor(c, lair.x, lair.y));
           } else {
             const claimed = this.grid.tiles.filter((t) => t.kind === TileKind.Claimed);
             if (claimed.length) {
               const t = claimed[Math.floor(Math.random() * claimed.length)];
               c.job = JobType.Wander;
-              c.setPath(this.grid.findPath(c.x, c.y, t.x, t.y));
+              c.setPath(this.pathFor(c, t.x, t.y));
             }
           }
         }
@@ -6353,7 +6464,7 @@ export class Game {
       c.job = JobType.Sleep;
       c.jobTarget = { x: free.x, y: free.y };
       c.restHealAcc = 0;
-      c.setPath(this.grid.findPath(c.x, c.y, free.x, free.y));
+      c.setPath(this.pathFor(c, free.x, free.y));
       this.mentioneOnce('lairUse', MENTOR_LINES.lairUse);
       this.hud.say(MENTOR_LINES.bedClaim);
       return true;
@@ -6363,7 +6474,7 @@ export class Game {
     c.job = JobType.Sleep;
     c.jobTarget = bed;
     c.restHealAcc = 0;
-    c.setPath(this.grid.findPath(c.x, c.y, bed.x, bed.y));
+    c.setPath(this.pathFor(c, bed.x, bed.y));
     this.mentioneOnce('lairUse', MENTOR_LINES.lairUse);
     this.hud.say(MENTOR_LINES.bedClaim);
     return true;
@@ -6380,7 +6491,7 @@ export class Game {
     c.jobTarget = t;
     c.eatAnnounced = false;
     c.eatAnim = 0;
-    c.setPath(this.grid.findPath(c.x, c.y, t.x, t.y));
+    c.setPath(this.pathFor(c, t.x, t.y));
     this.mentioneOnce('hatcheryUse', MENTOR_LINES.hatcheryUse);
     return true;
   }
@@ -6577,7 +6688,7 @@ export class Game {
           return;
         }
         if (Math.hypot(c.x - ko.x, c.y - ko.y) > 1.6) {
-          const path = this.grid.findPath(c.x, c.y, ko.x, ko.y);
+          const path = this.pathFor(c, ko.x, ko.y);
           if (path) {
             c.setPath(path);
             c.jobTarget = { x: ko.x, y: ko.y };
@@ -6595,7 +6706,7 @@ export class Game {
         }
         c.workTimer = ko.id;
         c.jobTarget = prison;
-        const path = this.grid.findPath(c.x, c.y, prison.x, prison.y);
+        const path = this.pathFor(c, prison.x, prison.y);
         if (path) c.setPath(path);
         else {
           c.job = JobType.Idle;
@@ -6652,7 +6763,7 @@ export class Game {
           return;
         }
         if (Math.hypot(c.x - ko.x, c.y - ko.y) > 1.6) {
-          const path = this.grid.findPath(c.x, c.y, ko.x, ko.y);
+          const path = this.pathFor(c, ko.x, ko.y);
           if (path) {
             c.setPath(path);
             c.jobTarget = { x: ko.x, y: ko.y };
@@ -6670,7 +6781,7 @@ export class Game {
         }
         c.workTimer = ko.id;
         c.jobTarget = bed;
-        const path = this.grid.findPath(c.x, c.y, bed.x, bed.y);
+        const path = this.pathFor(c, bed.x, bed.y);
         if (path) c.setPath(path);
         else {
           c.job = JobType.Idle;
@@ -6739,7 +6850,7 @@ export class Game {
       // Must stand on an orthogonal neighbor (planted at dig face)
       const manhattan = Math.abs(c.x - t.x) + Math.abs(c.y - t.y);
       if (manhattan !== 1 && Math.hypot(c.x - t.x, c.y - t.y) > 1.55) {
-        const path = this.grid.findPathAdjacent(c.x, c.y, t.x, t.y);
+        const path = this.pathAdjacentFor(c, t.x, t.y);
         if (path) c.setPath(path);
         else {
           c.job = JobType.Idle;
@@ -6822,7 +6933,7 @@ export class Game {
     } else if (c.job === JobType.Claim) {
       if (!arrived && c.pathIndex < c.path.length) return;
       if (Math.hypot(c.x - t.x, c.y - t.y) > 1.2) {
-        const path = this.grid.findPath(c.x, c.y, t.x, t.y);
+        const path = this.pathFor(c, t.x, t.y);
         if (path) c.setPath(path);
         else {
           c.job = JobType.Idle;
@@ -6858,9 +6969,15 @@ export class Game {
         this.saveNow();
       }
     } else if (c.job === JobType.Fortify) {
+      if (t.mark !== MarkType.Fortify || t.kind !== TileKind.Earth || t.fortified) {
+        c.job = JobType.Idle;
+        c.jobTarget = null;
+        c.setPath(null);
+        return;
+      }
       if (!arrived && c.pathIndex < c.path.length) return;
       if (Math.hypot(c.x - t.x, c.y - t.y) > 1.6) {
-        const path = this.grid.findPathAdjacent(c.x, c.y, t.x, t.y) ?? this.grid.findPath(c.x, c.y, t.x, t.y);
+        const path = this.pathAdjacentFor(c, t.x, t.y) ?? this.pathFor(c, t.x, t.y);
         if (path) c.setPath(path);
         else {
           c.job = JobType.Idle;
@@ -6870,9 +6987,10 @@ export class Game {
       }
       c.workTimer += dt;
       if (c.workTimer >= 1.15) {
-        t.fortified = true;
+        if (t.kind === TileKind.Earth && t.mark === MarkType.Fortify) {
+          t.fortified = true;
+        }
         t.mark = MarkType.None;
-        // keep kind as earth visually via fortified flag
         this.requestStructuralRebuild();
         c.job = JobType.Idle;
         c.jobTarget = null;
@@ -6967,7 +7085,7 @@ export class Game {
       }
       if (!arrived) {
         if (c.path.length === 0) {
-          const path = this.grid.findPath(c.x, c.y, c.jobTarget.x, c.jobTarget.y);
+          const path = this.pathFor(c, c.jobTarget.x, c.jobTarget.y);
           if (path) c.setPath(path);
         }
         return;
@@ -7030,7 +7148,7 @@ export class Game {
       }
       if (!arrived && c.path.length > 0) return;
       if (c.x !== c.jobTarget.x || c.y !== c.jobTarget.y) {
-        const path = this.grid.findPath(c.x, c.y, c.jobTarget.x, c.jobTarget.y);
+        const path = this.pathFor(c, c.jobTarget.x, c.jobTarget.y);
         if (path) c.setPath(path);
         return;
       }
@@ -7097,7 +7215,7 @@ export class Game {
       }
       if (!arrived && c.path.length > 0) return;
       if (c.x !== c.jobTarget.x || c.y !== c.jobTarget.y) {
-        const path = this.grid.findPath(c.x, c.y, c.jobTarget.x, c.jobTarget.y);
+        const path = this.pathFor(c, c.jobTarget.x, c.jobTarget.y);
         if (path) c.setPath(path);
         return;
       }
@@ -7162,7 +7280,7 @@ export class Game {
       }
       if (!arrived && c.path.length > 0) return;
       if (c.x !== c.jobTarget.x || c.y !== c.jobTarget.y) {
-        const path = this.grid.findPath(c.x, c.y, c.jobTarget.x, c.jobTarget.y);
+        const path = this.pathFor(c, c.jobTarget.x, c.jobTarget.y);
         if (path) c.setPath(path);
         return;
       }
@@ -7668,7 +7786,16 @@ export class Game {
       for (let x = cx - 1; x <= cx + 1; x++) {
         const tile = this.grid.get(x, y);
         if (!tile || tile.kind === TileKind.Heart || tile.kind === TileKind.Rock) continue;
-        if (tile.fortified || tile.kind === TileKind.Gold) continue;
+        if (tile.fortified) continue;
+        if (tile.kind === TileKind.Gold) {
+          if (tile.goldAmount > 0) this.addGold(tile.goldAmount);
+          tile.goldAmount = 0;
+          tile.kind = TileKind.Dirt;
+          tile.digProgress = 0;
+          tile.mark = MarkType.None;
+          this.gridDirty = true;
+          continue;
+        }
         if (tile.kind === TileKind.Earth || tile.kind === TileKind.Wall) {
           tile.kind = TileKind.Dirt;
           tile.digProgress = 0;

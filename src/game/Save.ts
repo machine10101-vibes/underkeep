@@ -32,6 +32,11 @@ export interface SavedCreature {
   sleepNeed: number;
   trainNeed: number;
   isHero: boolean;
+  job?: string;
+  mood?: number;
+  knockedOut?: boolean;
+  isPrisoner?: boolean;
+  convertProgress?: number;
 }
 
 export interface SaveData {
@@ -76,6 +81,7 @@ export interface SaveData {
   doorKits?: number;
   sentryKits?: number;
   goldEver?: number;
+  heartHp?: number;
 }
 
 function finiteNum(n: unknown): n is number {

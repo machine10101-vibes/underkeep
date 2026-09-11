@@ -4855,6 +4855,52 @@ export class Game {
     this.hud.setTooltip('Fewer torch lights, no bloom — cavern stays lit without the hiccup');
   }
 
+  /** QA/screenshot: every species in a keeper-view lineup. */
+  preparePass1015Shot(): void {
+    this.hud.hideOverlay();
+    const hx = this.grid.heartPos.x;
+    const hy = this.grid.heartPos.y;
+    const lineup: CreatureKind[] = [
+      CreatureKind.Scrabbler,
+      CreatureKind.Skitterwing,
+      CreatureKind.Rattlekin,
+      CreatureKind.Emberling,
+      CreatureKind.Gravemage,
+      CreatureKind.Thornwitch,
+      CreatureKind.Bonewretch,
+      CreatureKind.HeroKnight,
+      CreatureKind.HeroArcher,
+    ];
+    for (let i = 0; i < lineup.length; i++) {
+      const x = hx - 4 + i;
+      const y = hy + 2;
+      const tile = this.grid.get(x, y);
+      if (tile && tile.kind !== TileKind.Heart) {
+        tile.kind = TileKind.Claimed;
+        tile.room = RoomType.None;
+        tile.claimedProgress = 1;
+        tile.fortified = false;
+        tile.explored = true;
+        tile.mark = MarkType.None;
+      }
+      const existing = this.creatures.find((c) => c.alive && c.kind === lineup[i] && c.x === x && c.y === y);
+      const c = existing ?? this.spawnCreature(lineup[i], x, y);
+      const w = this.grid.tileToWorld(x, y);
+      c.wx = w.x;
+      c.wz = w.z;
+      c.job = JobType.Idle;
+      c.jobTarget = null;
+      c.setPath([]);
+    }
+    this.rebuild();
+    this.updateMinimap();
+    const mid = this.grid.tileToWorld(hx, hy + 2);
+    this.camTarget.set(mid.x, 0.8, mid.z);
+    this.renderer.camera.position.set(mid.x + 2.5, 11, mid.z + 9);
+    this.renderer.camera.lookAt(this.camTarget);
+    this.hud.setTooltip('Minions and heroes — each silhouette matches the name');
+  }
+
   /** QA/screenshot: the map Portal — buried blot, then claimed gateway. */
   preparePass108Shot(focus: 'buried' | 'claimed' | 'both' = 'both'): void {
     this.hud.hideOverlay();

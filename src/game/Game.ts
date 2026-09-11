@@ -5013,6 +5013,10 @@ export class Game {
       c.attackPulse = i % 2 === 1 ? 0.85 : 0.15;
       i += 1;
     }
+    const mid = this.grid.tileToWorld(this.grid.heartPos.x, this.grid.heartPos.y);
+    this.camTarget.set(mid.x, 0.55, mid.z);
+    this.renderer.camera.position.set(mid.x + 0.2, 7.2, mid.z + 10.4);
+    this.renderer.camera.lookAt(this.camTarget);
     this.hud.setTooltip('Species motion — each gait and strike matches the body');
   }
 

@@ -100,13 +100,13 @@ function addSkull(
     part(skull, new THREE.SphereGeometry(0.07, 6, 6), bone, sx * 0.12, -0.02, 0.05, 0, 0, 0, 0.82, 0.68, 0.78);
   }
 
-  const socket = mat({ color: 0x100808, roughness: 0.9 });
+  const socket = glow(0x080000);
   const eyeCol = opts.eye ?? 0xff6020;
   for (const sx of [-1, 1] as const) {
-    part(skull, new THREE.SphereGeometry(0.045, 6, 6), socket, sx * 0.06, 0.05, 0.13, 0, 0, 0, 1, 0.85, 0.7);
-    part(skull, new THREE.SphereGeometry(0.028, 6, 6), glow(eyeCol), sx * 0.06, 0.05, 0.155);
+    part(skull, new THREE.SphereGeometry(0.052, 6, 6), socket, sx * 0.062, 0.05, 0.132, 0, 0, 0, 1, 0.85, 0.72);
+    part(skull, new THREE.SphereGeometry(0.028, 6, 6), glow(eyeCol), sx * 0.06, 0.05, 0.16);
   }
-  part(skull, new THREE.ConeGeometry(0.028, 0.07, 4), socket, 0, -0.01, 0.16, 1.2, 0, 0);
+  part(skull, new THREE.ConeGeometry(0.032, 0.08, 4), socket, 0, -0.01, 0.17, 1.2, 0, 0);
   for (let i = 0; i < 6; i++) {
     part(skull, new THREE.BoxGeometry(0.018, 0.04, 0.016), bone, -0.075 + i * 0.03, -0.14 - (opts.jawHang ?? 0) * 0.4, 0.14);
   }

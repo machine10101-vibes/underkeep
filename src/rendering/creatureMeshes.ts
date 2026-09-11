@@ -597,11 +597,11 @@ function dressHeroArcher(g: THREE.Group, bodyMat: THREE.MeshStandardMaterial): v
   g.add(bracer);
 
   const bow = new THREE.Mesh(new THREE.TorusGeometry(0.32, 0.028, 4, 14, Math.PI * 1.15), wood);
-  bow.rotation.y = Math.PI / 2;
-  bow.position.set(-0.34, 0.78, 0.04);
+  bow.rotation.y = 0.35;
+  bow.position.set(0.28, 0.78, 0.18);
   g.add(bow);
   const string = new THREE.Mesh(new THREE.CylinderGeometry(0.007, 0.007, 0.58, 4), mat({ color: 0xe8e0d0 }));
-  string.position.set(-0.2, 0.78, 0.04);
+  string.position.set(0.16, 0.78, 0.22);
   g.add(string);
 
   const quiver = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.07, 0.38, 6), leather);

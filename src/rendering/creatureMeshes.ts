@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 
-export type WalkLimbTag = 'legL' | 'legR' | 'armL' | 'armR' | 'tail' | 'wingH';
+export type WalkLimbTag = 'legL' | 'legR' | 'armL' | 'armR' | 'foreL' | 'foreR' | 'tail' | 'wingH';
 
 /** Walk-cycle tagged limb. Shared with creatureMotion.ts. */
 function limb(
@@ -74,6 +74,17 @@ function tagged(
   if (walkLimb) g.userData.walkLimb = walkLimb;
   if (gait !== undefined) g.userData.gait = gait;
   return g;
+}
+
+/** Fist that seats a tool handle so weapons do not float off the wrist. */
+function addGrip(parent: THREE.Object3D, skin: THREE.Material, x: number, y: number, z: number): void {
+  part(parent, new THREE.SphereGeometry(0.042, 6, 6), skin, x, y, z);
+  part(parent, new THREE.SphereGeometry(0.018, 5, 5), skin, x + 0.03, y + 0.01, z + 0.018);
+}
+
+function markHeld(obj: THREE.Object3D, tool: string): void {
+  obj.userData.heldTool = tool;
+  obj.userData.baseRot = { x: obj.rotation.x, y: obj.rotation.y, z: obj.rotation.z };
 }
 
 /** Skull that reads as a skull: sockets, nasal hole, teeth. */
@@ -241,6 +252,8 @@ function dressScrabbler(g: THREE.Group, _bodyMat: THREE.MeshStandardMaterial): v
   pick.position.set(0.02, 0.02, 0.08);
   pick.rotation.x = 0.12;
   digArm.add(pick);
+  part(digArm, new THREE.SphereGeometry(0.05, 6, 6), clawMat, 0.02, 0.0, 0.1);
+  part(digArm, new THREE.ConeGeometry(0.03, 0.1, 4), clawMat, 0.06, -0.02, 0.08, 0.8, 0, 0.6);
   digArm.position.set(0.28, 1.02, 0.36);
   digArm.rotation.set(-0.28, 0, 0.04);
   g.add(digArm);
@@ -367,19 +380,23 @@ function dressRattlekin(g: THREE.Group): void {
   for (const sx of [-1, 1] as const) {
     const arm = tagged(sx * 0.26, 0.98, 0, 0.08, 0, sx * 0.35, sx < 0 ? 'armL' : 'armR');
     part(arm, new THREE.SphereGeometry(0.05, 6, 6), bone, 0, 0, 0);
-    part(arm, new THREE.CylinderGeometry(0.038, 0.028, 0.28, 5), bone, 0, -0.16, 0.02, 0.15, 0, 0);
-    part(arm, new THREE.SphereGeometry(0.04, 5, 5), bone, 0, -0.3, 0.03);
-    part(arm, new THREE.CylinderGeometry(0.03, 0.022, 0.22, 4), bone, 0, -0.42, 0.04, 0.2, 0, 0);
-    part(arm, new THREE.SphereGeometry(0.045, 5, 5), bone, 0, -0.54, 0.05);
+    part(arm, new THREE.CylinderGeometry(0.038, 0.03, 0.26, 5), bone, 0, -0.14, 0.02, 0.15, 0, 0);
+    part(arm, new THREE.SphereGeometry(0.04, 5, 5), bone, 0, -0.28, 0.03);
+    const fore = tagged(0, -0.28, 0.03, 0.28, 0, 0, sx < 0 ? 'foreL' : 'foreR');
+    part(fore, new THREE.CylinderGeometry(0.03, 0.024, 0.2, 4), bone, 0, -0.1, 0.02, 0.18, 0, 0);
+    addGrip(fore, bone, 0, -0.22, 0.04);
     if (sx > 0) {
       const cleaver = new THREE.Group();
-      part(cleaver, new THREE.CylinderGeometry(0.028, 0.034, 0.3, 5), rust, 0, 0.08, 0);
-      part(cleaver, new THREE.BoxGeometry(0.08, 0.5, 0.28), steel, 0.08, 0.42, 0, 0, 0, -0.1);
-      part(cleaver, new THREE.ConeGeometry(0.08, 0.18, 4), rust, 0.16, 0.62, 0.06, 0, 0, -0.85);
-      cleaver.position.set(0.02, -0.5, 0.04);
-      cleaver.rotation.z = -0.15;
-      arm.add(cleaver);
+      part(cleaver, new THREE.CylinderGeometry(0.022, 0.028, 0.22, 5), rust, 0, 0.02, 0);
+      part(cleaver, new THREE.BoxGeometry(0.07, 0.42, 0.24), steel, 0.05, 0.28, 0, 0, 0, -0.08);
+      part(cleaver, new THREE.ConeGeometry(0.07, 0.14, 4), rust, 0.12, 0.48, 0.04, 0, 0, -0.8);
+      cleaver.position.set(0.02, -0.2, 0.03);
+      cleaver.rotation.set(0.35, 0.12, -0.08);
+      markHeld(cleaver, 'cleaver');
+      fore.userData.carry = true;
+      fore.add(cleaver);
     }
+    arm.add(fore);
     g.add(arm);
 
     const leg = tagged(sx * 0.12, 0.42, 0, 0.12, 0, sx * 0.08, sx < 0 ? 'legL' : 'legR');
@@ -483,26 +500,34 @@ function dressGravemage(g: THREE.Group): void {
 
   for (const sx of [-1, 1] as const) {
     const arm = tagged(sx * 0.26, 0.95, 0.02, 0.15, 0, sx * 0.25, sx < 0 ? 'armL' : 'armR');
-    part(arm, new THREE.CylinderGeometry(0.055, 0.04, 0.34, 5), robe, 0, -0.16, 0.04, 0.25, 0, 0);
-    part(arm, new THREE.SphereGeometry(0.045, 5, 5), skin, 0, -0.34, 0.08);
+    part(arm, new THREE.CylinderGeometry(0.055, 0.04, 0.26, 5), robe, 0, -0.12, 0.03, 0.22, 0, 0);
+    part(arm, new THREE.SphereGeometry(0.042, 5, 5), skin, 0, -0.26, 0.05);
+    const fore = tagged(0, -0.26, 0.05, 0.32, 0, 0, sx < 0 ? 'foreL' : 'foreR');
+    part(fore, new THREE.CylinderGeometry(0.038, 0.03, 0.18, 5), robe, 0, -0.08, 0.02, 0.2, 0, 0);
+    addGrip(fore, skin, 0, -0.2, 0.04);
     if (sx < 0) {
       const book = new THREE.Group();
       part(book, new THREE.BoxGeometry(0.2, 0.04, 0.26), lining, 0, 0, 0);
       part(book, new THREE.BoxGeometry(0.17, 0.03, 0.23), mat({ color: 0xe8dcc8, roughness: 0.7 }), 0, 0.025, 0);
       part(book, new THREE.BoxGeometry(0.02, 0.05, 0.26), cloth, -0.1, 0, 0);
-      book.position.set(-0.02, -0.4, 0.14);
-      book.rotation.set(0.9, 0.35, -0.15);
-      arm.add(book);
+      book.position.set(0, -0.18, 0.1);
+      book.rotation.set(0.85, 0.3, -0.12);
+      markHeld(book, 'book');
+      fore.userData.carry = true;
+      fore.add(book);
     } else {
       const staff = new THREE.Group();
-      part(staff, new THREE.CylinderGeometry(0.025, 0.035, 1.15, 6), wood, 0, 0.2, 0);
-      part(staff, new THREE.SphereGeometry(0.07, 8, 6), bone, 0, 0.82, 0);
-      part(staff, new THREE.BoxGeometry(0.08, 0.03, 0.06), bone, 0, 0.74, 0.04, 0.3, 0, 0);
-      part(staff, new THREE.SphereGeometry(0.085, 10, 8), glow(0xaa66ff), 0, 0.96, 0);
-      staff.position.set(0.04, -0.55, 0.02);
-      staff.rotation.z = -0.12;
-      arm.add(staff);
+      part(staff, new THREE.CylinderGeometry(0.022, 0.03, 1.2, 6), wood, 0, 0.12, 0);
+      part(staff, new THREE.SphereGeometry(0.07, 8, 6), bone, 0, 0.78, 0);
+      part(staff, new THREE.BoxGeometry(0.08, 0.03, 0.06), bone, 0, 0.7, 0.04, 0.3, 0, 0);
+      part(staff, new THREE.SphereGeometry(0.085, 10, 8), glow(0xaa66ff), 0, 0.92, 0);
+      staff.position.set(0.02, -0.2, 0.03);
+      staff.rotation.set(0.18, 0.05, -0.1);
+      markHeld(staff, 'staff');
+      fore.userData.carry = true;
+      fore.add(staff);
     }
+    arm.add(fore);
     g.add(arm);
 
     g.add(limb(new THREE.CylinderGeometry(0.05, 0.04, 0.36, 5), robe, sx * 0.1, 0.26, 0, 0, 0, 0, sx < 0 ? 'legL' : 'legR'));
@@ -552,11 +577,14 @@ function dressThornwitch(g: THREE.Group): void {
   for (const sx of [-1, 1] as const) {
     part(g, new THREE.ConeGeometry(0.1, 0.2, 5), thorn, sx * 0.22, 1.1, 0, 0, 0, sx * -0.95);
     const arm = tagged(sx * 0.24, 0.98, 0.02, 0.05, 0, sx * 0.45, sx < 0 ? 'armL' : 'armR');
-    part(arm, new THREE.CylinderGeometry(0.036, 0.026, 0.36, 5), skin, 0, -0.16, 0.02, 0.15, 0, 0);
-    part(arm, new THREE.SphereGeometry(0.035, 5, 5), skin, 0, -0.34, 0.04);
+    part(arm, new THREE.CylinderGeometry(0.036, 0.028, 0.24, 5), skin, 0, -0.12, 0.02, 0.15, 0, 0);
+    part(arm, new THREE.SphereGeometry(0.032, 5, 5), skin, 0, -0.24, 0.03);
+    const fore = tagged(0, -0.24, 0.03, 0.22, 0, 0, sx < 0 ? 'foreL' : 'foreR');
+    part(fore, new THREE.CylinderGeometry(0.028, 0.022, 0.18, 5), skin, 0, -0.08, 0.02, 0.12, 0, 0);
+    addGrip(fore, skin, 0, -0.2, 0.03);
     if (sx > 0) {
       const whip = new THREE.Group();
-      part(whip, new THREE.CylinderGeometry(0.028, 0.034, 0.16, 5), thorn, 0, 0, 0);
+      part(whip, new THREE.CylinderGeometry(0.02, 0.026, 0.14, 5), thorn, 0, 0, 0);
       let px = 0.02;
       let py = 0.1;
       for (let i = 0; i < 7; i++) {
@@ -572,10 +600,13 @@ function dressThornwitch(g: THREE.Group): void {
         py += 0.1;
       }
       part(whip, new THREE.ConeGeometry(0.055, 0.18, 4), thorn, px, py, 0, 0, 0, -1.2);
-      whip.position.set(0.02, -0.38, 0.06);
-      whip.rotation.set(0.2, 0.3, -0.85);
-      arm.add(whip);
+      whip.position.set(0.02, -0.18, 0.04);
+      whip.rotation.set(0.35, 0.25, -0.95);
+      markHeld(whip, 'whip');
+      fore.userData.carry = true;
+      fore.add(whip);
     }
+    arm.add(fore);
     g.add(arm);
 
     const leg = tagged(sx * 0.1, 0.36, 0, 0, 0, 0, sx < 0 ? 'legL' : 'legR');
@@ -614,8 +645,14 @@ function dressBonewretch(g: THREE.Group): void {
   // Good arm clutches a femur; the other scrapes the floor
   const clutch = tagged(-0.16, 0.72, 0.06, 0.25, 0, -0.55, 'armL');
   part(clutch, new THREE.CylinderGeometry(0.026, 0.02, 0.32, 4), bone, 0, -0.14, 0.02, 0.2, 0, 0);
-  part(clutch, new THREE.SphereGeometry(0.035, 5, 5), bone, 0, -0.3, 0.04);
-  part(clutch, new THREE.CylinderGeometry(0.03, 0.04, 0.4, 5), bone, 0.08, -0.38, 0.08, 0, 0, 1.1);
+  addGrip(clutch, bone, 0, -0.3, 0.04);
+  const femur = new THREE.Group();
+  part(femur, new THREE.CylinderGeometry(0.03, 0.04, 0.4, 5), bone, 0, 0.04, 0);
+  part(femur, new THREE.SphereGeometry(0.045, 5, 5), bone, 0, 0.26, 0);
+  femur.position.set(0.04, -0.28, 0.06);
+  femur.rotation.set(0.15, 0.1, 1.05);
+  markHeld(femur, 'femur');
+  clutch.add(femur);
   g.add(clutch);
 
   const drag = tagged(0.34, 0.58, 0.06, 1.35, 0, 0.2, 'armR');
@@ -656,8 +693,11 @@ function dressHeroKnight(g: THREE.Group, bodyMat: THREE.MeshStandardMaterial): v
   for (const sx of [-1, 1] as const) {
     part(g, new THREE.SphereGeometry(0.14, 8, 6), armor, sx * 0.3, 1.04, 0, 0, 0, 0, 1.2, 0.65, 1.05);
     const arm = tagged(sx * 0.32, 0.92, 0, 0.05, 0, sx * 0.2, sx < 0 ? 'armL' : 'armR');
-    part(arm, new THREE.CylinderGeometry(0.065, 0.05, 0.28, 6), armor, 0, -0.14, 0);
-    part(arm, new THREE.BoxGeometry(0.1, 0.1, 0.1), armor, 0, -0.3, 0);
+    part(arm, new THREE.CylinderGeometry(0.065, 0.05, 0.24, 6), armor, 0, -0.12, 0);
+    part(arm, new THREE.BoxGeometry(0.09, 0.08, 0.09), armor, 0, -0.26, 0);
+    const fore = tagged(0, -0.26, 0, 0.22, 0, 0, sx < 0 ? 'foreL' : 'foreR');
+    part(fore, new THREE.CylinderGeometry(0.05, 0.042, 0.18, 6), armor, 0, -0.08, 0.02);
+    addGrip(fore, armor, 0, -0.2, 0.03);
     if (sx < 0) {
       const shield = new THREE.Group();
       const kite = new THREE.Shape();
@@ -672,19 +712,24 @@ function dressHeroKnight(g: THREE.Group, bodyMat: THREE.MeshStandardMaterial): v
       part(shield, new THREE.BoxGeometry(0.05, 0.22, 0.03), cloth, 0, 0.02, 0.01);
       part(shield, new THREE.BoxGeometry(0.16, 0.05, 0.03), cloth, 0, 0.08, 0.01);
       part(shield, new THREE.SphereGeometry(0.05, 6, 6), steel, 0, 0.04, 0.03);
-      shield.position.set(-0.06, -0.16, 0.16);
-      shield.rotation.y = 0.45;
-      arm.add(shield);
+      shield.position.set(-0.04, -0.12, 0.14);
+      shield.rotation.y = 0.4;
+      markHeld(shield, 'shield');
+      fore.userData.carry = true;
+      fore.add(shield);
     } else {
       const sword = new THREE.Group();
-      part(sword, new THREE.CylinderGeometry(0.02, 0.024, 0.16, 6), mat({ color: 0x6a4820, roughness: 0.55 }), 0, 0, 0);
-      part(sword, new THREE.BoxGeometry(0.22, 0.04, 0.05), steel, 0, 0.1, 0);
-      part(sword, new THREE.BoxGeometry(0.05, 0.58, 0.09), steel, 0, 0.4, 0);
-      part(sword, new THREE.ConeGeometry(0.045, 0.12, 4), steel, 0, 0.74, 0);
-      sword.position.set(0.04, -0.28, 0.06);
-      sword.rotation.z = -0.35;
-      arm.add(sword);
+      part(sword, new THREE.CylinderGeometry(0.018, 0.022, 0.12, 6), mat({ color: 0x6a4820, roughness: 0.55 }), 0, 0, 0, Math.PI / 2, 0, 0);
+      part(sword, new THREE.BoxGeometry(0.18, 0.035, 0.04), steel, 0, 0, 0.08);
+      part(sword, new THREE.BoxGeometry(0.05, 0.08, 0.52), steel, 0, 0.02, 0.36);
+      part(sword, new THREE.ConeGeometry(0.04, 0.12, 4), steel, 0, 0.02, 0.66, Math.PI / 2, 0, 0);
+      sword.position.set(0.03, -0.18, 0.06);
+      sword.rotation.set(-0.55, 0.35, -0.25);
+      markHeld(sword, 'sword');
+      fore.userData.carry = true;
+      fore.add(sword);
     }
+    arm.add(fore);
     g.add(arm);
 
     const leg = tagged(sx * 0.1, 0.42, 0, 0, 0, 0, sx < 0 ? 'legL' : 'legR');
@@ -736,18 +781,33 @@ function dressHeroArcher(g: THREE.Group, bodyMat: THREE.MeshStandardMaterial): v
 
   for (const sx of [-1, 1] as const) {
     const arm = tagged(sx * 0.22, 0.88, 0.04, 0.1, 0, sx * 0.35, sx < 0 ? 'armL' : 'armR');
-    part(arm, new THREE.CylinderGeometry(0.042, 0.034, 0.28, 5), cloth, 0, -0.12, 0.02, 0.2, 0, 0);
-    part(arm, new THREE.CylinderGeometry(0.04, 0.036, 0.1, 6), leather, 0, -0.26, 0.04);
-    part(arm, new THREE.SphereGeometry(0.032, 5, 5), skin, 0, -0.32, 0.05);
-    if (sx > 0) {
+    part(arm, new THREE.CylinderGeometry(0.042, 0.034, 0.22, 5), cloth, 0, -0.1, 0.02, 0.18, 0, 0);
+    part(arm, new THREE.SphereGeometry(0.032, 5, 5), leather, 0, -0.22, 0.03);
+    const fore = tagged(0, -0.22, 0.03, 0.2, 0, 0, sx < 0 ? 'foreL' : 'foreR');
+    part(fore, new THREE.CylinderGeometry(0.034, 0.028, 0.16, 5), cloth, 0, -0.07, 0.02, 0.15, 0, 0);
+    addGrip(fore, skin, 0, -0.18, 0.04);
+    if (sx < 0) {
       const bow = new THREE.Group();
-      part(bow, new THREE.TorusGeometry(0.3, 0.024, 4, 14, Math.PI * 1.2), wood, 0, 0.16, 0, 0, 0, -0.2);
-      part(bow, new THREE.CylinderGeometry(0.006, 0.006, 0.52, 4), mat({ color: 0xe8e0d0 }), -0.16, 0.16, 0.02);
-      part(bow, new THREE.CylinderGeometry(0.012, 0.012, 0.18, 4), wood, 0.02, 0.16, 0.02, 0, 0, 1.2);
-      bow.position.set(0.08, -0.2, 0.16);
-      bow.rotation.set(0.15, 0.55, -0.2);
-      arm.add(bow);
+      part(bow, new THREE.TorusGeometry(0.3, 0.022, 4, 14, Math.PI * 1.2), wood, 0, 0.02, 0, 0, Math.PI / 2, 0.15);
+      part(bow, new THREE.CylinderGeometry(0.005, 0.005, 0.5, 4), mat({ color: 0xe8e0d0 }), 0, 0.02, -0.16);
+      part(bow, new THREE.CylinderGeometry(0.012, 0.012, 0.16, 4), wood, 0, 0.02, 0.02, 0, 0, 1.2);
+      bow.position.set(0.02, -0.16, 0.1);
+      bow.rotation.set(0.08, 0.15, 0.05);
+      markHeld(bow, 'bow');
+      fore.userData.carry = true;
+      fore.add(bow);
+    } else {
+      const arrow = new THREE.Group();
+      part(arrow, new THREE.CylinderGeometry(0.008, 0.008, 0.42, 4), wood, 0, 0.08, 0, Math.PI / 2, 0, 0);
+      part(arrow, new THREE.ConeGeometry(0.02, 0.07, 4), fletch, 0, 0.08, -0.2, Math.PI / 2, 0, 0);
+      part(arrow, new THREE.ConeGeometry(0.016, 0.05, 4), dark, 0, 0.08, 0.24, -Math.PI / 2, 0, 0);
+      arrow.position.set(0.01, -0.16, 0.08);
+      arrow.rotation.set(0.1, 0.2, 0);
+      markHeld(arrow, 'arrow');
+      fore.userData.carry = true;
+      fore.add(arrow);
     }
+    arm.add(fore);
     g.add(arm);
 
     const leg = tagged(sx * 0.08, 0.38, 0, 0, 0, 0, sx < 0 ? 'legL' : 'legR');

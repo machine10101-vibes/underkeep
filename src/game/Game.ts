@@ -5034,6 +5034,12 @@ export class Game {
     this.hud.setTooltip('Strikes — wind-up, hit, and follow-through per species');
   }
 
+  /** QA/screenshot: fists on tools, elbowed arms, archer draw. */
+  preparePass1020Shot(): void {
+    this.preparePass1019Shot();
+    this.hud.setTooltip('Holds — fists on the tools, elbows in the swing, bow in the left hand');
+  }
+
   /** QA/screenshot: the map Portal — buried blot, then claimed gateway. */
   preparePass108Shot(focus: 'buried' | 'claimed' | 'both' = 'both'): void {
     this.hud.hideOverlay();

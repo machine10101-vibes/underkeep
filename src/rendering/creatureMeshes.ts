@@ -144,17 +144,20 @@ function dressScrabbler(g: THREE.Group, _bodyMat: THREE.MeshStandardMaterial): v
   abdomen.castShadow = true;
   g.add(abdomen);
 
+  // Dark dorsal shell so the keeper overview reads a beetle, not a lime blob
+  part(g, new THREE.SphereGeometry(0.34, 10, 8), shellMat, 0, 0.46, -0.14, 0, 0, 0, 1.2, 0.42, 1.7);
+
   // Split elytra — two dark wing-cases with a bright center seam
   for (const sx of [-1, 1] as const) {
     const elytron = new THREE.Mesh(new THREE.SphereGeometry(0.3, 10, 8), shellMat);
-    elytron.scale.set(0.82, 0.42, 1.42);
-    elytron.position.set(sx * 0.2, 0.5, -0.1);
-    elytron.rotation.z = sx * -0.18;
+    elytron.scale.set(0.92, 0.4, 1.5);
+    elytron.position.set(sx * 0.18, 0.52, -0.1);
+    elytron.rotation.z = sx * -0.14;
     elytron.castShadow = true;
     g.add(elytron);
-    part(g, new THREE.BoxGeometry(0.05, 0.05, 0.52), plateMat, sx * 0.17, 0.6, -0.08);
+    part(g, new THREE.BoxGeometry(0.05, 0.05, 0.52), plateMat, sx * 0.16, 0.62, -0.08);
   }
-  part(g, new THREE.BoxGeometry(0.035, 0.07, 0.64), glow(0x8ab040), 0, 0.58, -0.08);
+  part(g, new THREE.BoxGeometry(0.035, 0.07, 0.64), glow(0x8ab040), 0, 0.6, -0.08);
 
   const thorax = new THREE.Mesh(new THREE.SphereGeometry(0.22, 10, 8), shellMat);
   thorax.scale.set(1.38, 0.58, 1.05);
@@ -355,7 +358,7 @@ function dressRattlekin(g: THREE.Group): void {
   }
   part(g, new THREE.SphereGeometry(0.06, 6, 6), glow(0xff5018), 0, 0.78, 0.04);
 
-  addSkull(g, bone, 0.03, 1.2, 0.04, { tilt: 0.1, eye: 0xff6020 });
+  addSkull(g, bone, 0.03, 1.22, 0.08, { tilt: 0.08, eye: 0xff6020, scale: 1.12 });
 
   // Scrap fighter kit — rusty pauldron + jaw guard so it is not a Bonewretch clone
   part(g, new THREE.BoxGeometry(0.2, 0.08, 0.24), rust, 0.24, 1.02, 0, 0, 0, -0.45);
@@ -403,8 +406,9 @@ function dressEmberling(g: THREE.Group): void {
   part(g, new THREE.SphereGeometry(0.16, 8, 6), coal, 0, 0.4, -0.58, 0, 0, 0, 0.8, 0.58, 1.4);
 
   for (let i = 0; i < 5; i++) {
-    part(g, new THREE.BoxGeometry(0.05, 0.05, 0.22), hot, (i % 2 ? 0.1 : -0.1), 0.6, 0.16 - i * 0.16);
+    part(g, new THREE.BoxGeometry(0.06, 0.04, 0.26), glow(0xff5018), (i % 2 ? 0.09 : -0.09), 0.58, 0.18 - i * 0.18);
   }
+  part(g, new THREE.BoxGeometry(0.07, 0.05, 0.9), glow(0xff6620), 0, 0.6, -0.08);
 
   const head = new THREE.Mesh(new THREE.SphereGeometry(0.2, 10, 8), coal);
   head.scale.set(0.95, 0.72, 1.65);

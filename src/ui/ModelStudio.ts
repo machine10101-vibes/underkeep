@@ -515,8 +515,8 @@ export class ModelStudio {
     if (!Number.isFinite(center.y)) center.set(0, 0.8, 0);
     this.look.copy(center);
     this.spherical.radius = Math.max(2.2, size.length() * 1.15);
-    this.spherical.phi = 1.08;
-    this.spherical.theta = 0.28;
+    this.spherical.phi = 1.2;
+    this.spherical.theta = 0.62;
     this.autoSpin = false;
     document.getElementById('studio-spin')?.classList.remove('on');
   }

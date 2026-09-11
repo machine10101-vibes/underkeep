@@ -172,7 +172,9 @@ if (
     params.get('shot') === '10.15' ||
     params.get('shot') === '1015' ||
     params.get('shot') === '10.16' ||
-    params.get('shot') === '1016')
+    params.get('shot') === '1016' ||
+    params.get('shot') === '10.18' ||
+    params.get('shot') === '1018')
 ) {
   // Auto-arrange evidence shots
   setTimeout(() => {

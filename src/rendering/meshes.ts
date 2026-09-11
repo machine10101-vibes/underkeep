@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { DoorState, RoomType, TILE_SIZE, TileKind } from '../game/types';
 import { dressCreature } from './creatureMeshes';
+import { strikePhases } from './creatureMotion';
 import {
   bumpFor,
   claimedStoneTex,
@@ -1851,12 +1852,12 @@ export function poseScrabblerPickaxe(pick: THREE.Object3D, time: number, strikin
   pick.rotation.z = 0.04;
 }
 
-/** Combat chop — `attack` is 1 at impact and decays to the rest pose. */
-export function poseScrabblerCombatPick(pick: THREE.Object3D, attack: number): void {
+/** Combat chop — raise, slam toward +Z, then recover. */
+export function poseScrabblerCombatPick(pick: THREE.Object3D, attack: number, loop = false): void {
   pick.visible = true;
-  const a = Math.max(0, Math.min(1, attack));
-  pick.rotation.x = -0.22 + a * 0.55;
-  pick.rotation.y = a * 0.05;
+  const p = strikePhases(attack, loop);
+  pick.rotation.x = -0.2 - p.wind * 0.72 + p.hit * 0.7 + p.follow * 0.12;
+  pick.rotation.y = p.hit * 0.06;
   pick.rotation.z = 0.04;
 }
 

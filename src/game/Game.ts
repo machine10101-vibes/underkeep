@@ -4871,9 +4871,21 @@ export class Game {
       CreatureKind.HeroKnight,
       CreatureKind.HeroArcher,
     ];
+    const spots: Array<[number, number]> = [
+      [-2, 1],
+      [-1, 1],
+      [0, 1],
+      [1, 1],
+      [2, 1],
+      [-2, -1],
+      [-1, -1],
+      [1, -1],
+      [2, -1],
+    ];
     for (let i = 0; i < lineup.length; i++) {
-      const x = hx - 4 + i;
-      const y = hy + 2;
+      const [dx, dy] = spots[i];
+      const x = hx + dx;
+      const y = hy + dy;
       const tile = this.grid.get(x, y);
       if (tile && tile.kind !== TileKind.Heart) {
         tile.kind = TileKind.Claimed;
@@ -4883,8 +4895,7 @@ export class Game {
         tile.explored = true;
         tile.mark = MarkType.None;
       }
-      const existing = this.creatures.find((c) => c.alive && c.kind === lineup[i] && c.x === x && c.y === y);
-      const c = existing ?? this.spawnCreature(lineup[i], x, y);
+      const c = this.spawnCreature(lineup[i], x, y);
       const w = this.grid.tileToWorld(x, y);
       c.wx = w.x;
       c.wz = w.z;
@@ -4894,9 +4905,9 @@ export class Game {
     }
     this.rebuild();
     this.updateMinimap();
-    const mid = this.grid.tileToWorld(hx, hy + 2);
-    this.camTarget.set(mid.x, 0.8, mid.z);
-    this.renderer.camera.position.set(mid.x + 2.5, 11, mid.z + 9);
+    const mid = this.grid.tileToWorld(hx, hy);
+    this.camTarget.set(mid.x, 0.7, mid.z);
+    this.renderer.camera.position.set(mid.x + 1.8, 8.5, mid.z + 7.2);
     this.renderer.camera.lookAt(this.camTarget);
     this.hud.setTooltip('Minions and heroes — each silhouette matches the name');
   }

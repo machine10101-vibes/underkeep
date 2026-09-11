@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { Creature } from '../entities/Creature';
 import { DungeonRenderer } from '../rendering/DungeonRenderer';
+import { combatHitColor } from '../rendering/creatureMotion';
 import { HUD, MENTOR_LINES } from '../ui/HUD';
 import { ModelStudio } from '../ui/ModelStudio';
 import { Grid } from './Grid';
@@ -5001,6 +5002,20 @@ export class Game {
     this.hud.setTooltip('Minions and heroes — beetle, dragonfly, skeleton, salamander, mage, witch, wretch, knight, archer');
   }
 
+  /** QA/screenshot: species-true bodies plus gait / strike pose. */
+  preparePass1018Shot(): void {
+    this.preparePass1016Shot();
+    let i = 0;
+    for (const c of this.creatures) {
+      if (!c.alive) continue;
+      c.moving = i % 2 === 0;
+      c.walkCycle = i * 0.9;
+      c.attackPulse = i % 2 === 1 ? 0.85 : 0.15;
+      i += 1;
+    }
+    this.hud.setTooltip('Species motion — each gait and strike matches the body');
+  }
+
   /** QA/screenshot: the map Portal — buried blot, then claimed gateway. */
   preparePass108Shot(focus: 'buried' | 'claimed' | 'both' = 'both'): void {
     this.hud.hideOverlay();
@@ -7397,7 +7412,7 @@ export class Game {
     const klen = Math.hypot(kdx, kdz) || 1;
     target.wx += (kdx / klen) * 0.12;
     target.wz += (kdz / klen) * 0.12;
-    this.renderer.spawnFx(new THREE.Vector3(target.wx, 0.85, target.wz), c.isHero ? 0x88aaff : 0xff4040, 0.32);
+    this.renderer.spawnFx(new THREE.Vector3(target.wx, 0.85, target.wz), combatHitColor(c.kind), 0.32);
     this.renderer.spawnFx(new THREE.Vector3(target.wx, 1.15, target.wz), 0xffddaa, 0.18);
     if (beforeAlive && !target.alive) {
       if (target.isHero && this.grid.countRoom(RoomType.Prison) > 0) {

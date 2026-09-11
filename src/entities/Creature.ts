@@ -7,7 +7,13 @@ import {
   TILE_SIZE,
   Vec2,
 } from '../game/types';
-import { poseScrabblerPickaxe } from '../rendering/meshes';
+import {
+  attackDecayRate,
+  poseCreatureBody,
+  poseCreatureLimbs,
+  walkCadence,
+} from '../rendering/creatureMotion';
+import { poseScrabblerCombatPick, poseScrabblerPickaxe } from '../rendering/meshes';
 
 let nextId = 1;
 
@@ -167,10 +173,9 @@ export class Creature {
     const sleeping = this.job === JobType.Sleep;
     const eating = this.job === JobType.Eat;
     const claiming = this.job === JobType.Claim;
-    const fighting = this.job === JobType.Fight;
     if (eating) this.eatAnim += dt * 21;
-    if (this.moving) this.walkCycle += dt * 10;
-    if (this.attackPulse > 0) this.attackPulse = Math.max(0, this.attackPulse - dt * 4);
+    if (this.moving) this.walkCycle += dt * walkCadence(this.kind);
+    if (this.attackPulse > 0) this.attackPulse = Math.max(0, this.attackPulse - dt * attackDecayRate(this.kind));
     const bob =
       this.kind === CreatureKind.Skitterwing
         ? Math.sin(time * 6 + this.bobPhase) * 0.25 + 0.4
@@ -186,7 +191,15 @@ export class Creature {
                   ? Math.abs(Math.sin(this.walkCycle)) * 0.06
                   : Math.sin(time * 8 + this.bobPhase) * 0.04;
     const yOff = sleeping ? 0.12 : eating ? 0.05 + Math.abs(Math.sin(this.eatAnim * 14)) * 0.08 : claiming ? 0.04 : 0;
-    this.mesh.position.set(this.wx, bob + yOff, this.wz);
+    const motion = {
+      walkCycle: this.walkCycle,
+      moving: this.moving,
+      attack: this.attackPulse,
+      time,
+      lock: sleeping || eating || this.stunTimer > 0,
+    };
+    const body = poseCreatureBody(this.kind, motion);
+    this.mesh.position.set(this.wx, bob + yOff + body.y, this.wz);
     // Smooth Y facing — avoid lookAt snap/jitter
     let face = this.facing;
     let d = this.facingTarget - face;
@@ -194,7 +207,7 @@ export class Creature {
     while (d < -Math.PI) d += Math.PI * 2;
     face += d * Math.min(1, 12 * dt);
     this.facing = face;
-    this.mesh.rotation.y = this.facing;
+    this.mesh.rotation.y = this.facing + (sleeping || eating || this.stunTimer > 0 ? 0 : body.rotY);
     if (this.stunTimer > 0) {
       this.mesh.rotation.z = Math.sin(time * 20) * 0.3;
     } else if (sleeping) {
@@ -204,16 +217,15 @@ export class Creature {
       // Brief peck/bob pose while feasting
       this.mesh.rotation.x = Math.sin(this.eatAnim * 14) * 0.35;
       this.mesh.rotation.z = Math.sin(this.eatAnim * 10) * 0.12;
-    } else if (fighting && this.attackPulse > 0) {
-      this.mesh.rotation.x = this.attackPulse * 0.45;
-      this.mesh.rotation.z = 0;
     } else {
-      this.mesh.rotation.z = 0;
-      this.mesh.rotation.x = 0;
+      this.mesh.rotation.x = body.rotX;
+      this.mesh.rotation.z = body.rotZ;
     }
     if (this.pickaxe) {
       const swinging = this.job === JobType.Dig || this.job === JobType.Mine;
-      if (swinging) {
+      if (this.attackPulse > 0.02 && !swinging) {
+        poseScrabblerCombatPick(this.pickaxe, this.attackPulse);
+      } else if (swinging) {
         this.digAnim += dt;
         poseScrabblerPickaxe(this.pickaxe, this.digAnim, true);
       } else if (digging) {
@@ -224,7 +236,7 @@ export class Creature {
         this.pickaxe.visible = this.isWorker;
       }
     }
-    this.applyWalkLimbs(sleeping || eating || this.stunTimer > 0);
+    poseCreatureLimbs(this.mesh, this.kind, motion);
     if (this.selectRing) {
       this.selectRing.visible = digging || this.held || this.selected;
       this.selectRing.rotation.z = time * 1.5;
@@ -239,21 +251,6 @@ export class Creature {
     } catch (err) {
       console.warn('[underkeep] syncMesh failed', err);
     }
-  }
-
-  private applyWalkLimbs(lock = false): void {
-    const amp = lock ? 0 : this.moving ? 0.55 : 0;
-    const w = this.walkCycle;
-    this.mesh.traverse((o) => {
-      const tag = o.userData?.walkLimb as string | undefined;
-      if (!tag) return;
-      const base = o.userData.baseRot as { x: number; y: number; z: number } | undefined;
-      const bx = base?.x ?? 0;
-      const by = base?.y ?? 0;
-      const bz = base?.z ?? 0;
-      if (tag === 'legL' || tag === 'armR') o.rotation.set(bx + Math.sin(w) * amp, by, bz);
-      else if (tag === 'legR' || tag === 'armL') o.rotation.set(bx + Math.sin(w + Math.PI) * amp, by, bz);
-    });
   }
 
   private updateHealthFlower(time: number): void {

@@ -11,6 +11,7 @@ import {
   attackDecayRate,
   poseCreatureBody,
   poseCreatureLimbs,
+  walkBob,
   walkCadence,
 } from '../rendering/creatureMotion';
 import { poseScrabblerCombatPick, poseScrabblerPickaxe } from '../rendering/meshes';
@@ -176,6 +177,14 @@ export class Creature {
     if (eating) this.eatAnim += dt * 21;
     if (this.moving) this.walkCycle += dt * walkCadence(this.kind);
     if (this.attackPulse > 0) this.attackPulse = Math.max(0, this.attackPulse - dt * attackDecayRate(this.kind));
+    const motion = {
+      walkCycle: this.walkCycle,
+      moving: this.moving && !sleeping && !eating,
+      attack: this.attackPulse,
+      time,
+      lock: sleeping || eating || this.stunTimer > 0,
+    };
+    const body = poseCreatureBody(this.kind, motion);
     const bob =
       this.kind === CreatureKind.Skitterwing
         ? Math.sin(time * 6 + this.bobPhase) * 0.25 + 0.4
@@ -188,18 +197,9 @@ export class Creature {
               : eating
                 ? Math.sin(this.eatAnim * 14 + this.bobPhase) * 0.1
                 : this.moving
-                  ? Math.abs(Math.sin(this.walkCycle)) * 0.06
-                  : Math.sin(time * 8 + this.bobPhase) * 0.04;
+                  ? walkBob(this.kind, motion)
+                  : Math.sin(time * 2.6 + this.bobPhase) * 0.025;
     const yOff = sleeping ? 0.12 : eating ? 0.05 + Math.abs(Math.sin(this.eatAnim * 14)) * 0.08 : claiming ? 0.04 : 0;
-    const motion = {
-      walkCycle: this.walkCycle,
-      moving: this.moving,
-      attack: this.attackPulse,
-      time,
-      lock: sleeping || eating || this.stunTimer > 0,
-    };
-    const body = poseCreatureBody(this.kind, motion);
-    this.mesh.position.set(this.wx, bob + yOff + body.y, this.wz);
     // Smooth Y facing — avoid lookAt snap/jitter
     let face = this.facing;
     let d = this.facingTarget - face;
@@ -207,6 +207,9 @@ export class Creature {
     while (d < -Math.PI) d += Math.PI * 2;
     face += d * Math.min(1, 12 * dt);
     this.facing = face;
+    const lungeX = Math.sin(this.facing) * body.z;
+    const lungeZ = Math.cos(this.facing) * body.z;
+    this.mesh.position.set(this.wx + lungeX, bob + yOff + body.y, this.wz + lungeZ);
     this.mesh.rotation.y = this.facing + (sleeping || eating || this.stunTimer > 0 ? 0 : body.rotY);
     if (this.stunTimer > 0) {
       this.mesh.rotation.z = Math.sin(time * 20) * 0.3;

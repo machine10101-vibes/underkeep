@@ -5,44 +5,75 @@ import { CreatureKind } from '../game/types';
 export interface CreatureMotionState {
   walkCycle: number;
   moving: boolean;
-  /** 1 at impact, decays toward 0. */
+  /**
+   * In the keep: 1 at the moment of impact, then decays to 0.
+   * In Studio with `loopAttack`: a 0–1 cycle (wind → hit → follow → rest).
+   */
   attack: number;
   time: number;
   /** Sleep / eat / stun — freeze limbs on base pose. */
   lock?: boolean;
+  /** Studio looping strike (full wind-up, not impact-only). */
+  loopAttack?: boolean;
 }
 
 export interface CreatureBodyPose {
   y: number;
+  /** Forward lunge along local +Z. */
+  z: number;
   rotX: number;
   rotZ: number;
   rotY: number;
 }
 
+/** Wind-up / impact / follow-through weights for a readable strike. */
+export interface StrikePhases {
+  wind: number;
+  hit: number;
+  follow: number;
+}
+
 export function walkCadence(kind: CreatureKind): number {
   switch (kind) {
     case CreatureKind.Scrabbler:
-      return 16;
+      return 17;
     case CreatureKind.Skitterwing:
       return 8;
     case CreatureKind.Emberling:
-      return 7;
+      return 6.6;
     case CreatureKind.Bonewretch:
-      return 7.4;
+      return 6.8;
     case CreatureKind.Gravemage:
-      return 6;
+      return 5.6;
     case CreatureKind.HeroKnight:
-      return 8;
+      return 7.2;
     case CreatureKind.Rattlekin:
-      return 11;
+      return 11.5;
+    case CreatureKind.Thornwitch:
+      return 9.2;
+    case CreatureKind.HeroArcher:
+      return 9.4;
     default:
       return 10;
   }
 }
 
-/** Seconds-ish visible swing. Slower than the old dt*4 snap. */
-export function attackDecayRate(_kind: CreatureKind): number {
-  return 2.6;
+export function attackDecayRate(kind: CreatureKind): number {
+  switch (kind) {
+    case CreatureKind.HeroKnight:
+    case CreatureKind.Gravemage:
+      return 2.05;
+    case CreatureKind.Rattlekin:
+    case CreatureKind.Thornwitch:
+      return 2.35;
+    case CreatureKind.HeroArcher:
+      return 2.2;
+    case CreatureKind.Scrabbler:
+    case CreatureKind.Skitterwing:
+      return 3.05;
+    default:
+      return 2.55;
+  }
 }
 
 export function combatHitColor(kind: CreatureKind): number {
@@ -70,6 +101,69 @@ export function combatHitColor(kind: CreatureKind): number {
   }
 }
 
+/**
+ * Map an attack value to wind / hit / follow.
+ * `loop` = Studio cycle 0–1. Otherwise 1 is impact and the value decays to rest.
+ */
+export function strikePhases(attack: number, loop = false): StrikePhases {
+  if (loop) {
+    const u = ((attack % 1) + 1) % 1;
+    if (u < 0.26) {
+      const t = u / 0.26;
+      return { wind: t * t, hit: 0, follow: 0 };
+    }
+    if (u < 0.38) {
+      const t = (u - 0.26) / 0.12;
+      const hit = t * t * (3 - 2 * t);
+      return { wind: 1 - hit, hit, follow: 0 };
+    }
+    if (u < 0.68) {
+      const t = (u - 0.38) / 0.3;
+      return { wind: 0, hit: 1 - t, follow: t };
+    }
+    const t = (u - 0.68) / 0.32;
+    return { wind: 0, hit: 0, follow: Math.max(0, 1 - t) };
+  }
+  const a = Math.max(0, Math.min(1, attack));
+  if (a <= 0.001) return { wind: 0, hit: 0, follow: 0 };
+  if (a > 0.7) {
+    const t = (a - 0.7) / 0.3;
+    return { wind: 0, hit: t, follow: 1 - t };
+  }
+  if (a > 0.32) {
+    const t = (a - 0.32) / 0.38;
+    return { wind: 0, hit: 0, follow: t };
+  }
+  return { wind: 0, hit: 0, follow: (a / 0.32) * 0.4 };
+}
+
+export function walkBob(kind: CreatureKind, s: CreatureMotionState): number {
+  if (!s.moving) return 0;
+  const w = s.walkCycle;
+  switch (kind) {
+    case CreatureKind.Scrabbler:
+      return Math.abs(Math.sin(w)) * 0.04;
+    case CreatureKind.HeroKnight:
+      return Math.abs(Math.sin(w)) * 0.12;
+    case CreatureKind.Bonewretch:
+      return Math.sin(w) > 0.05 ? Math.abs(Math.sin(w)) * 0.15 : 0.015;
+    case CreatureKind.Emberling:
+      return Math.abs(Math.sin(w * 0.5)) * 0.035;
+    case CreatureKind.Skitterwing:
+      return 0;
+    case CreatureKind.Gravemage:
+      return Math.abs(Math.sin(w)) * 0.025;
+    case CreatureKind.Rattlekin:
+      return Math.abs(Math.sin(w)) * 0.07 + Math.abs(Math.sin(w * 2)) * 0.02;
+    case CreatureKind.Thornwitch:
+      return Math.abs(Math.sin(w)) * 0.05;
+    case CreatureKind.HeroArcher:
+      return Math.abs(Math.sin(w)) * 0.055;
+    default:
+      return Math.abs(Math.sin(w)) * 0.06;
+  }
+}
+
 function defaultGait(limb: string): number {
   if (limb === 'legL' || limb === 'armR') return 0;
   if (limb === 'legR' || limb === 'armL') return 1;
@@ -90,10 +184,10 @@ function applyRot(
 
 /** Per-species gait + attack overlays on tagged `walkLimb` nodes. */
 export function poseCreatureLimbs(root: THREE.Object3D, kind: CreatureKind, s: CreatureMotionState): void {
-  const attack = s.attack;
   const moving = s.moving;
   const t = s.walkCycle;
   const lock = !!s.lock;
+  const p = strikePhases(s.attack, !!s.loopAttack);
 
   root.traverse((ch) => {
     const limb = ch.userData.walkLimb as string | undefined;
@@ -112,82 +206,93 @@ export function poseCreatureLimbs(root: THREE.Object3D, kind: CreatureKind, s: C
     let dz = 0;
 
     if (kind === CreatureKind.Skitterwing && (limb === 'armL' || limb === 'armR' || limb === 'wingH')) {
-      const flap = Math.sin(s.time * 22 + phase) * (limb === 'wingH' ? 0.62 : 0.88) + (moving ? 0.12 : 0);
+      const flap = Math.sin(s.time * 24 + phase) * (limb === 'wingH' ? 0.7 : 0.98) + (moving ? 0.16 : 0.04);
       dx = flap;
     } else if (kind === CreatureKind.Emberling) {
       if (limb === 'tail') {
-        dy = Math.sin(t * 1.35 + s.time * 0.8) * (moving ? 0.55 : 0.18);
-        dz = Math.sin(t * 0.7) * (moving ? 0.16 : 0.05);
+        dy = Math.sin(t * 1.45 + s.time * 0.9) * (moving ? 0.7 : 0.22);
+        dz = Math.sin(t * 0.7 + 0.4) * (moving ? 0.22 : 0.07);
       } else {
-        dx = Math.sin(t + phase) * (moving ? 0.22 : 0.06);
+        dx = Math.sin(t + phase) * (moving ? 0.28 : 0.07);
       }
     } else if (kind === CreatureKind.Bonewretch) {
-      const limp = limb === 'legR' ? 0.88 : limb === 'legL' ? 0.22 : limb === 'armR' ? 0.18 : 0.4;
-      dx = Math.sin(t + phase) * limp * (moving ? 1 : 0.1);
-      if (limb === 'armR' && moving) dx += 0.08;
+      const limp = limb === 'legR' ? 1.05 : limb === 'legL' ? 0.18 : limb === 'armR' ? 0.22 : 0.42;
+      dx = Math.sin(t + phase) * limp * (moving ? 1 : 0.08);
+      if (limb === 'armR' && moving) {
+        dx += 0.12;
+        dz += Math.sin(t) * 0.12;
+      }
     } else if (kind === CreatureKind.Scrabbler) {
-      dx = Math.sin(t * 1.15 + phase) * (moving ? 0.72 : 0.08);
+      dx = Math.sin(t * 1.2 + phase) * (moving ? 0.88 : 0.1);
     } else if (kind === CreatureKind.Gravemage) {
-      dx = Math.sin(t + phase) * (moving ? 0.16 : 0.04);
+      dx = Math.sin(t + phase) * (moving ? 0.14 : 0.035);
     } else if (kind === CreatureKind.HeroKnight) {
-      dx = Math.sin(t + phase) * (moving ? 0.38 : 0.04);
+      dx = Math.sin(t + phase) * (moving ? 0.55 : 0.04);
     } else if (kind === CreatureKind.HeroArcher) {
-      dx = Math.sin(t + phase) * (moving ? 0.42 : 0.05);
+      dx = Math.sin(t + phase) * (moving ? 0.5 : 0.05);
     } else if (kind === CreatureKind.Thornwitch) {
-      dx = Math.sin(t + phase) * (moving ? 0.4 : 0.06);
-      if (limb === 'legL' || limb === 'legR') dy += Math.sin(t * 0.5) * (moving ? 0.08 : 0.02);
-    } else if (kind === CreatureKind.Rattlekin) {
-      dx = Math.sin(t + phase) * (moving ? 0.52 : 0.07);
-      if (moving) dz += Math.sin(t * 3 + phase) * 0.04;
-    } else {
       dx = Math.sin(t + phase) * (moving ? 0.48 : 0.06);
+      if (limb === 'legL' || limb === 'legR') dy += Math.sin(t * 0.5) * (moving ? 0.12 : 0.03);
+    } else if (kind === CreatureKind.Rattlekin) {
+      dx = Math.sin(t + phase) * (moving ? 0.64 : 0.07);
+      if (moving) dz += Math.sin(t * 3 + phase) * 0.055;
+    } else {
+      dx = Math.sin(t + phase) * (moving ? 0.5 : 0.06);
     }
 
-    if (attack > 0.01) {
-      const a = attack;
+    if (p.wind + p.hit + p.follow > 0.01) {
       if (kind === CreatureKind.Scrabbler && (limb === 'armR' || limb === 'armL')) {
-        dx += -a * 0.35;
+        dx += -p.wind * 0.2 - p.hit * 0.45 - p.follow * 0.12;
       }
       if (kind === CreatureKind.Rattlekin && limb === 'armR') {
-        dx += -a * 1.35;
-        dz += a * 0.22;
+        dx += p.wind * 1.05 - p.hit * 1.85 - p.follow * 0.55;
+        dz += p.wind * -0.15 + p.hit * 0.4;
+      }
+      if (kind === CreatureKind.Rattlekin && limb === 'armL') {
+        dx += p.hit * 0.25;
+        dz += p.hit * 0.2;
       }
       if (kind === CreatureKind.HeroKnight && limb === 'armR') {
-        dx += -a * 1.22;
-        dz += -a * 0.18;
+        dx += p.wind * 0.95 - p.hit * 1.75 - p.follow * 0.45;
+        dz += -p.wind * 0.12 - p.hit * 0.28;
       }
       if (kind === CreatureKind.HeroKnight && limb === 'armL') {
-        dz += a * 0.32;
-        dx += a * 0.12;
+        dz += p.wind * 0.12 + p.hit * 0.48 + p.follow * 0.18;
+        dx += p.hit * 0.18;
       }
       if (kind === CreatureKind.HeroArcher && limb === 'armL') {
-        dz += -a * 0.72;
-        dx += -a * 0.15;
+        dz += -p.wind * 1.15 - p.hit * 0.25 + p.follow * 0.35;
+        dx += -p.wind * 0.2;
       }
       if (kind === CreatureKind.HeroArcher && limb === 'armR') {
-        dz += a * 0.18;
-        dx += -a * 0.55;
+        dx += -p.wind * 0.25 - p.hit * 1.15 - p.follow * 0.2;
+        dz += p.wind * 0.35 + p.hit * 0.15;
       }
       if (kind === CreatureKind.Thornwitch && limb === 'armR') {
-        dy += Math.sin(a * Math.PI) * 1.35;
-        dx += -a * 0.45;
+        dy += -p.wind * 0.85 + p.hit * 1.65 + p.follow * 0.35;
+        dx += -p.wind * 0.2 - p.hit * 0.7;
+        dz += p.hit * 0.35;
       }
       if (kind === CreatureKind.Gravemage && limb === 'armR') {
-        dx += -a * 0.95;
-        dy += a * 0.28;
+        dx += -p.wind * 0.55 - p.hit * 1.15 - p.follow * 0.25;
+        dy += p.wind * 0.45 + p.hit * 0.2;
+      }
+      if (kind === CreatureKind.Gravemage && limb === 'armL') {
+        dx += p.hit * 0.2;
+        dy += p.wind * 0.15;
       }
       if (kind === CreatureKind.Bonewretch && limb === 'armR') {
-        dx += -a * 0.75;
-        dz += a * 0.55;
+        dx += p.wind * 0.35 - p.hit * 1.05 - p.follow * 0.25;
+        dz += -p.wind * 0.4 + p.hit * 0.85;
       }
       if (kind === CreatureKind.Emberling && limb === 'tail') {
-        dy += -a * 0.85;
+        dy += p.wind * 0.45 - p.hit * 1.15 - p.follow * 0.3;
       }
       if (kind === CreatureKind.Emberling && (limb === 'armL' || limb === 'armR')) {
-        dx += -a * 0.45;
+        dx += -p.wind * 0.15 - p.hit * 0.7;
       }
       if (kind === CreatureKind.Skitterwing && (limb === 'armL' || limb === 'armR' || limb === 'wingH')) {
-        dx += a * 0.35;
+        dx += p.wind * 0.25 + p.hit * 0.55 + p.follow * 0.15;
       }
     }
 
@@ -195,46 +300,58 @@ export function poseCreatureLimbs(root: THREE.Object3D, kind: CreatureKind, s: C
   });
 }
 
-/** Extra body hop / lean on top of the existing bob. */
+/** Extra body hop / lean / lunge on top of the existing bob. */
 export function poseCreatureBody(kind: CreatureKind, s: CreatureMotionState): CreatureBodyPose {
-  const a = s.attack;
   const moving = s.moving;
+  const p = strikePhases(s.attack, !!s.loopAttack);
   let y = 0;
+  let z = 0;
   let rotX = 0;
   let rotZ = 0;
   let rotY = 0;
 
-  if (s.lock) return { y, rotX, rotZ, rotY };
+  if (s.lock) return { y, z, rotX, rotZ, rotY };
 
   if (kind === CreatureKind.Skitterwing) {
-    y = a * 0.12;
-    rotX = a * -0.28;
+    y = p.wind * 0.18 - p.hit * 0.22 + p.follow * 0.06;
+    rotX = -p.wind * 0.12 - p.hit * 0.42 - p.follow * 0.1;
+    z = p.hit * 0.28 + p.follow * 0.08;
   } else if (kind === CreatureKind.Emberling) {
-    rotZ = Math.sin(s.walkCycle) * (moving ? 0.14 : 0.03);
-    rotX = a * 0.52;
-    y = a * 0.1;
+    rotY = Math.sin(s.walkCycle) * (moving ? 0.22 : 0.05);
+    rotZ = Math.sin(s.walkCycle + 0.7) * (moving ? 0.16 : 0.04);
+    rotX = p.wind * 0.18 + p.hit * 0.62 + p.follow * 0.2;
+    y = p.hit * 0.12;
+    z = p.hit * 0.34 + p.follow * 0.1;
   } else if (kind === CreatureKind.Bonewretch) {
-    rotZ = moving ? 0.1 + Math.sin(s.walkCycle) * 0.07 : 0.06;
-    rotX = 0.1 + a * 0.32;
+    rotZ = moving ? 0.12 + Math.sin(s.walkCycle) * 0.09 : 0.06;
+    rotX = 0.1 + p.wind * 0.12 + p.hit * 0.4 + p.follow * 0.12;
+    z = p.hit * 0.18;
   } else if (kind === CreatureKind.Gravemage) {
-    y = Math.sin(s.time * 2.2) * 0.035 + a * 0.04;
-    rotX = a * -0.22;
+    y = Math.sin(s.time * 2.2) * 0.04 + p.wind * 0.06 + p.hit * 0.02;
+    rotX = -p.wind * 0.08 - p.hit * 0.28 - p.follow * 0.08;
+    rotY = p.hit * 0.08;
   } else if (kind === CreatureKind.Thornwitch) {
-    rotY = Math.sin(s.walkCycle * 0.5) * (moving ? 0.14 : 0.04);
-    rotX = a * 0.16;
+    rotY = Math.sin(s.walkCycle * 0.5) * (moving ? 0.18 : 0.05) + p.hit * 0.22;
+    rotX = p.hit * 0.18;
+    z = p.hit * 0.12;
   } else if (kind === CreatureKind.Rattlekin) {
-    rotY = moving ? Math.sin(s.walkCycle * 2) * 0.05 : 0;
-    rotX = a * 0.4;
+    rotY = moving ? Math.sin(s.walkCycle * 2) * 0.07 : 0;
+    rotX = p.wind * -0.12 + p.hit * 0.48 + p.follow * 0.16;
+    rotZ = p.hit * -0.08;
+    z = p.hit * 0.3 + p.follow * 0.1;
   } else if (kind === CreatureKind.HeroKnight) {
-    rotX = a * 0.26;
-    rotZ = moving ? Math.sin(s.walkCycle) * 0.03 : 0;
+    rotX = p.wind * -0.08 + p.hit * 0.32 + p.follow * 0.1;
+    rotZ = (moving ? Math.sin(s.walkCycle) * 0.04 : 0) + p.hit * -0.06;
+    z = p.hit * 0.32 + p.follow * 0.12;
   } else if (kind === CreatureKind.HeroArcher) {
-    rotX = a * -0.14;
-    rotY = a * -0.08;
+    rotX = -p.wind * 0.1 - p.hit * 0.06;
+    rotY = -p.wind * 0.12 - p.hit * 0.04;
+    z = -p.wind * 0.1 + p.hit * 0.06;
   } else if (kind === CreatureKind.Scrabbler) {
-    rotX = a * 0.2;
-    rotZ = moving ? Math.sin(s.walkCycle * 2) * 0.045 : 0;
+    rotX = p.wind * -0.08 + p.hit * 0.28 + p.follow * 0.08;
+    rotZ = moving ? Math.sin(s.walkCycle * 2) * 0.055 : 0;
+    z = p.hit * 0.16;
   }
 
-  return { y, rotX, rotZ, rotY };
+  return { y, z, rotX, rotZ, rotY };
 }

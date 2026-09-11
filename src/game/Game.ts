@@ -5020,6 +5020,20 @@ export class Game {
     this.hud.setTooltip('Species motion — each gait and strike matches the body');
   }
 
+  /** QA/screenshot: wind-up, hit, and follow-through on each species. */
+  preparePass1019Shot(): void {
+    this.preparePass1018Shot();
+    let i = 0;
+    for (const c of this.creatures) {
+      if (!c.alive) continue;
+      c.moving = i % 3 === 0;
+      c.walkCycle = 0.4 + i * 0.7;
+      c.attackPulse = i % 3 === 1 ? 0.92 : i % 3 === 2 ? 0.55 : 0.2;
+      i += 1;
+    }
+    this.hud.setTooltip('Strikes — wind-up, hit, and follow-through per species');
+  }
+
   /** QA/screenshot: the map Portal — buried blot, then claimed gateway. */
   preparePass108Shot(focus: 'buried' | 'claimed' | 'both' = 'both'): void {
     this.hud.hideOverlay();

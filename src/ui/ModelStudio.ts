@@ -36,7 +36,7 @@ import {
   poseScrabblerPickaxe,
   tileMaterial,
 } from '../rendering/meshes';
-import { poseCreatureBody, poseCreatureLimbs } from '../rendering/creatureMotion';
+import { poseCreatureBody, poseCreatureLimbs, walkBob } from '../rendering/creatureMotion';
 
 export type StudioPose = 'idle' | 'walk' | 'dig' | 'attack';
 
@@ -547,20 +547,22 @@ export class ModelStudio {
     const attacking = pose === 'attack';
     const dig = pose === 'dig';
     const kind = (mesh.userData.creatureKind ?? this.entry?.id) as CreatureKind;
-    const attack = attacking ? 0.55 + 0.45 * Math.sin(t * 7) : 0;
+    const period = 1.2;
+    const attack = attacking ? (t % period) / period : 0;
     const motion = {
-      walkCycle: t * (walk ? 10 : attacking ? 4 : 2),
+      walkCycle: t * (walk ? 10 : 3),
       moving: walk,
       attack,
       time: t,
       lock: false,
+      loopAttack: attacking,
     };
     poseCreatureLimbs(mesh, kind, motion);
     const body = poseCreatureBody(kind, motion);
     const pick = (mesh as THREE.Group & { pickaxe?: THREE.Object3D }).pickaxe;
     if (pick) {
       if (dig) poseScrabblerPickaxe(pick, t, true);
-      else if (attacking && this.entry?.id === 'scrabbler') poseScrabblerCombatPick(pick, attack);
+      else if (attacking && this.entry?.id === 'scrabbler') poseScrabblerCombatPick(pick, attack, true);
       else poseScrabblerPickaxe(pick, 0, false);
       if (!dig) pick.visible = this.entry?.id === 'scrabbler';
     }
@@ -574,21 +576,14 @@ export class ModelStudio {
       this.stage.remove(this.digWall);
       this.digWall = null;
     }
+    mesh.rotation.x = body.rotX;
+    mesh.rotation.z = body.rotZ;
+    mesh.rotation.y = body.rotY;
+    mesh.position.z = body.z;
     if (walk) {
-      mesh.position.y = Math.abs(Math.sin(t * 8)) * 0.06 + body.y;
-      mesh.rotation.x = body.rotX;
-      mesh.rotation.z = body.rotZ;
-      mesh.position.z = 0;
-    } else if (attacking) {
-      mesh.rotation.x = body.rotX;
-      mesh.rotation.z = body.rotZ;
-      mesh.position.y = body.y;
-      mesh.position.z = attack * 0.16;
+      mesh.position.y = walkBob(kind, motion) + body.y;
     } else {
       mesh.position.y = body.y;
-      mesh.rotation.x = body.rotX;
-      mesh.rotation.z = body.rotZ;
-      mesh.position.z = 0;
     }
   }
 }

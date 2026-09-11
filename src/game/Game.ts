@@ -4855,6 +4855,63 @@ export class Game {
     this.hud.setTooltip('Fewer torch lights, no bloom — cavern stays lit without the hiccup');
   }
 
+  /** QA/screenshot: every species in a keeper-view lineup. */
+  preparePass1015Shot(): void {
+    this.hud.hideOverlay();
+    const hx = this.grid.heartPos.x;
+    const hy = this.grid.heartPos.y;
+    const lineup: CreatureKind[] = [
+      CreatureKind.Scrabbler,
+      CreatureKind.Skitterwing,
+      CreatureKind.Rattlekin,
+      CreatureKind.Emberling,
+      CreatureKind.Gravemage,
+      CreatureKind.Thornwitch,
+      CreatureKind.Bonewretch,
+      CreatureKind.HeroKnight,
+      CreatureKind.HeroArcher,
+    ];
+    const spots: Array<[number, number]> = [
+      [-2, 1],
+      [-1, 1],
+      [0, 1],
+      [1, 1],
+      [2, 1],
+      [-2, -1],
+      [-1, -1],
+      [1, -1],
+      [2, -1],
+    ];
+    for (let i = 0; i < lineup.length; i++) {
+      const [dx, dy] = spots[i];
+      const x = hx + dx;
+      const y = hy + dy;
+      const tile = this.grid.get(x, y);
+      if (tile && tile.kind !== TileKind.Heart) {
+        tile.kind = TileKind.Claimed;
+        tile.room = RoomType.None;
+        tile.claimedProgress = 1;
+        tile.fortified = false;
+        tile.explored = true;
+        tile.mark = MarkType.None;
+      }
+      const c = this.spawnCreature(lineup[i], x, y);
+      const w = this.grid.tileToWorld(x, y);
+      c.wx = w.x;
+      c.wz = w.z;
+      c.job = JobType.Idle;
+      c.jobTarget = null;
+      c.setPath([]);
+    }
+    this.rebuild();
+    this.updateMinimap();
+    const mid = this.grid.tileToWorld(hx, hy);
+    this.camTarget.set(mid.x, 0.7, mid.z);
+    this.renderer.camera.position.set(mid.x + 1.8, 8.5, mid.z + 7.2);
+    this.renderer.camera.lookAt(this.camTarget);
+    this.hud.setTooltip('Minions and heroes — each silhouette matches the name');
+  }
+
   /** QA/screenshot: the map Portal — buried blot, then claimed gateway. */
   preparePass108Shot(focus: 'buried' | 'claimed' | 'both' = 'both'): void {
     this.hud.hideOverlay();

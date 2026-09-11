@@ -618,6 +618,7 @@ export function makeCreatureMesh(color: number, scale: number, kind: string): TH
   });
 
   dressCreature(g, kind, bodyMat);
+  g.userData.creatureKind = kind;
 
   const flower = makeHealthFlower(kind === 'hero_knight' || kind === 'hero_archer' || kind === 'hero');
   // Counter-scale so flowers stay readable at overview regardless of body scale
@@ -1847,6 +1848,15 @@ export function poseScrabblerPickaxe(pick: THREE.Object3D, time: number, strikin
   // Stay aimed at the wall face: raised at the upper third, impact mid-face.
   pick.rotation.x = -0.32 + impact * 0.4;
   pick.rotation.y = 0;
+  pick.rotation.z = 0.04;
+}
+
+/** Combat chop — `attack` is 1 at impact and decays to the rest pose. */
+export function poseScrabblerCombatPick(pick: THREE.Object3D, attack: number): void {
+  pick.visible = true;
+  const a = Math.max(0, Math.min(1, attack));
+  pick.rotation.x = -0.22 + a * 0.55;
+  pick.rotation.y = a * 0.05;
   pick.rotation.z = 0.04;
 }
 

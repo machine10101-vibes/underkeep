@@ -32,9 +32,11 @@ import {
   makeWallFaceDetail,
   makeWallGeo,
   makeWaterMesh,
+  poseScrabblerCombatPick,
   poseScrabblerPickaxe,
   tileMaterial,
 } from '../rendering/meshes';
+import { poseCreatureBody, poseCreatureLimbs } from '../rendering/creatureMotion';
 
 export type StudioPose = 'idle' | 'walk' | 'dig' | 'attack';
 
@@ -103,7 +105,7 @@ function roomPreview(room: RoomType): THREE.Group {
 }
 
 const CREATURE_POSES: StudioPose[] = ['idle', 'walk', 'attack'];
-const WORKER_POSES: StudioPose[] = ['idle', 'walk', 'dig'];
+const WORKER_POSES: StudioPose[] = ['idle', 'walk', 'dig', 'attack'];
 
 const CATALOG: CatalogEntry[] = [
   {
@@ -513,8 +515,8 @@ export class ModelStudio {
     if (!Number.isFinite(center.y)) center.set(0, 0.8, 0);
     this.look.copy(center);
     this.spherical.radius = Math.max(2.2, size.length() * 1.15);
-    this.spherical.phi = 1.08;
-    this.spherical.theta = 0.28;
+    this.spherical.phi = 1.2;
+    this.spherical.theta = 0.62;
     this.autoSpin = false;
     document.getElementById('studio-spin')?.classList.remove('on');
   }
@@ -542,23 +544,24 @@ export class ModelStudio {
 
   private applyCreatureMotion(mesh: THREE.Object3D, pose: StudioPose, t: number, _dt: number): void {
     const walk = pose === 'walk';
-    const attack = pose === 'attack';
+    const attacking = pose === 'attack';
     const dig = pose === 'dig';
-    const amp = walk ? 0.55 : 0;
-    const w = t * (walk ? 8 : 0);
-    mesh.traverse((o) => {
-      const tag = o.userData?.walkLimb as string | undefined;
-      if (!tag) return;
-      const base = o.userData.baseRot as { x: number; y: number; z: number } | undefined;
-      const bx = base?.x ?? 0;
-      const by = base?.y ?? 0;
-      const bz = base?.z ?? 0;
-      if (tag === 'legL' || tag === 'armR') o.rotation.set(bx + Math.sin(w) * amp, by, bz);
-      else if (tag === 'legR' || tag === 'armL') o.rotation.set(bx + Math.sin(w + Math.PI) * amp, by, bz);
-    });
+    const kind = (mesh.userData.creatureKind ?? this.entry?.id) as CreatureKind;
+    const attack = attacking ? 0.55 + 0.45 * Math.sin(t * 7) : 0;
+    const motion = {
+      walkCycle: t * (walk ? 10 : attacking ? 4 : 2),
+      moving: walk,
+      attack,
+      time: t,
+      lock: false,
+    };
+    poseCreatureLimbs(mesh, kind, motion);
+    const body = poseCreatureBody(kind, motion);
     const pick = (mesh as THREE.Group & { pickaxe?: THREE.Object3D }).pickaxe;
     if (pick) {
-      poseScrabblerPickaxe(pick, t, dig);
+      if (dig) poseScrabblerPickaxe(pick, t, true);
+      else if (attacking && this.entry?.id === 'scrabbler') poseScrabblerCombatPick(pick, attack);
+      else poseScrabblerPickaxe(pick, 0, false);
       if (!dig) pick.visible = this.entry?.id === 'scrabbler';
     }
     if (dig && this.entry?.id === 'scrabbler') {
@@ -572,13 +575,19 @@ export class ModelStudio {
       this.digWall = null;
     }
     if (walk) {
-      mesh.position.y = Math.abs(Math.sin(t * 8)) * 0.06;
-    } else if (attack) {
-      mesh.rotation.x = Math.sin(t * 9) * 0.22;
-      mesh.position.z = Math.sin(t * 9) * 0.12;
+      mesh.position.y = Math.abs(Math.sin(t * 8)) * 0.06 + body.y;
+      mesh.rotation.x = body.rotX;
+      mesh.rotation.z = body.rotZ;
+      mesh.position.z = 0;
+    } else if (attacking) {
+      mesh.rotation.x = body.rotX;
+      mesh.rotation.z = body.rotZ;
+      mesh.position.y = body.y;
+      mesh.position.z = attack * 0.16;
     } else {
-      mesh.position.y = 0;
-      mesh.rotation.x = 0;
+      mesh.position.y = body.y;
+      mesh.rotation.x = body.rotX;
+      mesh.rotation.z = body.rotZ;
       mesh.position.z = 0;
     }
   }

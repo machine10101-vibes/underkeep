@@ -55,7 +55,10 @@ const POSE_LABEL: Record<StudioPose, string> = {
 
 function creatureMesh(kind: CreatureKind): THREE.Group {
   const stats = CREATURE_STATS[kind];
-  return makeCreatureMesh(stats.color, stats.scale, kind);
+  const mesh = makeCreatureMesh(stats.color, stats.scale, kind);
+  const extras = mesh as THREE.Group & { healthFlower?: THREE.Object3D };
+  if (extras.healthFlower) extras.healthFlower.visible = false;
+  return mesh;
 }
 
 function solidTile(kind: TileKind): THREE.Group {

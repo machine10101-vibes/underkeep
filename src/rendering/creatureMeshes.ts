@@ -120,75 +120,75 @@ export function dressCreature(g: THREE.Group, kind: string, bodyMat: THREE.MeshS
 }
 
 /** Beetle-worker: split elytra, horn, mandibles, six jointed legs, wall-aimed pick. */
-function dressScrabbler(g: THREE.Group, bodyMat: THREE.MeshStandardMaterial): void {
-  const shellMat = mat({ color: 0x3d5a24, metalness: 0.28, roughness: 0.42, emissive: 0x1a280c, emissiveIntensity: 0.18 });
-  const plateMat = mat({ color: 0x2a4018, metalness: 0.35, roughness: 0.38, emissive: 0x142010, emissiveIntensity: 0.14 });
-  const headMat = mat({ color: 0x8ab050, metalness: 0.12, roughness: 0.55 });
-  const clawMat = mat({ color: 0xe8e0b0, metalness: 0.72, roughness: 0.26 });
-  const dark = mat({ color: 0x243018, roughness: 0.7 });
+function dressScrabbler(g: THREE.Group, _bodyMat: THREE.MeshStandardMaterial): void {
+  const belly = mat({ color: 0xc6e070, metalness: 0.08, roughness: 0.55, emissive: 0x3a5010, emissiveIntensity: 0.12 });
+  const shellMat = mat({ color: 0x1a2e0c, metalness: 0.28, roughness: 0.42, emissive: 0x0c1806, emissiveIntensity: 0.16 });
+  const plateMat = mat({ color: 0x0e1a08, metalness: 0.35, roughness: 0.38 });
+  const headMat = mat({ color: 0x7aaa38, metalness: 0.12, roughness: 0.55 });
+  const clawMat = mat({ color: 0xf0e8b8, metalness: 0.72, roughness: 0.26 });
+  const dark = mat({ color: 0x1a2010, roughness: 0.7 });
 
-  const abdomen = new THREE.Mesh(new THREE.SphereGeometry(0.38, 12, 10), bodyMat);
+  const abdomen = new THREE.Mesh(new THREE.SphereGeometry(0.38, 12, 10), belly);
   abdomen.scale.set(1.15, 0.72, 1.45);
   abdomen.position.set(0, 0.36, -0.08);
   abdomen.castShadow = true;
   g.add(abdomen);
 
-  // Split elytra — two wing-cases with a center seam so it reads as a beetle
+  // Split elytra — two dark wing-cases with a bright center seam
   for (const sx of [-1, 1] as const) {
-    const elytron = new THREE.Mesh(new THREE.SphereGeometry(0.28, 10, 8), shellMat);
-    elytron.scale.set(0.72, 0.48, 1.15);
-    elytron.position.set(sx * 0.16, 0.54, -0.02);
-    elytron.rotation.z = sx * -0.18;
+    const elytron = new THREE.Mesh(new THREE.SphereGeometry(0.3, 10, 8), shellMat);
+    elytron.scale.set(0.78, 0.52, 1.2);
+    elytron.position.set(sx * 0.18, 0.56, -0.04);
+    elytron.rotation.z = sx * -0.22;
     elytron.castShadow = true;
     g.add(elytron);
-    part(g, new THREE.BoxGeometry(0.04, 0.05, 0.42), plateMat, sx * 0.14, 0.62, -0.02);
+    part(g, new THREE.BoxGeometry(0.05, 0.06, 0.46), plateMat, sx * 0.16, 0.66, -0.04);
   }
-  part(g, new THREE.BoxGeometry(0.03, 0.06, 0.52), plateMat, 0, 0.6, -0.04);
+  part(g, new THREE.BoxGeometry(0.04, 0.08, 0.56), glow(0x8ab040), 0, 0.64, -0.04);
 
   const thorax = new THREE.Mesh(new THREE.SphereGeometry(0.22, 10, 8), shellMat);
-  thorax.scale.set(1.15, 0.75, 0.9);
+  thorax.scale.set(1.2, 0.78, 0.95);
   thorax.position.set(0, 0.46, 0.28);
   thorax.castShadow = true;
   g.add(thorax);
 
   const head = new THREE.Mesh(new THREE.SphereGeometry(0.18, 10, 8), headMat);
-  head.scale.set(1.15, 0.85, 1.1);
-  head.position.set(0, 0.44, 0.46);
+  head.scale.set(1.2, 0.88, 1.15);
+  head.position.set(0, 0.46, 0.5);
   head.castShadow = true;
   g.add(head);
-  // Horn / frill — beetle, not a blob
-  part(g, new THREE.ConeGeometry(0.05, 0.22, 5), clawMat, 0, 0.62, 0.5, 0.55, 0, 0);
-  part(g, new THREE.BoxGeometry(0.22, 0.04, 0.06), plateMat, 0, 0.52, 0.38);
+  part(g, new THREE.ConeGeometry(0.07, 0.36, 5), clawMat, 0, 0.7, 0.56, 0.45, 0, 0);
+  part(g, new THREE.BoxGeometry(0.24, 0.05, 0.07), plateMat, 0, 0.54, 0.4);
 
   const eyeMat = glow(0xffee66);
   for (const sx of [-1, 1] as const) {
-    part(g, new THREE.SphereGeometry(0.055, 6, 6), eyeMat, sx * 0.1, 0.5, 0.6);
-    const mandible = new THREE.Mesh(new THREE.ConeGeometry(0.05, 0.26, 5), clawMat);
-    mandible.position.set(sx * 0.09, 0.34, 0.62);
-    mandible.rotation.set(1.2, 0, sx * 0.55);
+    part(g, new THREE.SphereGeometry(0.07, 6, 6), eyeMat, sx * 0.12, 0.52, 0.64);
+    const mandible = new THREE.Mesh(new THREE.ConeGeometry(0.07, 0.34, 5), clawMat);
+    mandible.position.set(sx * 0.11, 0.32, 0.68);
+    mandible.rotation.set(1.15, 0, sx * 0.62);
     mandible.castShadow = true;
     g.add(mandible);
-    const ant = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.008, 0.3, 4), dark);
-    ant.position.set(sx * 0.08, 0.66, 0.52);
-    ant.rotation.set(-0.75, 0, sx * 0.4);
+    const ant = new THREE.Mesh(new THREE.CylinderGeometry(0.014, 0.01, 0.34, 4), dark);
+    ant.position.set(sx * 0.09, 0.7, 0.54);
+    ant.rotation.set(-0.75, 0, sx * 0.45);
     g.add(ant);
-    part(g, new THREE.SphereGeometry(0.03, 5, 5), headMat, sx * 0.16, 0.78, 0.4);
+    part(g, new THREE.SphereGeometry(0.035, 5, 5), headMat, sx * 0.18, 0.84, 0.4);
   }
 
-  const legMat = mat({ color: 0x3a4828, roughness: 0.7 });
+  const legMat = mat({ color: 0x2a2010, roughness: 0.7 });
   const zLegs = [-0.24, 0.0, 0.22];
   for (const sx of [-1, 1] as const) {
     zLegs.forEach((sz, i) => {
       const tag = i === 0 ? (sx < 0 ? 'legL' : 'legR') : undefined;
-      const hip = tagged(sx * 0.3, 0.28, sz, 0.12, 0, sx * 0.9, tag);
-      part(hip, new THREE.CylinderGeometry(0.03, 0.022, 0.2, 5), legMat, 0, -0.02, 0, 0.35, 0, 0);
-      part(hip, new THREE.CylinderGeometry(0.022, 0.016, 0.18, 4), dark, sx * 0.02, -0.16, 0.04, 0.7, 0, sx * 0.15);
-      part(hip, new THREE.ConeGeometry(0.02, 0.08, 4), clawMat, sx * 0.03, -0.26, 0.08, 1.1, 0, 0);
+      const hip = tagged(sx * 0.34, 0.3, sz, 0.12, 0, sx * 1.05, tag);
+      part(hip, new THREE.CylinderGeometry(0.04, 0.028, 0.24, 5), legMat, 0, -0.02, 0, 0.35, 0, 0);
+      part(hip, new THREE.CylinderGeometry(0.028, 0.02, 0.2, 4), dark, sx * 0.02, -0.18, 0.05, 0.7, 0, sx * 0.15);
+      part(hip, new THREE.ConeGeometry(0.028, 0.1, 4), clawMat, sx * 0.03, -0.28, 0.1, 1.1, 0, 0);
       g.add(hip);
     });
-    const claw = new THREE.Mesh(new THREE.ConeGeometry(0.075, 0.3, 5), clawMat);
+    const claw = new THREE.Mesh(new THREE.ConeGeometry(0.085, 0.34, 5), clawMat);
     claw.rotation.set(-0.35, 0, sx * 0.85);
-    claw.position.set(sx * 0.3, 0.3, 0.5);
+    claw.position.set(sx * 0.32, 0.32, 0.54);
     claw.castShadow = true;
     g.add(claw);
   }
@@ -356,11 +356,11 @@ function dressRattlekin(g: THREE.Group): void {
     part(arm, new THREE.SphereGeometry(0.045, 5, 5), bone, 0, -0.54, 0.05);
     if (sx > 0) {
       const cleaver = new THREE.Group();
-      part(cleaver, new THREE.CylinderGeometry(0.025, 0.03, 0.28, 5), rust, 0, 0.08, 0);
-      part(cleaver, new THREE.BoxGeometry(0.07, 0.4, 0.2), steel, 0.06, 0.36, 0, 0, 0, -0.12);
-      part(cleaver, new THREE.ConeGeometry(0.06, 0.14, 4), rust, 0.12, 0.52, 0.04, 0, 0, -0.85);
-      cleaver.position.set(0.04, -0.58, 0.08);
-      cleaver.rotation.z = -0.35;
+      part(cleaver, new THREE.CylinderGeometry(0.028, 0.034, 0.3, 5), rust, 0, 0.08, 0);
+      part(cleaver, new THREE.BoxGeometry(0.08, 0.5, 0.28), steel, 0.08, 0.42, 0, 0, 0, -0.1);
+      part(cleaver, new THREE.ConeGeometry(0.08, 0.18, 4), rust, 0.16, 0.62, 0.06, 0, 0, -0.85);
+      cleaver.position.set(0.02, -0.5, 0.04);
+      cleaver.rotation.z = -0.15;
       arm.add(cleaver);
     }
     g.add(arm);
@@ -381,32 +381,33 @@ function dressEmberling(g: THREE.Group): void {
   const hot = glow(0xff6620);
   const tip = glow(0xffee66);
 
-  const body = new THREE.Mesh(new THREE.SphereGeometry(0.32, 10, 8), coal);
-  body.scale.set(1.05, 0.85, 1.65);
-  body.position.set(0, 0.52, -0.06);
+  const body = new THREE.Mesh(new THREE.SphereGeometry(0.3, 10, 8), coal);
+  body.scale.set(0.95, 0.72, 2.05);
+  body.position.set(0, 0.48, -0.12);
   body.castShadow = true;
   g.add(body);
-  part(g, new THREE.SphereGeometry(0.2, 8, 6), coal, 0, 0.48, -0.42, 0, 0, 0, 0.9, 0.7, 1.2);
+  part(g, new THREE.SphereGeometry(0.18, 8, 6), coal, 0, 0.44, -0.52, 0, 0, 0, 0.85, 0.65, 1.35);
 
-  for (let i = 0; i < 4; i++) {
-    part(g, new THREE.BoxGeometry(0.035, 0.04, 0.28), hot, (i % 2 ? 0.08 : -0.08), 0.68, 0.05 - i * 0.12, 0, 0, i * 0.15);
+  for (let i = 0; i < 5; i++) {
+    part(g, new THREE.BoxGeometry(0.05, 0.05, 0.22), hot, (i % 2 ? 0.1 : -0.1), 0.66, 0.16 - i * 0.16);
   }
 
   const head = new THREE.Mesh(new THREE.SphereGeometry(0.2, 10, 8), coal);
-  head.scale.set(1.05, 0.85, 1.35);
-  head.position.set(0, 0.72, 0.38);
+  head.scale.set(1.05, 0.82, 1.45);
+  head.position.set(0, 0.7, 0.42);
   head.castShadow = true;
   g.add(head);
-  part(g, new THREE.ConeGeometry(0.12, 0.22, 6), coal, 0, 0.66, 0.58, 1.15, 0, 0);
-  part(g, new THREE.SphereGeometry(0.1, 8, 6), hot, 0, 0.64, 0.52);
+  part(g, new THREE.ConeGeometry(0.14, 0.32, 6), coal, 0, 0.64, 0.68, 1.2, 0, 0);
+  part(g, new THREE.ConeGeometry(0.1, 0.22, 6), hot, 0, 0.62, 0.7, 1.2, 0, 0);
+  part(g, new THREE.SphereGeometry(0.09, 8, 6), tip, 0, 0.62, 0.58);
   for (const sx of [-1, 1] as const) {
-    part(g, new THREE.SphereGeometry(0.035, 6, 6), tip, sx * 0.1, 0.78, 0.5);
-    part(g, new THREE.ConeGeometry(0.035, 0.14, 4), coal, sx * 0.12, 0.88, 0.32, 0.3, 0, sx * 0.4);
+    part(g, new THREE.SphereGeometry(0.04, 6, 6), tip, sx * 0.12, 0.78, 0.52);
+    part(g, new THREE.ConeGeometry(0.04, 0.16, 4), coal, sx * 0.14, 0.9, 0.32, 0.25, 0, sx * 0.45);
   }
 
-  for (let i = 0; i < 6; i++) {
-    const h = 0.2 + (i % 3) * 0.08;
-    part(g, new THREE.ConeGeometry(0.055 + (i % 2) * 0.02, h, 5), i % 2 ? lava : hot, (i % 2 ? 0.06 : -0.06), 0.82 + h * 0.35, 0.2 - i * 0.1);
+  for (let i = 0; i < 7; i++) {
+    const h = 0.26 + (i % 3) * 0.1;
+    part(g, new THREE.ConeGeometry(0.06 + (i % 2) * 0.025, h, 5), i % 2 ? lava : hot, (i % 2 ? 0.07 : -0.07), 0.78 + h * 0.4, 0.28 - i * 0.12);
   }
 
   const tail = new THREE.Group();
@@ -597,11 +598,11 @@ function dressBonewretch(g: THREE.Group): void {
   part(clutch, new THREE.CylinderGeometry(0.03, 0.04, 0.4, 5), bone, 0.08, -0.38, 0.08, 0, 0, 1.1);
   g.add(clutch);
 
-  const drag = tagged(0.32, 0.62, 0.04, 1.15, 0, 0.25, 'armR');
-  part(drag, new THREE.CylinderGeometry(0.028, 0.022, 0.36, 4), bone, 0, -0.16, 0);
-  part(drag, new THREE.SphereGeometry(0.032, 5, 5), bone, 0, -0.34, 0.02);
-  part(drag, new THREE.CylinderGeometry(0.022, 0.018, 0.32, 4), bone, 0, -0.5, 0.04, 0.25, 0, 0);
-  part(drag, new THREE.SphereGeometry(0.04, 5, 5), bone, 0.02, -0.66, 0.08);
+  const drag = tagged(0.34, 0.58, 0.06, 1.35, 0, 0.2, 'armR');
+  part(drag, new THREE.CylinderGeometry(0.03, 0.024, 0.4, 4), bone, 0, -0.18, 0);
+  part(drag, new THREE.SphereGeometry(0.034, 5, 5), bone, 0, -0.38, 0.02);
+  part(drag, new THREE.CylinderGeometry(0.024, 0.02, 0.38, 4), bone, 0, -0.58, 0.06, 0.3, 0, 0);
+  part(drag, new THREE.SphereGeometry(0.05, 5, 5), bone, 0.04, -0.78, 0.1);
   g.add(drag);
 
   const limp = tagged(-0.04, 0.3, 0.02, 0.2, 0, -0.2, 'legL');
@@ -681,33 +682,34 @@ function dressHeroKnight(g: THREE.Group, bodyMat: THREE.MeshStandardMaterial): v
 
 /** Woods archer — face out of the hood, cloak, recurve bow in hand, fletched quiver. */
 function dressHeroArcher(g: THREE.Group, bodyMat: THREE.MeshStandardMaterial): void {
-  const cloth = mat({ color: bodyMat.color.getHex() || 0x5080a0, metalness: 0.12, roughness: 0.68 });
-  const leather = mat({ color: 0x6a4a28, roughness: 0.7 });
+  const cloth = mat({ color: 0x3a5a70, metalness: 0.12, roughness: 0.68 });
+  const hood = mat({ color: 0x243848, roughness: 0.72 });
+  const leather = mat({ color: 0x8a5a28, roughness: 0.7 });
   const wood = mat({ color: 0x8a6030, roughness: 0.58 });
-  const skin = mat({ color: 0xc4a888, roughness: 0.7 });
-  const fletch = mat({ color: 0x306040, roughness: 0.55 });
+  const skin = mat({ color: 0xd4b090, roughness: 0.7 });
+  const fletch = mat({ color: 0x50a040, roughness: 0.55 });
   const dark = mat({ color: 0x2a2018, roughness: 0.7 });
+  void bodyMat;
 
   const body = new THREE.Mesh(new THREE.CapsuleGeometry(0.18, 0.4, 6, 10), cloth);
   body.position.y = 0.68;
   body.castShadow = true;
   g.add(body);
-  part(g, new THREE.BoxGeometry(0.28, 0.32, 0.16), leather, 0, 0.78, 0.02);
-  part(g, new THREE.BoxGeometry(0.08, 0.5, 0.04), leather, 0.08, 0.78, 0.14, 0, 0, -0.4);
-  // Cloak hanging off the back
-  part(g, new THREE.BoxGeometry(0.34, 0.55, 0.06), cloth, 0, 0.7, -0.16, 0.15, 0, 0);
+  part(g, new THREE.BoxGeometry(0.3, 0.34, 0.18), leather, 0, 0.78, 0.04);
+  part(g, new THREE.BoxGeometry(0.08, 0.5, 0.04), leather, 0.08, 0.78, 0.16, 0, 0, -0.4);
+  part(g, new THREE.BoxGeometry(0.36, 0.58, 0.07), hood, 0, 0.68, -0.18, 0.18, 0, 0);
 
-  const head = new THREE.Mesh(new THREE.SphereGeometry(0.15, 10, 8), skin);
-  head.position.set(0, 1.18, 0.06);
+  const head = new THREE.Mesh(new THREE.SphereGeometry(0.155, 10, 8), skin);
+  head.position.set(0, 1.16, 0.1);
   g.add(head);
-  part(g, new THREE.ConeGeometry(0.03, 0.05, 4), skin, 0, 1.16, 0.18, 1.15, 0, 0);
+  part(g, new THREE.ConeGeometry(0.035, 0.06, 4), skin, 0, 1.14, 0.22, 1.15, 0, 0);
   for (const sx of [-1, 1] as const) {
-    part(g, new THREE.SphereGeometry(0.022, 6, 6), dark, sx * 0.045, 1.2, 0.18);
+    part(g, new THREE.SphereGeometry(0.024, 6, 6), dark, sx * 0.05, 1.18, 0.22);
   }
-  // Hood sits behind the face so the ranger reads from the front
-  part(g, new THREE.SphereGeometry(0.18, 10, 8), cloth, 0, 1.24, -0.04, 0, 0, 0, 1.15, 1.05, 1.15);
-  part(g, new THREE.ConeGeometry(0.16, 0.22, 8, 1, true), cloth, 0, 1.38, -0.06, 2.9, 0, 0);
-  part(g, new THREE.ConeGeometry(0.03, 0.1, 4), fletch, 0.08, 1.4, -0.02, 0.4, 0, 0.5);
+  // Dark hood behind a visible face
+  part(g, new THREE.SphereGeometry(0.18, 10, 8), hood, 0, 1.24, -0.06, 0, 0, 0, 1.2, 1.0, 1.05);
+  part(g, new THREE.ConeGeometry(0.14, 0.2, 8, 1, true), hood, 0, 1.4, -0.1, 2.85, 0, 0);
+  part(g, new THREE.ConeGeometry(0.035, 0.12, 4), fletch, 0.1, 1.42, -0.04, 0.35, 0, 0.55);
 
   for (const sx of [-1, 1] as const) {
     const arm = tagged(sx * 0.22, 0.88, 0.04, 0.1, 0, sx * 0.35, sx < 0 ? 'armL' : 'armR');

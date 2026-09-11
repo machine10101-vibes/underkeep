@@ -4914,7 +4914,15 @@ export class Game {
 
   /** QA/screenshot: species details — beetle, dragonfly, skeleton, salamander, mage, witch, wretch, knight, archer. */
   preparePass1016Shot(): void {
+    for (const c of this.creatures) {
+      c.alive = false;
+      c.mesh.visible = false;
+    }
     this.preparePass1015Shot();
+    const mid = this.grid.tileToWorld(this.grid.heartPos.x, this.grid.heartPos.y);
+    this.camTarget.set(mid.x, 0.45, mid.z + 0.6);
+    this.renderer.camera.position.set(mid.x + 0.4, 4.4, mid.z + 7.6);
+    this.renderer.camera.lookAt(this.camTarget);
     this.hud.setTooltip('Minions and heroes — beetle, dragonfly, skeleton, salamander, mage, witch, wretch, knight, archer');
   }
 

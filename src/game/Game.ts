@@ -4912,6 +4912,12 @@ export class Game {
     this.hud.setTooltip('Minions and heroes — each silhouette matches the name');
   }
 
+  /** QA/screenshot: species details — beetle, dragonfly, skeleton, salamander, mage, witch, wretch, knight, archer. */
+  preparePass1016Shot(): void {
+    this.preparePass1015Shot();
+    this.hud.setTooltip('Minions and heroes — beetle, dragonfly, skeleton, salamander, mage, witch, wretch, knight, archer');
+  }
+
   /** QA/screenshot: the map Portal — buried blot, then claimed gateway. */
   preparePass108Shot(focus: 'buried' | 'claimed' | 'both' = 'both'): void {
     this.hud.hideOverlay();

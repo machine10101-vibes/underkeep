@@ -798,21 +798,21 @@ function makeRecurveBow(): THREE.Group {
 
   // D in the XY plane so the recurve reads from the front / 3/4, not edge-on.
   const curve = new THREE.CatmullRomCurve3([
-    new THREE.Vector3(0.05, -0.5, 0),
-    new THREE.Vector3(-0.11, -0.34, 0),
-    new THREE.Vector3(-0.04, -0.16, 0),
+    new THREE.Vector3(0.04, -0.42, 0),
+    new THREE.Vector3(-0.1, -0.28, 0),
+    new THREE.Vector3(-0.035, -0.14, 0),
     new THREE.Vector3(0, 0, 0),
-    new THREE.Vector3(-0.04, 0.16, 0),
-    new THREE.Vector3(-0.11, 0.34, 0),
-    new THREE.Vector3(0.05, 0.5, 0),
+    new THREE.Vector3(-0.035, 0.14, 0),
+    new THREE.Vector3(-0.1, 0.28, 0),
+    new THREE.Vector3(0.04, 0.42, 0),
   ]);
   const stave = new THREE.Mesh(new THREE.TubeGeometry(curve, 28, 0.022, 7, false), wood);
   stave.castShadow = true;
   bow.add(stave);
   part(bow, new THREE.CylinderGeometry(0.026, 0.026, 0.14, 6), wrap, 0, 0, 0);
-  part(bow, new THREE.SphereGeometry(0.016, 5, 5), wood, 0.05, 0.5, 0);
-  part(bow, new THREE.SphereGeometry(0.016, 5, 5), wood, 0.05, -0.5, 0);
-  const cord = new THREE.Mesh(new THREE.CylinderGeometry(0.005, 0.005, 0.98, 5), string);
+  part(bow, new THREE.SphereGeometry(0.016, 5, 5), wood, 0.04, 0.42, 0);
+  part(bow, new THREE.SphereGeometry(0.016, 5, 5), wood, 0.04, -0.42, 0);
+  const cord = new THREE.Mesh(new THREE.CylinderGeometry(0.005, 0.005, 0.82, 5), string);
   cord.position.set(0.07, 0, 0);
   bow.add(cord);
   return bow;
@@ -897,7 +897,7 @@ function dressHeroArcher(g: THREE.Group, bodyMat: THREE.MeshStandardMaterial): v
       const arrow = makeArrow();
       arrow.position.set(0.02, -0.16, 0.08);
       // Shaft along local Y → pitch so it points world-forward, point first.
-      arrow.rotation.set(-Math.PI / 2 - 0.15, 0.25, 0.1);
+      arrow.rotation.set(Math.PI / 2 + 0.12, -0.2, 0.08);
       markHeld(arrow, 'arrow');
       fore.userData.carry = true;
       fore.add(arrow);

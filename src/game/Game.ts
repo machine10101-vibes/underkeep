@@ -5053,6 +5053,13 @@ export class Game {
     this.hud.setTooltip('Archer — one head in a cowl, recurve bow, fletched arrow');
   }
 
+  /** QA/screenshot: living idles and species gaits on the plaza lineup. */
+  preparePass1023Shot(): void {
+    this.preparePass1018Shot();
+    this.hud.hideOverlay();
+    this.hud.setTooltip('Living motion — each species idles, walks, and strikes as itself');
+  }
+
   /** QA/screenshot: the map Portal — buried blot, then claimed gateway. */
   preparePass108Shot(focus: 'buried' | 'claimed' | 'both' = 'both'): void {
     this.hud.hideOverlay();

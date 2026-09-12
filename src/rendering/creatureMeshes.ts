@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 
-export type WalkLimbTag = 'legL' | 'legR' | 'armL' | 'armR' | 'foreL' | 'foreR' | 'tail' | 'wingH';
+export type WalkLimbTag = 'legL' | 'legR' | 'armL' | 'armR' | 'foreL' | 'foreR' | 'tail' | 'wingH' | 'ant' | 'hair' | 'jaw';
 
 /** Walk-cycle tagged limb. Shared with creatureMotion.ts. */
 function limb(
@@ -108,7 +108,6 @@ function addSkull(
   part(skull, new THREE.SphereGeometry(0.155, 10, 8), bone, 0, 0.06, -0.04, 0, 0, 0, 1.18, 1.12, 1.15);
   part(skull, new THREE.BoxGeometry(0.26, 0.07, 0.12), bone, 0, 0.14, 0.12);
   part(skull, new THREE.BoxGeometry(0.07, 0.08, 0.1), bone, 0, 0.04, 0.16);
-  part(skull, new THREE.BoxGeometry(0.22, 0.09, 0.16), bone, 0, -0.14 - hang, 0.1, 0.25 + hang * 1.6, 0, 0);
   for (const sx of [-1, 1] as const) {
     part(skull, new THREE.SphereGeometry(0.08, 6, 6), bone, sx * 0.14, 0.0, 0.04, 0, 0, 0, 0.72, 0.58, 0.68);
   }
@@ -120,9 +119,13 @@ function addSkull(
     part(skull, new THREE.SphereGeometry(0.034, 6, 6), glow(eyeCol), sx * 0.068, 0.06, 0.2);
   }
   part(skull, new THREE.BoxGeometry(0.045, 0.07, 0.05), socket, 0, -0.01, 0.2);
+
+  const jaw = tagged(0, -0.1, 0.06, 0.22 + hang * 1.4, 0, 0, 'jaw');
+  part(jaw, new THREE.BoxGeometry(0.22, 0.09, 0.16), bone, 0, -0.04 - hang * 0.3, 0.04);
   for (let i = 0; i < 5; i++) {
-    part(skull, new THREE.BoxGeometry(0.024, 0.055, 0.018), bone, -0.07 + i * 0.035, -0.2 - hang * 0.5, 0.17);
+    part(jaw, new THREE.BoxGeometry(0.024, 0.055, 0.018), bone, -0.07 + i * 0.035, -0.1 - hang * 0.2, 0.11);
   }
+  skull.add(jaw);
 }
 
 /** Living face that sits in front of a hood or hair. */
@@ -226,11 +229,10 @@ function dressScrabbler(g: THREE.Group, _bodyMat: THREE.MeshStandardMaterial): v
     mandible.castShadow = true;
     g.add(mandible);
     part(g, new THREE.ConeGeometry(0.035, 0.12, 4), clawMat, sx * 0.22, 0.16, 0.88, 1.3, 0, sx * 0.4);
-    const ant = new THREE.Mesh(new THREE.CylinderGeometry(0.014, 0.01, 0.36, 4), dark);
-    ant.position.set(sx * 0.1, 0.64, 0.54);
-    ant.rotation.set(-0.75, 0, sx * 0.45);
+    const ant = tagged(sx * 0.1, 0.64, 0.54, -0.75, 0, sx * 0.45, 'ant', sx < 0 ? 0 : 1);
+    part(ant, new THREE.CylinderGeometry(0.014, 0.01, 0.36, 4), dark, 0, 0.18, 0);
+    part(ant, new THREE.SphereGeometry(0.038, 5, 5), headMat, 0, 0.38, 0);
     g.add(ant);
-    part(g, new THREE.SphereGeometry(0.038, 5, 5), headMat, sx * 0.21, 0.8, 0.4);
   }
 
   const legMat = mat({ color: 0x2a2010, roughness: 0.7 });
@@ -600,12 +602,13 @@ function dressThornwitch(g: THREE.Group): void {
   part(g, new THREE.BoxGeometry(0.2, 0.05, 0.08), leather, 0, 0.68, 0.12);
 
   addFace(g, skin, 0, 1.28, 0.08, { eye: 0xff3060, scale: 1.02 });
-  // Long hair + thorn crown
-  part(g, new THREE.SphereGeometry(0.18, 8, 6), hair, 0, 1.36, -0.06, 0, 0, 0, 1.2, 0.72, 1.15);
+  const hairG = tagged(0, 1.36, -0.06, 0, 0, 0, 'hair');
+  part(hairG, new THREE.SphereGeometry(0.18, 8, 6), hair, 0, 0, 0, 0, 0, 0, 1.2, 0.72, 1.15);
   for (let i = 0; i < 7; i++) {
     const a = -1.2 + i * 0.4;
-    part(g, new THREE.CapsuleGeometry(0.04, 0.52, 3, 5), hair, Math.sin(a) * 0.14, 0.92, -0.2 + Math.cos(a) * 0.05, 0.35, 0, a * 0.12);
+    part(hairG, new THREE.CapsuleGeometry(0.04, 0.52, 3, 5), hair, Math.sin(a) * 0.14, -0.44, -0.14 + Math.cos(a) * 0.05, 0.35, 0, a * 0.12);
   }
+  g.add(hairG);
   for (let i = 0; i < 9; i++) {
     const a = (i / 9) * Math.PI * 2;
     const spike = new THREE.Mesh(new THREE.ConeGeometry(0.032, 0.2 + (i % 2) * 0.1, 4), thorn);

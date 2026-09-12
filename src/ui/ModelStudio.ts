@@ -36,7 +36,7 @@ import {
   poseScrabblerPickaxe,
   tileMaterial,
 } from '../rendering/meshes';
-import { poseCreatureBody, poseCreatureLimbs, walkBob } from '../rendering/creatureMotion';
+import { poseCreatureBody, poseCreatureLimbs, walkBob, walkCadence } from '../rendering/creatureMotion';
 
 export type StudioPose = 'idle' | 'walk' | 'dig' | 'attack';
 
@@ -550,7 +550,7 @@ export class ModelStudio {
     const period = 1.2;
     const attack = attacking ? (t % period) / period : 0;
     const motion = {
-      walkCycle: t * (walk ? 10 : 3),
+      walkCycle: t * (walk ? walkCadence(kind) : 2.4),
       moving: walk,
       attack,
       time: t,

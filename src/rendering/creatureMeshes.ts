@@ -796,23 +796,24 @@ function makeRecurveBow(): THREE.Group {
   const string = mat({ color: 0xf0ead8, roughness: 0.4, emissive: 0x403820, emissiveIntensity: 0.12 });
   const bow = new THREE.Group();
 
+  // D in the XY plane so the recurve reads from the front / 3/4, not edge-on.
   const curve = new THREE.CatmullRomCurve3([
-    new THREE.Vector3(0, -0.46, 0.04),
-    new THREE.Vector3(0, -0.32, -0.07),
-    new THREE.Vector3(0, -0.14, -0.03),
+    new THREE.Vector3(0.05, -0.5, 0),
+    new THREE.Vector3(-0.11, -0.34, 0),
+    new THREE.Vector3(-0.04, -0.16, 0),
     new THREE.Vector3(0, 0, 0),
-    new THREE.Vector3(0, 0.14, -0.03),
-    new THREE.Vector3(0, 0.32, -0.07),
-    new THREE.Vector3(0, 0.46, 0.04),
+    new THREE.Vector3(-0.04, 0.16, 0),
+    new THREE.Vector3(-0.11, 0.34, 0),
+    new THREE.Vector3(0.05, 0.5, 0),
   ]);
-  const stave = new THREE.Mesh(new THREE.TubeGeometry(curve, 28, 0.016, 7, false), wood);
+  const stave = new THREE.Mesh(new THREE.TubeGeometry(curve, 28, 0.022, 7, false), wood);
   stave.castShadow = true;
   bow.add(stave);
-  part(bow, new THREE.CylinderGeometry(0.022, 0.022, 0.13, 6), wrap, 0, 0, 0.005);
-  part(bow, new THREE.SphereGeometry(0.014, 5, 5), wood, 0, 0.46, 0.04);
-  part(bow, new THREE.SphereGeometry(0.014, 5, 5), wood, 0, -0.46, 0.04);
-  const cord = new THREE.Mesh(new THREE.CylinderGeometry(0.004, 0.004, 0.9, 5), string);
-  cord.position.set(0, 0, 0.05);
+  part(bow, new THREE.CylinderGeometry(0.026, 0.026, 0.14, 6), wrap, 0, 0, 0);
+  part(bow, new THREE.SphereGeometry(0.016, 5, 5), wood, 0.05, 0.5, 0);
+  part(bow, new THREE.SphereGeometry(0.016, 5, 5), wood, 0.05, -0.5, 0);
+  const cord = new THREE.Mesh(new THREE.CylinderGeometry(0.005, 0.005, 0.98, 5), string);
+  cord.position.set(0.07, 0, 0);
   bow.add(cord);
   return bow;
 }
@@ -824,14 +825,14 @@ function makeArrow(): THREE.Group {
   const fletch = mat({ color: 0x3a8a38, roughness: 0.5 });
   const nock = mat({ color: 0x2a2018, roughness: 0.7 });
   const arrow = new THREE.Group();
-  part(arrow, new THREE.CylinderGeometry(0.01, 0.01, 0.62, 6), wood, 0, 0, 0, Math.PI / 2, 0, 0);
-  part(arrow, new THREE.ConeGeometry(0.024, 0.09, 5), steel, 0, 0, 0.35, Math.PI / 2, 0, 0);
-  part(arrow, new THREE.BoxGeometry(0.016, 0.02, 0.03), nock, 0, 0, -0.32);
+  part(arrow, new THREE.CylinderGeometry(0.012, 0.012, 0.64, 6), wood, 0, 0, 0);
+  part(arrow, new THREE.ConeGeometry(0.028, 0.1, 5), steel, 0, 0.36, 0);
+  part(arrow, new THREE.BoxGeometry(0.018, 0.03, 0.02), nock, 0, -0.33, 0);
   for (let i = 0; i < 3; i++) {
     const a = (i / 3) * Math.PI * 2;
-    const vane = new THREE.Mesh(new THREE.BoxGeometry(0.006, 0.055, 0.09), fletch);
-    vane.position.set(Math.sin(a) * 0.022, Math.cos(a) * 0.022, -0.24);
-    vane.rotation.z = a;
+    const vane = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.09, 0.008), fletch);
+    vane.position.set(Math.sin(a) * 0.02, -0.24, Math.cos(a) * 0.02);
+    vane.rotation.y = a;
     arrow.add(vane);
   }
   return arrow;
@@ -870,24 +871,33 @@ function dressHeroArcher(g: THREE.Group, bodyMat: THREE.MeshStandardMaterial): v
   part(g, new THREE.ConeGeometry(0.2, 0.4, 8, 1, true), hood, 0, 0.92, -0.18, 0.35, 0, 0);
 
   for (const sx of [-1, 1] as const) {
-    const arm = tagged(sx * 0.22, 0.88, 0.06, 0.08, 0, sx * 0.22, sx < 0 ? 'armL' : 'armR');
+    const arm = tagged(
+      sx * 0.2,
+      0.9,
+      sx < 0 ? 0.14 : 0.1,
+      sx < 0 ? 0.22 : 0.18,
+      sx < 0 ? 0.35 : -0.2,
+      sx * 0.18,
+      sx < 0 ? 'armL' : 'armR'
+    );
     part(arm, new THREE.CylinderGeometry(0.042, 0.034, 0.22, 5), cloth, 0, -0.1, 0.02, 0.18, 0, 0);
     part(arm, new THREE.SphereGeometry(0.032, 5, 5), leather, 0, -0.22, 0.03);
-    const fore = tagged(0, -0.22, 0.03, 0.12, 0, 0, sx < 0 ? 'foreL' : 'foreR');
+    const fore = tagged(0, -0.22, 0.03, sx < 0 ? 0.18 : 0.35, 0, 0, sx < 0 ? 'foreL' : 'foreR');
     part(fore, new THREE.CylinderGeometry(0.034, 0.028, 0.16, 5), cloth, 0, -0.07, 0.02, 0.12, 0, 0);
     if (sx < 0) part(fore, new THREE.BoxGeometry(0.07, 0.1, 0.055), leather, 0, -0.08, 0.03);
     addGrip(fore, skin, 0, -0.18, 0.04);
     if (sx < 0) {
       const bow = makeRecurveBow();
-      bow.position.set(0.03, -0.16, 0.05);
-      bow.rotation.set(-0.12, 0.95, 0.08);
+      bow.position.set(0.02, -0.16, 0.04);
+      bow.rotation.set(-0.28, 0.15, 0.08);
       markHeld(bow, 'bow');
       fore.userData.carry = true;
       fore.add(bow);
     } else {
       const arrow = makeArrow();
-      arrow.position.set(0.02, -0.15, 0.12);
-      arrow.rotation.set(0.08, 0.35, 0.05);
+      arrow.position.set(0.02, -0.16, 0.08);
+      // Shaft along local Y → pitch so it points world-forward, point first.
+      arrow.rotation.set(-Math.PI / 2 - 0.15, 0.25, 0.1);
       markHeld(arrow, 'arrow');
       fore.userData.carry = true;
       fore.add(arrow);

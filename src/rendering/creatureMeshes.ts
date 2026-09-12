@@ -789,14 +789,62 @@ function dressHeroKnight(g: THREE.Group, bodyMat: THREE.MeshStandardMaterial): v
   part(g, new THREE.BoxGeometry(0.05, 0.32, 0.16), cloth, 0, 1.58, 0);
 }
 
-/** Woods archer — face out of the hood, cloak, recurve bow in hand, fletched quiver. */
+/** Vertical recurve — stave curves away, string nock-to-nock, grip in the fist. */
+function makeRecurveBow(): THREE.Group {
+  const wood = mat({ color: 0x8a5a28, roughness: 0.52, metalness: 0.08 });
+  const wrap = mat({ color: 0x4a2c14, roughness: 0.75 });
+  const string = mat({ color: 0xf0ead8, roughness: 0.4, emissive: 0x403820, emissiveIntensity: 0.12 });
+  const bow = new THREE.Group();
+
+  const curve = new THREE.CatmullRomCurve3([
+    new THREE.Vector3(0, -0.46, 0.04),
+    new THREE.Vector3(0, -0.32, -0.07),
+    new THREE.Vector3(0, -0.14, -0.03),
+    new THREE.Vector3(0, 0, 0),
+    new THREE.Vector3(0, 0.14, -0.03),
+    new THREE.Vector3(0, 0.32, -0.07),
+    new THREE.Vector3(0, 0.46, 0.04),
+  ]);
+  const stave = new THREE.Mesh(new THREE.TubeGeometry(curve, 28, 0.016, 7, false), wood);
+  stave.castShadow = true;
+  bow.add(stave);
+  part(bow, new THREE.CylinderGeometry(0.022, 0.022, 0.13, 6), wrap, 0, 0, 0.005);
+  part(bow, new THREE.SphereGeometry(0.014, 5, 5), wood, 0, 0.46, 0.04);
+  part(bow, new THREE.SphereGeometry(0.014, 5, 5), wood, 0, -0.46, 0.04);
+  const cord = new THREE.Mesh(new THREE.CylinderGeometry(0.004, 0.004, 0.9, 5), string);
+  cord.position.set(0, 0, 0.05);
+  bow.add(cord);
+  return bow;
+}
+
+/** Shaft, steel head, three vanes, nock — reads as an arrow, not a stick. */
+function makeArrow(): THREE.Group {
+  const wood = mat({ color: 0x8a6030, roughness: 0.58 });
+  const steel = mat({ color: 0xc8d0dc, metalness: 0.82, roughness: 0.22 });
+  const fletch = mat({ color: 0x3a8a38, roughness: 0.5 });
+  const nock = mat({ color: 0x2a2018, roughness: 0.7 });
+  const arrow = new THREE.Group();
+  part(arrow, new THREE.CylinderGeometry(0.01, 0.01, 0.62, 6), wood, 0, 0, 0, Math.PI / 2, 0, 0);
+  part(arrow, new THREE.ConeGeometry(0.024, 0.09, 5), steel, 0, 0, 0.35, Math.PI / 2, 0, 0);
+  part(arrow, new THREE.BoxGeometry(0.016, 0.02, 0.03), nock, 0, 0, -0.32);
+  for (let i = 0; i < 3; i++) {
+    const a = (i / 3) * Math.PI * 2;
+    const vane = new THREE.Mesh(new THREE.BoxGeometry(0.006, 0.055, 0.09), fletch);
+    vane.position.set(Math.sin(a) * 0.022, Math.cos(a) * 0.022, -0.24);
+    vane.rotation.z = a;
+    arrow.add(vane);
+  }
+  return arrow;
+}
+
+/** Woods archer — one head in a draped cowl, recurve bow in the left fist, arrow in the right. */
 function dressHeroArcher(g: THREE.Group, bodyMat: THREE.MeshStandardMaterial): void {
   const cloth = mat({ color: 0x3a5a70, metalness: 0.12, roughness: 0.68 });
   const hood = mat({ color: 0x243848, roughness: 0.72 });
   const leather = mat({ color: 0x8a5a28, roughness: 0.7 });
   const wood = mat({ color: 0x8a6030, roughness: 0.58 });
   const skin = mat({ color: 0xd4b090, roughness: 0.7 });
-  const fletch = mat({ color: 0x50a040, roughness: 0.55 });
+  const fletch = mat({ color: 0x3a8a38, roughness: 0.5 });
   const dark = mat({ color: 0x2a2018, roughness: 0.7 });
   void bodyMat;
 
@@ -805,40 +853,41 @@ function dressHeroArcher(g: THREE.Group, bodyMat: THREE.MeshStandardMaterial): v
   body.castShadow = true;
   g.add(body);
   part(g, new THREE.BoxGeometry(0.3, 0.34, 0.18), leather, 0, 0.78, 0.04);
-  part(g, new THREE.BoxGeometry(0.08, 0.5, 0.04), leather, 0.08, 0.78, 0.16, 0, 0, -0.4);
-  part(g, new THREE.BoxGeometry(0.36, 0.58, 0.07), hood, 0, 0.68, -0.18, 0.18, 0, 0);
+  part(g, new THREE.BoxGeometry(0.07, 0.46, 0.04), leather, 0.07, 0.78, 0.15, 0, 0, -0.35);
+  part(g, new THREE.BoxGeometry(0.34, 0.62, 0.06), hood, 0, 0.64, -0.16, 0.2, 0, 0);
 
-  // Face sits forward of a draped cowl — not a second head behind the ranger
-  addFace(g, skin, 0, 1.16, 0.24, { eye: 0x1a2010, scale: 1.0 });
-  part(g, new THREE.SphereGeometry(0.2, 10, 8), hood, 0, 1.28, -0.02, 0, 0, 0, 1.15, 0.95, 1.2);
-  part(g, new THREE.ConeGeometry(0.2, 0.28, 8, 1, true), hood, 0, 1.42, -0.08, 2.7, 0, 0);
-  part(g, new THREE.BoxGeometry(0.28, 0.12, 0.08), hood, 0, 1.32, 0.12, 0.35, 0, 0);
-  part(g, new THREE.ConeGeometry(0.035, 0.12, 4), fletch, 0.1, 1.46, -0.08, 0.35, 0, 0.55);
+  // One skull. Cowl wraps that same head — no second sphere behind it.
+  const headY = 1.18;
+  const headZ = 0.1;
+  addFace(g, skin, 0, headY, headZ, { eye: 0x1a2010, scale: 0.96 });
+  part(g, new THREE.SphereGeometry(0.12, 8, 6), dark, 0, headY + 0.05, headZ - 0.02, 0, 0, 0, 1.05, 0.5, 0.85);
+  part(g, new THREE.SphereGeometry(0.155, 10, 8), hood, 0, headY + 0.1, headZ - 0.04, 0, 0, 0, 1.18, 0.4, 1.02);
+  part(g, new THREE.SphereGeometry(0.13, 8, 6), hood, 0, headY + 0.02, headZ - 0.1, 0, 0, 0, 1.12, 0.85, 0.52);
+  for (const sx of [-1, 1] as const) {
+    part(g, new THREE.CapsuleGeometry(0.035, 0.16, 3, 6), hood, sx * 0.13, headY - 0.02, headZ - 0.02, 0.15, 0, sx * 0.28);
+  }
+  part(g, new THREE.BoxGeometry(0.2, 0.045, 0.055), hood, 0, headY + 0.1, headZ + 0.08, 0.35, 0, 0);
+  part(g, new THREE.ConeGeometry(0.2, 0.4, 8, 1, true), hood, 0, 0.92, -0.18, 0.35, 0, 0);
 
   for (const sx of [-1, 1] as const) {
-    const arm = tagged(sx * 0.22, 0.88, 0.04, 0.1, 0, sx * 0.35, sx < 0 ? 'armL' : 'armR');
+    const arm = tagged(sx * 0.22, 0.88, 0.06, 0.08, 0, sx * 0.22, sx < 0 ? 'armL' : 'armR');
     part(arm, new THREE.CylinderGeometry(0.042, 0.034, 0.22, 5), cloth, 0, -0.1, 0.02, 0.18, 0, 0);
     part(arm, new THREE.SphereGeometry(0.032, 5, 5), leather, 0, -0.22, 0.03);
-    const fore = tagged(0, -0.22, 0.03, 0.2, 0, 0, sx < 0 ? 'foreL' : 'foreR');
-    part(fore, new THREE.CylinderGeometry(0.034, 0.028, 0.16, 5), cloth, 0, -0.07, 0.02, 0.15, 0, 0);
+    const fore = tagged(0, -0.22, 0.03, 0.12, 0, 0, sx < 0 ? 'foreL' : 'foreR');
+    part(fore, new THREE.CylinderGeometry(0.034, 0.028, 0.16, 5), cloth, 0, -0.07, 0.02, 0.12, 0, 0);
+    if (sx < 0) part(fore, new THREE.BoxGeometry(0.07, 0.1, 0.055), leather, 0, -0.08, 0.03);
     addGrip(fore, skin, 0, -0.18, 0.04);
     if (sx < 0) {
-      const bow = new THREE.Group();
-      part(bow, new THREE.TorusGeometry(0.3, 0.022, 4, 14, Math.PI * 1.2), wood, 0, 0.02, 0, 0, Math.PI / 2, 0.15);
-      part(bow, new THREE.CylinderGeometry(0.005, 0.005, 0.5, 4), mat({ color: 0xe8e0d0 }), 0, 0.02, -0.16);
-      part(bow, new THREE.CylinderGeometry(0.012, 0.012, 0.16, 4), wood, 0, 0.02, 0.02, 0, 0, 1.2);
-      bow.position.set(0.02, -0.16, 0.1);
-      bow.rotation.set(0.08, 0.15, 0.05);
+      const bow = makeRecurveBow();
+      bow.position.set(0.03, -0.16, 0.05);
+      bow.rotation.set(-0.12, 0.95, 0.08);
       markHeld(bow, 'bow');
       fore.userData.carry = true;
       fore.add(bow);
     } else {
-      const arrow = new THREE.Group();
-      part(arrow, new THREE.CylinderGeometry(0.008, 0.008, 0.42, 4), wood, 0, 0.08, 0, Math.PI / 2, 0, 0);
-      part(arrow, new THREE.ConeGeometry(0.02, 0.07, 4), fletch, 0, 0.08, -0.2, Math.PI / 2, 0, 0);
-      part(arrow, new THREE.ConeGeometry(0.016, 0.05, 4), dark, 0, 0.08, 0.24, -Math.PI / 2, 0, 0);
-      arrow.position.set(0.01, -0.16, 0.08);
-      arrow.rotation.set(0.1, 0.2, 0);
+      const arrow = makeArrow();
+      arrow.position.set(0.02, -0.15, 0.12);
+      arrow.rotation.set(0.08, 0.35, 0.05);
       markHeld(arrow, 'arrow');
       fore.userData.carry = true;
       fore.add(arrow);
@@ -853,13 +902,16 @@ function dressHeroArcher(g: THREE.Group, bodyMat: THREE.MeshStandardMaterial): v
   }
 
   const quiver = new THREE.Group();
-  part(quiver, new THREE.CylinderGeometry(0.055, 0.065, 0.36, 6), leather, 0, 0, 0);
+  part(quiver, new THREE.CylinderGeometry(0.05, 0.06, 0.38, 6), leather, 0, 0, 0);
+  part(quiver, new THREE.TorusGeometry(0.052, 0.012, 4, 8), leather, 0, 0.18, 0, Math.PI / 2, 0, 0);
   for (let i = 0; i < 4; i++) {
-    part(quiver, new THREE.CylinderGeometry(0.01, 0.01, 0.4, 4), wood, -0.03 + i * 0.02, 0.12, -0.01 + (i % 2) * 0.02);
-    part(quiver, new THREE.ConeGeometry(0.022, 0.07, 4), fletch, -0.03 + i * 0.02, 0.34, -0.01 + (i % 2) * 0.02);
+    const ox = -0.024 + i * 0.016;
+    const oz = (i % 2) * 0.016 - 0.008;
+    part(quiver, new THREE.CylinderGeometry(0.008, 0.008, 0.28, 5), wood, ox, 0.2, oz);
+    part(quiver, new THREE.BoxGeometry(0.005, 0.04, 0.07), fletch, ox, 0.36, oz);
   }
-  quiver.position.set(0.14, 0.9, -0.2);
-  quiver.rotation.set(0.25, 0, 0.35);
+  quiver.position.set(-0.12, 0.86, -0.2);
+  quiver.rotation.set(0.35, 0, -0.45);
   g.add(quiver);
 }
 

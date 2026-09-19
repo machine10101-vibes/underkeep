@@ -5060,6 +5060,13 @@ export class Game {
     this.hud.setTooltip('Living motion — each species idles, walks, and strikes as itself');
   }
 
+  /** QA/screenshot: species-true bodies — beetle, dragonfly, skull, salamander, mage, witch, wretch, knight, archer. */
+  preparePass1024Shot(): void {
+    this.preparePass1021Shot();
+    this.hud.hideOverlay();
+    this.hud.setTooltip('Minions and heroes — beetle, dragonfly, skull, salamander, mage, witch, wretch, knight, archer');
+  }
+
   /** QA/screenshot: the map Portal — buried blot, then claimed gateway. */
   preparePass108Shot(focus: 'buried' | 'claimed' | 'both' = 'both'): void {
     this.hud.hideOverlay();

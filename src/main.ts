@@ -184,7 +184,9 @@ if (
     params.get('shot') === '10.22' ||
     params.get('shot') === '1022' ||
     params.get('shot') === '10.23' ||
-    params.get('shot') === '1023')
+    params.get('shot') === '1023' ||
+    params.get('shot') === '10.24' ||
+    params.get('shot') === '1024')
 ) {
   // Auto-arrange evidence shots
   setTimeout(() => {
@@ -225,10 +227,12 @@ if (
       preparePass1021Shot?: () => void;
       preparePass1022Shot?: () => void;
       preparePass1023Shot?: () => void;
+      preparePass1024Shot?: () => void;
     };
     g.hud.hideOverlay();
     const shot = params.get('shot');
-    if (shot === '10.23' || shot === '1023') g.preparePass1023Shot?.();
+    if (shot === '10.24' || shot === '1024') g.preparePass1024Shot?.();
+    else if (shot === '10.23' || shot === '1023') g.preparePass1023Shot?.();
     else if (shot === '10.22' || shot === '1022') g.preparePass1022Shot?.();
     else if (shot === '10.21' || shot === '1021') g.preparePass1021Shot?.();
     else if (shot === '10.20' || shot === '1020') g.preparePass1020Shot?.();

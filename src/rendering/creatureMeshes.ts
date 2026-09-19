@@ -87,7 +87,7 @@ function markHeld(obj: THREE.Object3D, tool: string): void {
   obj.userData.baseRot = { x: obj.rotation.x, y: obj.rotation.y, z: obj.rotation.z };
 }
 
-/** Skull that reads as a skull: brow, cheeks, sockets, nasal hole, teeth. */
+/** Skull that reads as a skull: oval cranium, brow, zygoma, sockets, nasal hole, teeth. */
 function addSkull(
   parent: THREE.Object3D,
   bone: THREE.Material,
@@ -105,25 +105,29 @@ function addSkull(
   skull.scale.setScalar(s);
   parent.add(skull);
 
-  part(skull, new THREE.SphereGeometry(0.155, 10, 8), bone, 0, 0.06, -0.04, 0, 0, 0, 1.18, 1.12, 1.15);
-  part(skull, new THREE.BoxGeometry(0.26, 0.07, 0.12), bone, 0, 0.14, 0.12);
-  part(skull, new THREE.BoxGeometry(0.07, 0.08, 0.1), bone, 0, 0.04, 0.16);
+  // Graphic skull — big brow, cheeks, and jaw that still read when lighting flattens
+  part(skull, new THREE.SphereGeometry(0.15, 10, 8), bone, 0, 0.06, -0.04, 0, 0, 0, 1.2, 0.88, 1.22);
+  part(skull, new THREE.BoxGeometry(0.32, 0.08, 0.16), bone, 0, 0.16, 0.12);
+  part(skull, new THREE.BoxGeometry(0.08, 0.1, 0.12), bone, 0, 0.04, 0.18);
   for (const sx of [-1, 1] as const) {
-    part(skull, new THREE.SphereGeometry(0.08, 6, 6), bone, sx * 0.14, 0.0, 0.04, 0, 0, 0, 0.72, 0.58, 0.68);
+    part(skull, new THREE.BoxGeometry(0.1, 0.08, 0.12), bone, sx * 0.14, 0.0, 0.08);
   }
 
-  const socket = glow(0x030000);
+  const socket = glow(0x020000);
   const eyeCol = opts.eye ?? 0xff6020;
   for (const sx of [-1, 1] as const) {
-    part(skull, new THREE.BoxGeometry(0.08, 0.07, 0.06), socket, sx * 0.07, 0.06, 0.16);
-    part(skull, new THREE.SphereGeometry(0.034, 6, 6), glow(eyeCol), sx * 0.068, 0.06, 0.2);
+    part(skull, new THREE.BoxGeometry(0.1, 0.09, 0.08), socket, sx * 0.078, 0.06, 0.18);
+    part(skull, new THREE.SphereGeometry(0.032, 6, 6), glow(eyeCol), sx * 0.076, 0.06, 0.23);
   }
-  part(skull, new THREE.BoxGeometry(0.045, 0.07, 0.05), socket, 0, -0.01, 0.2);
+  part(skull, new THREE.BoxGeometry(0.042, 0.075, 0.06), socket, 0, -0.01, 0.23);
 
   const jaw = tagged(0, -0.1, 0.06, 0.22 + hang * 1.4, 0, 0, 'jaw');
-  part(jaw, new THREE.BoxGeometry(0.22, 0.09, 0.16), bone, 0, -0.04 - hang * 0.3, 0.04);
-  for (let i = 0; i < 5; i++) {
-    part(jaw, new THREE.BoxGeometry(0.024, 0.055, 0.018), bone, -0.07 + i * 0.035, -0.1 - hang * 0.2, 0.11);
+  part(jaw, new THREE.BoxGeometry(0.24, 0.08, 0.16), bone, 0, -0.05 - hang * 0.3, 0.03);
+  for (const sx of [-1, 1] as const) {
+    part(jaw, new THREE.BoxGeometry(0.045, 0.11, 0.08), bone, sx * 0.1, 0.02, -0.02);
+  }
+  for (let i = 0; i < 6; i++) {
+    part(jaw, new THREE.BoxGeometry(0.024, 0.062, 0.018), bone, -0.08 + i * 0.032, -0.11 - hang * 0.2, 0.11);
   }
   skull.add(jaw);
 }
@@ -142,16 +146,17 @@ function addFace(
   face.position.set(x, y, z);
   face.scale.setScalar(s);
   parent.add(face);
-  part(face, new THREE.SphereGeometry(0.15, 10, 8), skin, 0, 0, 0, 0, 0, 0, 1.02, 1.05, 0.95);
-  part(face, new THREE.ConeGeometry(0.038, 0.07, 5), skin, 0, -0.02, 0.14, 1.15, 0, 0);
-  part(face, new THREE.SphereGeometry(0.045, 6, 6), skin, 0, -0.06, 0.1, 0, 0, 0, 1.15, 0.55, 0.7);
+  part(face, new THREE.SphereGeometry(0.15, 10, 8), skin, 0, 0, 0, 0, 0, 0, 1.0, 1.08, 0.92);
+  part(face, new THREE.SphereGeometry(0.055, 6, 6), skin, 0, 0.06, 0.02, 0, 0, 0, 1.35, 0.45, 0.7);
+  part(face, new THREE.ConeGeometry(0.032, 0.065, 5), skin, 0, -0.015, 0.145, 1.2, 0, 0);
+  part(face, new THREE.SphereGeometry(0.048, 6, 6), skin, 0, -0.055, 0.105, 0, 0, 0, 1.2, 0.52, 0.72);
   const eye = glow(opts.eye ?? 0x1a1410);
   for (const sx of [-1, 1] as const) {
-    part(face, new THREE.SphereGeometry(0.042, 6, 6), skin, sx * 0.07, 0.02, 0.08, 0, 0, 0, 0.85, 0.7, 0.55);
-    part(face, new THREE.SphereGeometry(0.024, 6, 6), eye, sx * 0.052, 0.03, 0.132);
-    part(face, new THREE.SphereGeometry(0.01, 4, 4), glow(0xf0ead8), sx * 0.06, 0.038, 0.148);
+    part(face, new THREE.SphereGeometry(0.038, 6, 6), skin, sx * 0.072, 0.028, 0.085, 0, 0, 0, 0.88, 0.62, 0.5);
+    part(face, new THREE.SphereGeometry(0.022, 6, 6), eye, sx * 0.054, 0.032, 0.135);
+    part(face, new THREE.SphereGeometry(0.009, 4, 4), glow(0xf0ead8), sx * 0.062, 0.04, 0.15);
   }
-  part(face, new THREE.BoxGeometry(0.055, 0.012, 0.02), mat({ color: 0x6a3040, roughness: 0.7 }), 0, -0.07, 0.132);
+  part(face, new THREE.BoxGeometry(0.05, 0.01, 0.018), mat({ color: 0x6a3040, roughness: 0.7 }), 0, -0.068, 0.138);
 }
 
 /**
@@ -180,76 +185,82 @@ function dressScrabbler(g: THREE.Group, _bodyMat: THREE.MeshStandardMaterial): v
   const clawMat = mat({ color: 0xf0e8b8, metalness: 0.72, roughness: 0.26 });
   const dark = mat({ color: 0x1a2010, roughness: 0.7 });
 
-  // Oval lime belly — beetle underside, not a ball
-  const abdomen = new THREE.Mesh(new THREE.CapsuleGeometry(0.28, 0.62, 5, 10), belly);
+  // Long oval lime belly — beetle underside from above, not a ball
+  const abdomen = new THREE.Mesh(new THREE.CapsuleGeometry(0.24, 0.78, 5, 10), belly);
   abdomen.rotation.x = Math.PI / 2;
-  abdomen.scale.set(1.35, 0.72, 0.55);
-  abdomen.position.set(0, 0.28, -0.14);
+  abdomen.scale.set(1.22, 0.78, 0.42);
+  abdomen.position.set(0, 0.24, -0.18);
   abdomen.castShadow = true;
   g.add(abdomen);
-  for (let i = 0; i < 4; i++) {
-    part(g, new THREE.BoxGeometry(0.42 - i * 0.04, 0.04, 0.12), belly, 0, 0.22, -0.02 - i * 0.16);
+  for (let i = 0; i < 5; i++) {
+    part(g, new THREE.BoxGeometry(0.44 - i * 0.05, 0.035, 0.1), belly, 0, 0.18, 0.02 - i * 0.15);
   }
 
-  // Split elytra — flattened wing-cases with a bright center seam
+  // Split elytra — two flattened wing-cases with scutes and a bright center seam
   for (const sx of [-1, 1] as const) {
-    const elytron = new THREE.Mesh(new THREE.CapsuleGeometry(0.2, 0.55, 4, 8), shellMat);
+    const elytron = new THREE.Mesh(new THREE.CapsuleGeometry(0.18, 0.62, 4, 8), shellMat);
     elytron.rotation.x = Math.PI / 2;
-    elytron.scale.set(1.05, 0.95, 0.38);
-    elytron.position.set(sx * 0.16, 0.5, -0.12);
-    elytron.rotation.z = sx * -0.12;
+    elytron.scale.set(1.12, 0.88, 0.28);
+    elytron.position.set(sx * 0.18, 0.46, -0.14);
+    elytron.rotation.z = sx * -0.1;
     elytron.castShadow = true;
     g.add(elytron);
-    part(g, new THREE.BoxGeometry(0.06, 0.035, 0.48), plateMat, sx * 0.15, 0.6, -0.1);
+    part(g, new THREE.BoxGeometry(0.045, 0.03, 0.52), plateMat, sx * 0.14, 0.56, -0.12);
+    part(g, new THREE.BoxGeometry(0.04, 0.028, 0.44), plateMat, sx * 0.22, 0.54, -0.14);
+    part(g, new THREE.BoxGeometry(0.05, 0.022, 0.12), glow(0x6a9030), sx * 0.18, 0.58, 0.12);
   }
-  part(g, new THREE.BoxGeometry(0.03, 0.08, 0.7), glow(0x9ac048), 0, 0.58, -0.1);
+  part(g, new THREE.BoxGeometry(0.028, 0.07, 0.78), glow(0x9ac048), 0, 0.54, -0.12);
 
-  // Boxy thorax plate between head and wing-cases
-  part(g, new THREE.BoxGeometry(0.46, 0.16, 0.28), shellMat, 0, 0.42, 0.28);
-  part(g, new THREE.BoxGeometry(0.38, 0.06, 0.2), plateMat, 0, 0.52, 0.28);
+  // Shield pronotum between head and wing-cases
+  part(g, new THREE.BoxGeometry(0.5, 0.14, 0.3), shellMat, 0, 0.4, 0.3);
+  part(g, new THREE.BoxGeometry(0.4, 0.055, 0.22), plateMat, 0, 0.5, 0.3);
+  part(g, new THREE.BoxGeometry(0.18, 0.04, 0.26), glow(0x7aaa38), 0, 0.48, 0.3);
 
-  // Wedge head + rhinoceros horn
-  const head = new THREE.Mesh(new THREE.SphereGeometry(0.17, 10, 8), headMat);
-  head.scale.set(1.35, 0.62, 1.2);
-  head.position.set(0, 0.4, 0.54);
+  // Wedge head + curved rhinoceros horn
+  const head = new THREE.Mesh(new THREE.SphereGeometry(0.16, 10, 8), headMat);
+  head.scale.set(1.42, 0.52, 1.28);
+  head.position.set(0, 0.38, 0.56);
   head.castShadow = true;
   g.add(head);
-  part(g, new THREE.ConeGeometry(0.16, 0.22, 6), headMat, 0, 0.38, 0.68, 1.15, 0, 0);
-  part(g, new THREE.ConeGeometry(0.07, 0.46, 5), clawMat, 0, 0.68, 0.6, 0.48, 0, 0);
-  part(g, new THREE.ConeGeometry(0.03, 0.1, 4), clawMat, 0, 0.9, 0.5, 0.3, 0, 0);
-  part(g, new THREE.BoxGeometry(0.3, 0.04, 0.07), plateMat, 0, 0.48, 0.42);
+  part(g, new THREE.ConeGeometry(0.15, 0.24, 6), headMat, 0, 0.36, 0.72, 1.2, 0, 0);
+  // Rhinoceros horn — pale cone that sticks forward from the plaza
+  part(g, new THREE.ConeGeometry(0.075, 0.48, 5), clawMat, 0, 0.72, 0.58, 0.42, 0, 0);
+  part(g, new THREE.ConeGeometry(0.03, 0.14, 4), clawMat, 0, 0.94, 0.48, 0.25, 0, 0);
+  part(g, new THREE.BoxGeometry(0.32, 0.035, 0.06), plateMat, 0, 0.46, 0.44);
 
   const eyeMat = glow(0xffee66);
   for (const sx of [-1, 1] as const) {
-    part(g, new THREE.SphereGeometry(0.08, 7, 6), mat({ color: 0x3a5010, roughness: 0.4 }), sx * 0.15, 0.46, 0.68, 0, 0, 0, 0.85, 0.9, 0.7);
-    part(g, new THREE.SphereGeometry(0.055, 6, 6), eyeMat, sx * 0.155, 0.47, 0.74);
-    const mandible = new THREE.Mesh(new THREE.ConeGeometry(0.07, 0.42, 5), clawMat);
-    mandible.position.set(sx * 0.14, 0.24, 0.76);
-    mandible.rotation.set(1.15, 0, sx * 0.72);
+    part(g, new THREE.SphereGeometry(0.075, 7, 6), mat({ color: 0x3a5010, roughness: 0.4 }), sx * 0.16, 0.44, 0.7, 0, 0, 0, 0.82, 0.85, 0.65);
+    part(g, new THREE.SphereGeometry(0.05, 6, 6), eyeMat, sx * 0.165, 0.45, 0.76);
+    const mandible = new THREE.Mesh(new THREE.ConeGeometry(0.065, 0.4, 5), clawMat);
+    mandible.position.set(sx * 0.15, 0.22, 0.78);
+    mandible.rotation.set(1.2, 0, sx * 0.78);
     mandible.castShadow = true;
     g.add(mandible);
-    part(g, new THREE.ConeGeometry(0.035, 0.12, 4), clawMat, sx * 0.22, 0.16, 0.88, 1.3, 0, sx * 0.4);
-    const ant = tagged(sx * 0.1, 0.64, 0.54, -0.75, 0, sx * 0.45, 'ant', sx < 0 ? 0 : 1);
+    part(g, new THREE.ConeGeometry(0.032, 0.12, 4), clawMat, sx * 0.24, 0.14, 0.9, 1.35, 0, sx * 0.45);
+    const ant = tagged(sx * 0.1, 0.62, 0.54, -0.75, 0, sx * 0.45, 'ant', sx < 0 ? 0 : 1);
     part(ant, new THREE.CylinderGeometry(0.014, 0.01, 0.36, 4), dark, 0, 0.18, 0);
     part(ant, new THREE.SphereGeometry(0.038, 5, 5), headMat, 0, 0.38, 0);
     g.add(ant);
   }
 
   const legMat = mat({ color: 0x2a2010, roughness: 0.7 });
-  const zLegs = [-0.32, -0.04, 0.26];
+  const zLegs = [-0.36, -0.06, 0.24];
   for (const sx of [-1, 1] as const) {
     zLegs.forEach((sz, i) => {
       const tag = sx < 0 ? 'legL' : 'legR';
       const gait = (sx < 0 ? i : i + 1) % 2;
-      const hip = tagged(sx * 0.38, 0.26, sz, 0.12, 0, sx * 1.05, tag, gait);
-      part(hip, new THREE.CylinderGeometry(0.04, 0.028, 0.26, 5), legMat, 0, -0.02, 0, 0.35, 0, 0);
-      part(hip, new THREE.CylinderGeometry(0.028, 0.02, 0.22, 4), dark, sx * 0.02, -0.2, 0.05, 0.7, 0, sx * 0.15);
-      part(hip, new THREE.ConeGeometry(0.028, 0.1, 4), clawMat, sx * 0.03, -0.3, 0.1, 1.1, 0, 0);
+      const hip = tagged(sx * 0.42, 0.24, sz, 0.1, 0, sx * 1.12, tag, gait);
+      part(hip, new THREE.SphereGeometry(0.04, 5, 5), dark, 0, 0.02, 0);
+      part(hip, new THREE.CylinderGeometry(0.038, 0.026, 0.24, 5), legMat, 0, -0.04, 0.01, 0.4, 0, 0);
+      part(hip, new THREE.SphereGeometry(0.03, 5, 5), dark, sx * 0.01, -0.16, 0.04);
+      part(hip, new THREE.CylinderGeometry(0.026, 0.018, 0.2, 4), dark, sx * 0.02, -0.26, 0.06, 0.75, 0, sx * 0.18);
+      part(hip, new THREE.ConeGeometry(0.026, 0.1, 4), clawMat, sx * 0.03, -0.36, 0.12, 1.15, 0, 0);
       g.add(hip);
     });
-    const claw = new THREE.Mesh(new THREE.ConeGeometry(0.085, 0.34, 5), clawMat);
+    const claw = new THREE.Mesh(new THREE.ConeGeometry(0.08, 0.32, 5), clawMat);
     claw.rotation.set(-0.35, 0, sx * 0.85);
-    claw.position.set(sx * 0.34, 0.3, 0.56);
+    claw.position.set(sx * 0.34, 0.28, 0.56);
     claw.castShadow = true;
     g.add(claw);
   }
@@ -312,37 +323,47 @@ function dressSkitterwing(g: THREE.Group, bodyMat: THREE.MeshStandardMaterial): 
   const band = mat({ color: 0x80e0b8, emissive: 0x206050, emissiveIntensity: 0.4 });
   const dark = mat({ color: 0x103028, roughness: 0.6 });
 
-  const thorax = new THREE.Mesh(new THREE.BoxGeometry(0.28, 0.24, 0.34), bodyMat);
+  // Humped flight-muscle thorax
+  const thorax = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.26, 0.36), bodyMat);
   thorax.position.set(0, 0.98, 0.02);
   thorax.castShadow = true;
   g.add(thorax);
-  part(g, new THREE.SphereGeometry(0.14, 8, 6), teal, 0, 1.02, 0.02, 0, 0, 0, 1.1, 0.85, 1.2);
+  part(g, new THREE.SphereGeometry(0.15, 8, 6), teal, 0, 1.06, 0.0, 0, 0, 0, 1.15, 0.72, 1.25);
+  part(g, new THREE.BoxGeometry(0.22, 0.06, 0.28), dark, 0, 1.12, 0.0);
 
-  // Long segmented abdomen — the dragonfly tell
-  for (let i = 0; i < 7; i++) {
-    const seg = new THREE.Mesh(new THREE.SphereGeometry(0.078 - i * 0.005, 8, 6), i % 2 ? band : teal);
-    seg.scale.set(0.7, 0.62, 1.35);
-    seg.position.set(0, 0.92 - i * 0.012, -0.2 - i * 0.145);
+  // Long cylindrical abdomen — banded dragonfly tail
+  for (let i = 0; i < 8; i++) {
+    const r = 0.07 - i * 0.004;
+    const seg = new THREE.Mesh(new THREE.CylinderGeometry(r, r - 0.004, 0.13, 8), i % 2 ? band : teal);
+    seg.rotation.x = Math.PI / 2;
+    seg.position.set(0, 0.9 - i * 0.008, -0.22 - i * 0.132);
     g.add(seg);
+    if (i % 2 === 0) part(g, new THREE.TorusGeometry(r + 0.008, 0.008, 4, 8), dark, 0, 0.9 - i * 0.008, -0.22 - i * 0.132, Math.PI / 2, 0, 0);
   }
-  part(g, new THREE.ConeGeometry(0.04, 0.28, 5), glow(0xffe080), 0, 0.84, -1.22, Math.PI / 2, 0, 0);
-  part(g, new THREE.ConeGeometry(0.018, 0.1, 4), glow(0xffa040), 0, 0.84, -1.38, Math.PI / 2, 0, 0);
+  // Barbed stinger — two-part, readable from plaza
+  part(g, new THREE.ConeGeometry(0.055, 0.32, 5), glow(0xffe080), 0, 0.82, -1.28, Math.PI / 2, 0, 0);
+  part(g, new THREE.ConeGeometry(0.028, 0.14, 4), glow(0xff8020), 0, 0.82, -1.48, Math.PI / 2, 0, 0);
+  for (const sx of [-1, 1] as const) {
+    part(g, new THREE.ConeGeometry(0.016, 0.08, 3), glow(0xffa040), sx * 0.04, 0.84, -1.36, 0.9, 0, sx * 0.8);
+  }
 
-  const head = new THREE.Mesh(new THREE.SphereGeometry(0.09, 8, 8), mat({ color: 0x50d0b0, roughness: 0.45 }));
-  head.position.set(0, 1.02, 0.22);
+  const head = new THREE.Mesh(new THREE.SphereGeometry(0.08, 8, 8), mat({ color: 0x50d0b0, roughness: 0.45 }));
+  head.scale.set(0.85, 0.9, 1.15);
+  head.position.set(0, 1.02, 0.24);
   g.add(head);
-  // Compound eyes dominate the silhouette
+  // Compound eyes wrap the head
   const eyeMat = glow(0x40ffc0);
   const eyeShell = mat({ color: 0x102820, roughness: 0.35, metalness: 0.2 });
   for (const sx of [-1, 1] as const) {
-    part(g, new THREE.SphereGeometry(0.125, 8, 6), eyeShell, sx * 0.13, 1.05, 0.28, 0, 0, 0, 0.88, 1.12, 1.0);
-    part(g, new THREE.SphereGeometry(0.09, 8, 6), eyeMat, sx * 0.145, 1.06, 0.34, 0, 0, 0, 0.78, 1.05, 0.72);
-    part(g, new THREE.SphereGeometry(0.03, 5, 5), glow(0xe8fff4), sx * 0.16, 1.1, 0.38);
+    part(g, new THREE.SphereGeometry(0.132, 8, 6), eyeShell, sx * 0.14, 1.06, 0.3, 0, 0, 0, 0.9, 1.18, 1.05);
+    part(g, new THREE.SphereGeometry(0.095, 8, 6), eyeMat, sx * 0.155, 1.07, 0.36, 0, 0, 0, 0.78, 1.08, 0.7);
+    part(g, new THREE.SphereGeometry(0.028, 5, 5), glow(0xe8fff4), sx * 0.17, 1.12, 0.4);
     const ant = new THREE.Mesh(new THREE.CylinderGeometry(0.01, 0.008, 0.22, 4), teal);
-    ant.position.set(sx * 0.04, 1.18, 0.28);
+    ant.position.set(sx * 0.04, 1.18, 0.3);
     ant.rotation.set(-0.55, 0, sx * 0.45);
     g.add(ant);
-    part(g, new THREE.SphereGeometry(0.018, 4, 4), dark, sx * 0.08, 1.28, 0.18);
+    part(g, new THREE.SphereGeometry(0.018, 4, 4), dark, sx * 0.08, 1.28, 0.2);
+    part(g, new THREE.ConeGeometry(0.02, 0.08, 4), dark, sx * 0.03, 0.96, 0.34, 1.1, 0, sx * 0.4);
   }
 
   const wingMat = mat({
@@ -398,11 +419,15 @@ function dressRattlekin(g: THREE.Group): void {
   const rust = mat({ color: 0x8a6040, metalness: 0.55, roughness: 0.4 });
   const steel = mat({ color: 0x9aa0a8, metalness: 0.7, roughness: 0.32 });
 
-  part(g, new THREE.SphereGeometry(0.16, 8, 6), bone, 0, 0.44, 0, 0, 0, 0, 1.45, 0.42, 1.15);
-  part(g, new THREE.BoxGeometry(0.22, 0.08, 0.14), bone, 0, 0.4, 0.02);
-  part(g, new THREE.CylinderGeometry(0.035, 0.048, 0.58, 6), bone, 0, 0.78, -0.02);
-  for (let i = 0; i < 5; i++) {
-    part(g, new THREE.BoxGeometry(0.07, 0.04, 0.07), bone, 0, 0.54 + i * 0.12, -0.02);
+  part(g, new THREE.SphereGeometry(0.16, 8, 6), bone, 0, 0.42, 0, 0, 0, 0, 1.55, 0.38, 1.2);
+  part(g, new THREE.BoxGeometry(0.24, 0.07, 0.16), bone, 0, 0.38, 0.02);
+  part(g, new THREE.CylinderGeometry(0.032, 0.046, 0.62, 6), bone, 0, 0.78, -0.02);
+  for (let i = 0; i < 6; i++) {
+    part(g, new THREE.BoxGeometry(0.065, 0.035, 0.065), bone, 0, 0.5 + i * 0.11, -0.02);
+  }
+  // Scapulae so the ribcage reads as a fighter, not a hanging rag
+  for (const sx of [-1, 1] as const) {
+    part(g, new THREE.BoxGeometry(0.12, 0.04, 0.16), bone, sx * 0.16, 1.02, -0.04, 0, 0, sx * -0.35);
   }
 
   for (let i = 0; i < 6; i++) {
@@ -431,8 +456,10 @@ function dressRattlekin(g: THREE.Group): void {
     if (sx > 0) {
       const cleaver = new THREE.Group();
       part(cleaver, new THREE.CylinderGeometry(0.022, 0.028, 0.22, 5), rust, 0, 0.02, 0);
-      part(cleaver, new THREE.BoxGeometry(0.08, 0.48, 0.28), steel, 0.06, 0.32, 0, 0, 0, -0.08);
-      part(cleaver, new THREE.ConeGeometry(0.08, 0.16, 4), rust, 0.14, 0.54, 0.04, 0, 0, -0.8);
+      part(cleaver, new THREE.BoxGeometry(0.07, 0.5, 0.3), steel, 0.06, 0.34, 0, 0, 0, -0.08);
+      part(cleaver, new THREE.BoxGeometry(0.04, 0.12, 0.08), steel, 0.1, 0.22, 0.12);
+      part(cleaver, new THREE.BoxGeometry(0.04, 0.1, 0.07), steel, 0.1, 0.38, 0.13);
+      part(cleaver, new THREE.ConeGeometry(0.08, 0.16, 4), rust, 0.14, 0.56, 0.04, 0, 0, -0.8);
       cleaver.position.set(0.02, -0.2, 0.03);
       cleaver.rotation.set(0.35, 0.12, -0.08);
       markHeld(cleaver, 'cleaver');
@@ -458,58 +485,73 @@ function dressEmberling(g: THREE.Group): void {
   const hot = glow(0xff6620);
   const tip = glow(0xffee66);
 
-  const body = new THREE.Mesh(new THREE.CapsuleGeometry(0.2, 0.85, 5, 10), coal);
+  // Long low lizard trunk — salamander, not a coal lump
+  const body = new THREE.Mesh(new THREE.CapsuleGeometry(0.16, 1.05, 5, 10), coal);
   body.rotation.x = Math.PI / 2;
-  body.scale.set(1.05, 1.15, 0.72);
-  body.position.set(0, 0.4, -0.08);
+  body.scale.set(1.15, 1.28, 0.58);
+  body.position.set(0, 0.34, -0.12);
   body.castShadow = true;
   g.add(body);
-  part(g, new THREE.SphereGeometry(0.16, 8, 6), coal, 0, 0.38, -0.62, 0, 0, 0, 0.85, 0.55, 1.35);
+  part(g, new THREE.SphereGeometry(0.14, 8, 6), coal, 0, 0.32, -0.72, 0, 0, 0, 0.8, 0.48, 1.4);
+  part(g, new THREE.BoxGeometry(0.22, 0.04, 0.95), glow(0xff6620), 0, 0.22, -0.08);
 
-  for (let i = 0; i < 6; i++) {
-    part(g, new THREE.BoxGeometry(0.05, 0.035, 0.2), glow(0xff5018), (i % 2 ? 0.1 : -0.1), 0.54, 0.22 - i * 0.16);
+  for (let i = 0; i < 7; i++) {
+    part(g, new THREE.BoxGeometry(0.04, 0.03, 0.16), glow(0xff5018), (i % 2 ? 0.12 : -0.12), 0.46, 0.28 - i * 0.16);
   }
-  part(g, new THREE.BoxGeometry(0.08, 0.055, 1.05), glow(0xff7728), 0, 0.56, -0.06);
+  part(g, new THREE.BoxGeometry(0.07, 0.05, 1.15), glow(0xff8830), 0, 0.48, -0.08);
+  for (let i = 0; i < 5; i++) {
+    part(g, new THREE.SphereGeometry(0.035, 5, 5), lava, 0, 0.5, 0.3 - i * 0.2);
+  }
 
-  // Open glowing maw — salamander snout, not a dark potato
-  const head = new THREE.Mesh(new THREE.SphereGeometry(0.18, 10, 8), coal);
-  head.scale.set(0.92, 0.68, 1.45);
-  head.position.set(0, 0.58, 0.52);
+  // Long salamander snout, side eyes, open glowing maw
+  const head = new THREE.Mesh(new THREE.SphereGeometry(0.16, 10, 8), coal);
+  head.scale.set(0.85, 0.58, 1.65);
+  head.position.set(0, 0.5, 0.58);
   head.castShadow = true;
   g.add(head);
-  part(g, new THREE.ConeGeometry(0.14, 0.38, 6), coal, 0, 0.62, 0.78, 1.05, 0, 0);
-  part(g, new THREE.ConeGeometry(0.12, 0.34, 6), coal, 0, 0.48, 0.76, 2.05, 0, 0);
-  part(g, new THREE.ConeGeometry(0.1, 0.28, 6), hot, 0, 0.55, 0.82, 1.35, 0, 0);
-  part(g, new THREE.SphereGeometry(0.09, 8, 6), tip, 0, 0.56, 0.7);
-  for (let i = 0; i < 4; i++) {
-    part(g, new THREE.ConeGeometry(0.016, 0.05, 3), tip, -0.05 + i * 0.033, 0.5, 0.92, 1.4, 0, 0);
+  part(g, new THREE.ConeGeometry(0.12, 0.42, 6), coal, 0, 0.54, 0.88, 1.15, 0, 0);
+  part(g, new THREE.ConeGeometry(0.1, 0.38, 6), coal, 0, 0.4, 0.86, 2.0, 0, 0);
+  part(g, new THREE.ConeGeometry(0.085, 0.32, 6), hot, 0, 0.48, 0.92, 1.4, 0, 0);
+  part(g, new THREE.SphereGeometry(0.08, 8, 6), tip, 0, 0.5, 0.78);
+  for (let i = 0; i < 5; i++) {
+    part(g, new THREE.ConeGeometry(0.014, 0.048, 3), tip, -0.06 + i * 0.03, 0.42, 1.02, 1.45, 0, 0);
   }
   for (const sx of [-1, 1] as const) {
-    part(g, new THREE.SphereGeometry(0.038, 6, 6), tip, sx * 0.12, 0.7, 0.64);
-    part(g, new THREE.ConeGeometry(0.035, 0.14, 4), coal, sx * 0.14, 0.8, 0.4, 0.25, 0, sx * 0.45);
+    part(g, new THREE.SphereGeometry(0.042, 6, 6), tip, sx * 0.14, 0.58, 0.62);
+    part(g, new THREE.SphereGeometry(0.016, 4, 4), glow(0xffeeaa), sx * 0.155, 0.6, 0.68);
+    part(g, new THREE.ConeGeometry(0.032, 0.16, 4), coal, sx * 0.12, 0.72, 0.38, 0.2, 0, sx * 0.5);
+    // External flame gills
+    part(g, new THREE.ConeGeometry(0.03, 0.16, 4), hot, sx * 0.16, 0.62, 0.42, 0.4, 0, sx * 0.85);
   }
 
-  for (let i = 0; i < 8; i++) {
-    const h = 0.22 + (i % 3) * 0.1;
-    part(g, new THREE.ConeGeometry(0.055 + (i % 2) * 0.02, h, 5), i % 2 ? lava : hot, (i % 2 ? 0.06 : -0.06), 0.72 + h * 0.38, 0.32 - i * 0.11);
+  for (let i = 0; i < 9; i++) {
+    const h = 0.2 + (i % 3) * 0.09;
+    part(g, new THREE.ConeGeometry(0.048 + (i % 2) * 0.018, h, 5), i % 2 ? lava : hot, (i % 2 ? 0.05 : -0.05), 0.62 + h * 0.38, 0.36 - i * 0.12);
   }
 
   const tail = new THREE.Group();
-  tail.position.set(0, 0.36, -0.7);
+  tail.position.set(0, 0.3, -0.82);
   tail.userData.walkLimb = 'tail';
   tail.userData.baseRot = { x: 0, y: 0, z: 0 };
-  part(tail, new THREE.ConeGeometry(0.1, 0.55, 6), coal, 0, 0, -0.22, Math.PI / 2, 0, 0);
-  part(tail, new THREE.ConeGeometry(0.05, 0.32, 5), hot, 0, 0.04, -0.52, Math.PI / 2, 0, 0);
+  part(tail, new THREE.ConeGeometry(0.09, 0.62, 6), coal, 0, 0, -0.26, Math.PI / 2, 0, 0);
+  part(tail, new THREE.ConeGeometry(0.045, 0.38, 5), hot, 0, 0.03, -0.6, Math.PI / 2, 0, 0);
+  part(tail, new THREE.BoxGeometry(0.03, 0.03, 0.4), glow(0xff8830), 0, 0.06, -0.3);
   g.add(tail);
 
   for (const sx of [-1, 1] as const) {
-    const arm = tagged(sx * 0.26, 0.58, 0.18, 0.15, 0, sx * 0.55, sx < 0 ? 'armL' : 'armR');
-    part(arm, new THREE.CylinderGeometry(0.05, 0.038, 0.26, 5), lava, 0, -0.1, 0.04, 0.4, 0, 0);
-    part(arm, new THREE.SphereGeometry(0.07, 6, 6), hot, 0, -0.24, 0.08);
+    const arm = tagged(sx * 0.28, 0.48, 0.22, 0.2, 0, sx * 0.7, sx < 0 ? 'armL' : 'armR');
+    part(arm, new THREE.CylinderGeometry(0.045, 0.034, 0.24, 5), lava, 0, -0.1, 0.04, 0.45, 0, 0);
+    part(arm, new THREE.SphereGeometry(0.055, 6, 6), hot, 0, -0.22, 0.08);
+    for (let t = 0; t < 3; t++) {
+      part(arm, new THREE.ConeGeometry(0.014, 0.06, 3), coal, (t - 1) * 0.03, -0.28, 0.12, 1.2, 0, 0);
+    }
     g.add(arm);
-    const leg = tagged(sx * 0.18, 0.36, -0.18, 0.2, 0, sx * 0.2, sx < 0 ? 'legL' : 'legR');
-    part(leg, new THREE.CylinderGeometry(0.05, 0.04, 0.22, 5), coal, 0, -0.08, 0);
-    part(leg, new THREE.SphereGeometry(0.06, 5, 5), lava, 0, -0.2, 0.04);
+    const leg = tagged(sx * 0.22, 0.3, -0.22, 0.25, 0, sx * 0.35, sx < 0 ? 'legL' : 'legR');
+    part(leg, new THREE.CylinderGeometry(0.048, 0.036, 0.2, 5), coal, 0, -0.08, 0);
+    part(leg, new THREE.SphereGeometry(0.05, 5, 5), lava, 0, -0.2, 0.04);
+    for (let t = 0; t < 3; t++) {
+      part(leg, new THREE.ConeGeometry(0.014, 0.055, 3), coal, (t - 1) * 0.028, -0.26, 0.08, 1.15, 0, 0);
+    }
     g.add(leg);
   }
 
@@ -534,18 +576,21 @@ function dressGravemage(g: THREE.Group): void {
   body.position.y = 0.72;
   body.castShadow = true;
   g.add(body);
-  part(g, new THREE.ConeGeometry(0.42, 0.58, 8, 1, true), robe, 0, 0.3, 0);
-  part(g, new THREE.ConeGeometry(0.3, 0.2, 8, 1, true), lining, 0, 0.52, 0.02);
-  part(g, new THREE.TorusGeometry(0.2, 0.025, 4, 10), lining, 0, 0.95, 0, Math.PI / 2, 0, 0);
+  part(g, new THREE.ConeGeometry(0.44, 0.62, 8, 1, true), robe, 0, 0.28, 0);
+  part(g, new THREE.ConeGeometry(0.32, 0.22, 8, 1, true), lining, 0, 0.5, 0.02);
+  part(g, new THREE.TorusGeometry(0.2, 0.028, 4, 10), lining, 0, 0.95, 0, Math.PI / 2, 0, 0);
+  part(g, new THREE.BoxGeometry(0.28, 0.08, 0.06), lining, 0, 0.72, 0.16);
 
-  // Pointed cowl — dark opening punched in the hood so it is not a wizard-hat blob
-  part(g, new THREE.SphereGeometry(0.22, 10, 8), robe, 0, 1.3, -0.12, 0, 0, 0, 1.3, 1.22, 1.28);
-  part(g, new THREE.ConeGeometry(0.18, 0.52, 8), robe, 0, 1.68, -0.2, -0.48, 0, 0);
-  part(g, new THREE.BoxGeometry(0.2, 0.18, 0.1), glow(0x050210), 0, 1.2, 0.14);
-  const eye = glow(0xdd99ff);
+  // Pointed cowl with a punched void — eyes float in the hood opening
+  part(g, new THREE.SphereGeometry(0.22, 10, 8), robe, 0, 1.32, -0.16, 0, 0, 0, 1.28, 1.18, 1.22);
+  part(g, new THREE.ConeGeometry(0.16, 0.62, 8), robe, 0, 1.76, -0.26, -0.55, 0, 0);
+  part(g, new THREE.BoxGeometry(0.18, 0.08, 0.12), robe, 0, 1.36, 0.08);
+  part(g, new THREE.BoxGeometry(0.22, 0.2, 0.12), glow(0x04010c), 0, 1.18, 0.16);
+  part(g, new THREE.BoxGeometry(0.16, 0.12, 0.04), glow(0x120418), 0, 1.16, 0.22);
+  const eye = glow(0xee99ff);
   for (const sx of [-1, 1] as const) {
-    part(g, new THREE.SphereGeometry(0.046, 6, 6), eye, sx * 0.055, 1.22, 0.2);
-    part(g, new THREE.SphereGeometry(0.016, 4, 4), glow(0xf4e8ff), sx * 0.06, 1.235, 0.23);
+    part(g, new THREE.SphereGeometry(0.05, 6, 6), eye, sx * 0.058, 1.2, 0.24);
+    part(g, new THREE.SphereGeometry(0.018, 4, 4), glow(0xf8eeff), sx * 0.064, 1.216, 0.27);
   }
 
   for (const sx of [-1, 1] as const) {
@@ -560,6 +605,7 @@ function dressGravemage(g: THREE.Group): void {
       part(book, new THREE.BoxGeometry(0.2, 0.04, 0.26), lining, 0, 0, 0);
       part(book, new THREE.BoxGeometry(0.17, 0.03, 0.23), mat({ color: 0xe8dcc8, roughness: 0.7 }), 0, 0.025, 0);
       part(book, new THREE.BoxGeometry(0.02, 0.05, 0.26), cloth, -0.1, 0, 0);
+      part(book, new THREE.BoxGeometry(0.08, 0.008, 0.12), glow(0xaa66ff), 0.02, 0.044, 0.02);
       book.position.set(0, -0.18, 0.1);
       book.rotation.set(0.85, 0.3, -0.12);
       markHeld(book, 'book');
@@ -568,8 +614,8 @@ function dressGravemage(g: THREE.Group): void {
     } else {
       const staff = new THREE.Group();
       part(staff, new THREE.CylinderGeometry(0.022, 0.03, 1.2, 6), wood, 0, 0.12, 0);
-      addSkull(staff, bone, 0, 0.8, 0.04, { tilt: 0.12, eye: 0xaa66ff, scale: 0.58 });
-      part(staff, new THREE.SphereGeometry(0.1, 10, 8), glow(0xaa66ff), 0, 1.02, 0);
+      addSkull(staff, bone, 0, 0.78, 0.04, { tilt: 0.12, eye: 0xaa66ff, scale: 0.72 });
+      part(staff, new THREE.SphereGeometry(0.11, 10, 8), glow(0xcc88ff), 0, 1.04, 0);
       staff.position.set(0.02, -0.2, 0.03);
       staff.rotation.set(0.18, 0.05, -0.1);
       markHeld(staff, 'staff');
@@ -592,14 +638,19 @@ function dressThornwitch(g: THREE.Group): void {
   const hair = mat({ color: 0x1a0810, roughness: 0.7, emissive: 0x200810, emissiveIntensity: 0.2 });
   const barb = glow(0xff3060);
 
-  part(g, new THREE.SphereGeometry(0.24, 10, 8), silk, 0, 0.46, 0, 0, 0, 0, 1.35, 0.58, 0.95);
-  const torso = new THREE.Mesh(new THREE.CapsuleGeometry(0.11, 0.34, 5, 8), silk);
-  torso.position.y = 0.86;
+  // Hourglass: wide hips, cinched waist, high bust
+  part(g, new THREE.SphereGeometry(0.26, 10, 8), silk, 0, 0.42, 0, 0, 0, 0, 1.48, 0.52, 0.92);
+  const torso = new THREE.Mesh(new THREE.CapsuleGeometry(0.09, 0.36, 5, 8), silk);
+  torso.position.y = 0.84;
   torso.castShadow = true;
   g.add(torso);
-  part(g, new THREE.SphereGeometry(0.17, 8, 6), leather, 0, 1.02, 0.04, 0, 0, 0, 1.22, 0.62, 0.88);
-  part(g, new THREE.ConeGeometry(0.4, 0.52, 8, 1, true), silk, 0, 0.26, 0);
-  part(g, new THREE.BoxGeometry(0.2, 0.05, 0.08), leather, 0, 0.68, 0.12);
+  part(g, new THREE.SphereGeometry(0.175, 8, 6), leather, 0, 1.04, 0.05, 0, 0, 0, 1.28, 0.55, 0.85);
+  part(g, new THREE.ConeGeometry(0.42, 0.54, 8, 1, true), silk, 0, 0.24, 0);
+  part(g, new THREE.BoxGeometry(0.16, 0.14, 0.06), leather, 0, 0.72, 0.1);
+  part(g, new THREE.BoxGeometry(0.04, 0.16, 0.02), glow(0xff4060), 0, 0.72, 0.14);
+  for (const sx of [-1, 1] as const) {
+    part(g, new THREE.BoxGeometry(0.015, 0.12, 0.015), barb, sx * 0.04, 0.72, 0.14);
+  }
 
   addFace(g, skin, 0, 1.28, 0.08, { eye: 0xff3060, scale: 1.02 });
   const hairG = tagged(0, 1.36, -0.06, 0, 0, 0, 'hair');
@@ -609,14 +660,16 @@ function dressThornwitch(g: THREE.Group): void {
     part(hairG, new THREE.CapsuleGeometry(0.04, 0.52, 3, 5), hair, Math.sin(a) * 0.14, -0.44, -0.14 + Math.cos(a) * 0.05, 0.35, 0, a * 0.12);
   }
   g.add(hairG);
-  for (let i = 0; i < 9; i++) {
-    const a = (i / 9) * Math.PI * 2;
-    const spike = new THREE.Mesh(new THREE.ConeGeometry(0.032, 0.2 + (i % 2) * 0.1, 4), thorn);
-    spike.position.set(Math.cos(a) * 0.14, 1.46, Math.sin(a) * 0.12 - 0.02);
-    spike.rotation.z = Math.cos(a) * 0.4;
-    spike.rotation.x = Math.sin(a) * 0.28;
+  for (let i = 0; i < 10; i++) {
+    const a = (i / 10) * Math.PI * 2;
+    const tall = i % 2 === 0;
+    const spike = new THREE.Mesh(new THREE.ConeGeometry(0.03, tall ? 0.32 : 0.18, 4), thorn);
+    spike.position.set(Math.cos(a) * 0.13, 1.48 + (tall ? 0.04 : 0), Math.sin(a) * 0.11 - 0.02);
+    spike.rotation.z = Math.cos(a) * 0.35;
+    spike.rotation.x = Math.sin(a) * 0.25;
     g.add(spike);
   }
+  part(g, new THREE.ConeGeometry(0.04, 0.28, 4), thorn, 0, 1.62, -0.02);
   for (const sx of [-1, 1] as const) {
     part(g, new THREE.ConeGeometry(0.1, 0.2, 5), thorn, sx * 0.22, 1.1, 0, 0, 0, sx * -0.95);
     const arm = tagged(sx * 0.24, 0.98, 0.02, 0.05, 0, sx * 0.45, sx < 0 ? 'armL' : 'armR');
@@ -627,22 +680,22 @@ function dressThornwitch(g: THREE.Group): void {
     addGrip(fore, skin, 0, -0.2, 0.03);
     if (sx > 0) {
       const whip = new THREE.Group();
-      part(whip, new THREE.CylinderGeometry(0.024, 0.032, 0.16, 5), thorn, 0, 0, 0);
+      part(whip, new THREE.CylinderGeometry(0.03, 0.04, 0.16, 5), thorn, 0, 0, 0);
       let px = 0.02;
       let py = 0.1;
       for (let i = 0; i < 7; i++) {
-        const seg = new THREE.Mesh(new THREE.CylinderGeometry(0.028, 0.02, 0.16, 4), leather);
+        const seg = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.028, 0.17, 5), leather);
         seg.position.set(px, py, 0);
         seg.rotation.z = -0.55 - i * 0.12;
         whip.add(seg);
-        const hook = new THREE.Mesh(new THREE.ConeGeometry(0.024, 0.08, 3), barb);
-        hook.position.set(px + 0.05, py + 0.02, 0);
+        const hook = new THREE.Mesh(new THREE.ConeGeometry(0.03, 0.1, 3), barb);
+        hook.position.set(px + 0.06, py + 0.02, 0);
         hook.rotation.z = -1.2;
         whip.add(hook);
-        px += 0.1;
+        px += 0.105;
         py += 0.1;
       }
-      part(whip, new THREE.ConeGeometry(0.055, 0.18, 4), thorn, px, py, 0, 0, 0, -1.2);
+      part(whip, new THREE.ConeGeometry(0.065, 0.2, 4), thorn, px, py, 0, 0, 0, -1.2);
       whip.position.set(0.02, -0.18, 0.04);
       whip.rotation.set(0.35, 0.25, -0.95);
       markHeld(whip, 'whip');
@@ -666,23 +719,25 @@ function dressBonewretch(g: THREE.Group): void {
   const rag = mat({ color: 0x4a5038, roughness: 0.85, emissive: 0x1a2010, emissiveIntensity: 0.1 });
   const rot = mat({ color: 0x6a6040, roughness: 0.8 });
 
-  const torso = new THREE.Mesh(new THREE.CapsuleGeometry(0.12, 0.3, 4, 8), bone);
-  torso.position.set(0.12, 0.54, 0);
-  torso.rotation.z = 0.72;
+  const torso = new THREE.Mesh(new THREE.CapsuleGeometry(0.11, 0.32, 4, 8), bone);
+  torso.position.set(0.14, 0.52, 0);
+  torso.rotation.z = 0.82;
   torso.castShadow = true;
   g.add(torso);
-  for (let i = 0; i < 4; i++) {
-    const rib = new THREE.Mesh(new THREE.TorusGeometry(0.12, 0.016, 4, 10, Math.PI), bone);
+  for (let i = 0; i < 5; i++) {
+    const rib = new THREE.Mesh(new THREE.TorusGeometry(0.11, 0.015, 4, 10, Math.PI), bone);
     rib.rotation.x = Math.PI / 2;
-    rib.position.set(0.16, 0.42 + i * 0.08, 0.04);
-    rib.rotation.z = 0.55;
+    rib.position.set(0.18, 0.4 + i * 0.075, 0.04);
+    rib.rotation.z = 0.62;
     g.add(rib);
+    part(g, new THREE.BoxGeometry(0.04, 0.03, 0.04), bone, 0.08, 0.4 + i * 0.075, -0.04);
   }
-  part(g, new THREE.SphereGeometry(0.045, 6, 6), glow(0x70ff40), 0.14, 0.54, 0.06);
-  part(g, new THREE.ConeGeometry(0.26, 0.5, 6, 1, true), rag, 0.04, 0.46, -0.08, 0, 0, 0.45);
-  part(g, new THREE.BoxGeometry(0.09, 0.34, 0.04), rag, -0.1, 0.38, -0.1, 0.25, 0, 0.5);
-  part(g, new THREE.BoxGeometry(0.07, 0.26, 0.04), rot, 0.2, 0.34, -0.12, 0.35, 0, -0.3);
-  part(g, new THREE.BoxGeometry(0.06, 0.2, 0.03), rag, 0.08, 0.28, -0.14, 0.4, 0, 0.2);
+  part(g, new THREE.SphereGeometry(0.042, 6, 6), glow(0x70ff40), 0.16, 0.52, 0.06);
+  part(g, new THREE.ConeGeometry(0.28, 0.54, 6, 1, true), rag, 0.02, 0.44, -0.1, 0, 0, 0.5);
+  part(g, new THREE.BoxGeometry(0.1, 0.38, 0.04), rag, -0.12, 0.36, -0.12, 0.3, 0, 0.55);
+  part(g, new THREE.BoxGeometry(0.08, 0.3, 0.04), rot, 0.22, 0.32, -0.14, 0.4, 0, -0.35);
+  part(g, new THREE.BoxGeometry(0.07, 0.24, 0.03), rag, 0.06, 0.26, -0.16, 0.45, 0, 0.25);
+  part(g, new THREE.BoxGeometry(0.05, 0.18, 0.03), rot, 0.14, 0.22, -0.1, 0.5, 0, -0.15);
 
   addSkull(g, bone, 0.28, 0.96, 0.08, { tilt: 0.48, eye: 0x70ff40, jawHang: 0.1, scale: 1.0 });
 
@@ -699,12 +754,14 @@ function dressBonewretch(g: THREE.Group): void {
   clutch.add(femur);
   g.add(clutch);
 
-  const drag = tagged(0.34, 0.5, 0.04, 0.42, 0, 0.18, 'armR');
-  part(drag, new THREE.CylinderGeometry(0.038, 0.03, 0.36, 4), bone, 0, -0.16, 0.02, 0.2, 0, 0);
-  part(drag, new THREE.SphereGeometry(0.04, 5, 5), bone, 0, -0.34, 0.04);
-  part(drag, new THREE.CylinderGeometry(0.03, 0.022, 0.38, 4), bone, 0, -0.52, 0.08, 0.35, 0, 0);
-  part(drag, new THREE.SphereGeometry(0.072, 5, 5), bone, 0.04, -0.72, 0.12);
-  part(drag, new THREE.ConeGeometry(0.045, 0.14, 4), bone, 0.08, -0.82, 0.18, 1.1, 0, 0.4);
+  const drag = tagged(0.4, 0.44, 0.02, 0.12, 0, 0.06, 'armR');
+  part(drag, new THREE.CylinderGeometry(0.042, 0.032, 0.44, 4), bone, 0, -0.2, 0.02, 0.12, 0, 0);
+  part(drag, new THREE.SphereGeometry(0.044, 5, 5), bone, 0, -0.42, 0.03);
+  part(drag, new THREE.CylinderGeometry(0.032, 0.024, 0.48, 4), bone, 0, -0.66, 0.04, 0.18, 0, 0);
+  part(drag, new THREE.SphereGeometry(0.09, 5, 5), bone, 0.02, -0.92, 0.06);
+  part(drag, new THREE.ConeGeometry(0.055, 0.18, 4), bone, 0.06, -1.06, 0.1, 1.2, 0, 0.25);
+  part(drag, new THREE.BoxGeometry(0.055, 0.26, 0.03), rag, -0.05, -0.55, -0.02, 0.2, 0, 0.15);
+  part(drag, new THREE.BoxGeometry(0.045, 0.2, 0.025), rot, 0.06, -0.78, 0.02, 0.3, 0, -0.12);
   g.add(drag);
 
   const limp = tagged(-0.04, 0.3, 0.02, 0.2, 0, -0.2, 'legL');
@@ -728,11 +785,13 @@ function dressHeroKnight(g: THREE.Group, bodyMat: THREE.MeshStandardMaterial): v
   body.position.y = 0.76;
   body.castShadow = true;
   g.add(body);
-  part(g, new THREE.BoxGeometry(0.38, 0.32, 0.22), armor, 0, 0.88, 0.02);
+  part(g, new THREE.BoxGeometry(0.4, 0.34, 0.24), armor, 0, 0.88, 0.02);
   part(g, new THREE.BoxGeometry(0.26, 0.4, 0.06), cloth, 0, 0.78, 0.16);
   part(g, new THREE.BoxGeometry(0.05, 0.28, 0.04), steel, 0, 0.82, 0.2);
   part(g, new THREE.BoxGeometry(0.16, 0.05, 0.04), steel, 0, 0.88, 0.2);
-  part(g, new THREE.CylinderGeometry(0.22, 0.28, 0.16, 8), armor, 0, 0.52, 0);
+  part(g, new THREE.CylinderGeometry(0.2, 0.18, 0.1, 8), armor, 0, 1.12, 0);
+  part(g, new THREE.CylinderGeometry(0.22, 0.3, 0.18, 8), armor, 0, 0.5, 0);
+  part(g, new THREE.BoxGeometry(0.36, 0.08, 0.16), armor, 0, 0.58, 0.04);
 
   for (const sx of [-1, 1] as const) {
     part(g, new THREE.SphereGeometry(0.16, 8, 6), armor, sx * 0.32, 1.06, 0, 0, 0, 0, 1.25, 0.68, 1.1);
@@ -782,14 +841,15 @@ function dressHeroKnight(g: THREE.Group, bodyMat: THREE.MeshStandardMaterial): v
     g.add(leg);
   }
 
-  // Great helm — boxy T-visor punched through the face
-  part(g, new THREE.CylinderGeometry(0.16, 0.18, 0.26, 8), armor, 0, 1.3, 0);
-  part(g, new THREE.BoxGeometry(0.32, 0.1, 0.32), armor, 0, 1.46, 0);
-  part(g, new THREE.BoxGeometry(0.26, 0.14, 0.1), dark, 0, 1.27, 0.145);
-  part(g, new THREE.BoxGeometry(0.06, 0.2, 0.08), dark, 0, 1.2, 0.155);
-  part(g, new THREE.BoxGeometry(0.2, 0.04, 0.02), glow(0x406080), 0, 1.28, 0.2);
-  part(g, new THREE.BoxGeometry(0.036, 0.16, 0.02), glow(0x406080), 0, 1.22, 0.205);
-  part(g, new THREE.BoxGeometry(0.05, 0.32, 0.16), cloth, 0, 1.58, 0);
+  // Great helm — bucket with a punched T-visor that reads from plaza
+  part(g, new THREE.CylinderGeometry(0.17, 0.19, 0.28, 8), armor, 0, 1.32, 0);
+  part(g, new THREE.BoxGeometry(0.34, 0.1, 0.34), armor, 0, 1.5, 0);
+  part(g, new THREE.BoxGeometry(0.28, 0.08, 0.08), armor, 0, 1.4, 0.16);
+  part(g, new THREE.BoxGeometry(0.28, 0.16, 0.1), dark, 0, 1.28, 0.155);
+  part(g, new THREE.BoxGeometry(0.07, 0.22, 0.09), dark, 0, 1.18, 0.165);
+  part(g, new THREE.BoxGeometry(0.22, 0.05, 0.022), glow(0x5080b0), 0, 1.3, 0.215);
+  part(g, new THREE.BoxGeometry(0.042, 0.18, 0.022), glow(0x5080b0), 0, 1.2, 0.22);
+  part(g, new THREE.BoxGeometry(0.05, 0.34, 0.16), cloth, 0, 1.62, 0);
 }
 
 /** Vertical recurve — stave curves away, string nock-to-nock, grip in the fist. */
@@ -809,7 +869,7 @@ function makeRecurveBow(): THREE.Group {
     new THREE.Vector3(-0.1, 0.28, 0),
     new THREE.Vector3(0.04, 0.42, 0),
   ]);
-  const stave = new THREE.Mesh(new THREE.TubeGeometry(curve, 28, 0.022, 7, false), wood);
+  const stave = new THREE.Mesh(new THREE.TubeGeometry(curve, 28, 0.026, 7, false), wood);
   stave.castShadow = true;
   bow.add(stave);
   part(bow, new THREE.CylinderGeometry(0.026, 0.026, 0.14, 6), wrap, 0, 0, 0);
@@ -828,13 +888,13 @@ function makeArrow(): THREE.Group {
   const fletch = mat({ color: 0x3a8a38, roughness: 0.5 });
   const nock = mat({ color: 0x2a2018, roughness: 0.7 });
   const arrow = new THREE.Group();
-  part(arrow, new THREE.CylinderGeometry(0.012, 0.012, 0.64, 6), wood, 0, 0, 0);
-  part(arrow, new THREE.ConeGeometry(0.028, 0.1, 5), steel, 0, 0.36, 0);
-  part(arrow, new THREE.BoxGeometry(0.018, 0.03, 0.02), nock, 0, -0.33, 0);
+  part(arrow, new THREE.CylinderGeometry(0.013, 0.013, 0.66, 6), wood, 0, 0, 0);
+  part(arrow, new THREE.ConeGeometry(0.038, 0.14, 5), steel, 0, 0.38, 0);
+  part(arrow, new THREE.BoxGeometry(0.02, 0.032, 0.022), nock, 0, -0.34, 0);
   for (let i = 0; i < 3; i++) {
     const a = (i / 3) * Math.PI * 2;
-    const vane = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.09, 0.008), fletch);
-    vane.position.set(Math.sin(a) * 0.02, -0.24, Math.cos(a) * 0.02);
+    const vane = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.12, 0.01), fletch);
+    vane.position.set(Math.sin(a) * 0.024, -0.24, Math.cos(a) * 0.024);
     vane.rotation.y = a;
     arrow.add(vane);
   }
@@ -858,20 +918,21 @@ function dressHeroArcher(g: THREE.Group, bodyMat: THREE.MeshStandardMaterial): v
   g.add(body);
   part(g, new THREE.BoxGeometry(0.3, 0.34, 0.18), leather, 0, 0.78, 0.04);
   part(g, new THREE.BoxGeometry(0.07, 0.46, 0.04), leather, 0.07, 0.78, 0.15, 0, 0, -0.35);
+  part(g, new THREE.BoxGeometry(0.12, 0.05, 0.06), leather, 0, 0.58, 0.12);
   part(g, new THREE.BoxGeometry(0.34, 0.62, 0.06), hood, 0, 0.64, -0.16, 0.2, 0, 0);
 
-  // One skull. Cowl wraps that same head — no second sphere behind it.
+  // One skull. Cowl wraps that same head — flattened cap and nape, face stays out.
   const headY = 1.18;
-  const headZ = 0.1;
-  addFace(g, skin, 0, headY, headZ, { eye: 0x1a2010, scale: 0.96 });
-  part(g, new THREE.SphereGeometry(0.12, 8, 6), dark, 0, headY + 0.05, headZ - 0.02, 0, 0, 0, 1.05, 0.5, 0.85);
-  part(g, new THREE.SphereGeometry(0.155, 10, 8), hood, 0, headY + 0.1, headZ - 0.04, 0, 0, 0, 1.18, 0.4, 1.02);
-  part(g, new THREE.SphereGeometry(0.13, 8, 6), hood, 0, headY + 0.02, headZ - 0.1, 0, 0, 0, 1.12, 0.85, 0.52);
+  const headZ = 0.12;
+  addFace(g, skin, 0, headY, headZ, { eye: 0x1a2010, scale: 0.98 });
+  part(g, new THREE.SphereGeometry(0.11, 8, 6), dark, 0, headY + 0.06, headZ - 0.04, 0, 0, 0, 1.08, 0.42, 0.8);
+  part(g, new THREE.SphereGeometry(0.15, 10, 8), hood, 0, headY + 0.12, headZ - 0.06, 0, 0, 0, 1.15, 0.32, 0.95);
+  part(g, new THREE.SphereGeometry(0.12, 8, 6), hood, 0, headY + 0.0, headZ - 0.12, 0, 0, 0, 1.05, 0.78, 0.45);
   for (const sx of [-1, 1] as const) {
-    part(g, new THREE.CapsuleGeometry(0.035, 0.16, 3, 6), hood, sx * 0.13, headY - 0.02, headZ - 0.02, 0.15, 0, sx * 0.28);
+    part(g, new THREE.CapsuleGeometry(0.03, 0.14, 3, 6), hood, sx * 0.125, headY - 0.04, headZ - 0.04, 0.2, 0, sx * 0.32);
   }
-  part(g, new THREE.BoxGeometry(0.2, 0.045, 0.055), hood, 0, headY + 0.1, headZ + 0.08, 0.35, 0, 0);
-  part(g, new THREE.ConeGeometry(0.2, 0.4, 8, 1, true), hood, 0, 0.92, -0.18, 0.35, 0, 0);
+  part(g, new THREE.BoxGeometry(0.18, 0.035, 0.045), hood, 0, headY + 0.1, headZ + 0.06, 0.4, 0, 0);
+  part(g, new THREE.ConeGeometry(0.2, 0.42, 8, 1, true), hood, 0, 0.9, -0.2, 0.38, 0, 0);
 
   for (const sx of [-1, 1] as const) {
     const arm = tagged(

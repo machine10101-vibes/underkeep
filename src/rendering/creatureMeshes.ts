@@ -105,39 +105,29 @@ function addSkull(
   skull.scale.setScalar(s);
   parent.add(skull);
 
-  // Oval cranium — flattened, not a ball
-  part(skull, new THREE.SphereGeometry(0.155, 10, 8), bone, 0, 0.05, -0.03, 0, 0, 0, 1.22, 0.92, 1.28);
-  part(skull, new THREE.SphereGeometry(0.1, 8, 6), bone, 0, 0.12, -0.08, 0, 0, 0, 1.05, 0.55, 0.85);
+  // Graphic skull — big brow, cheeks, and jaw that still read when lighting flattens
+  part(skull, new THREE.SphereGeometry(0.15, 10, 8), bone, 0, 0.06, -0.04, 0, 0, 0, 1.2, 0.88, 1.22);
+  part(skull, new THREE.BoxGeometry(0.32, 0.08, 0.16), bone, 0, 0.16, 0.12);
+  part(skull, new THREE.BoxGeometry(0.08, 0.1, 0.12), bone, 0, 0.04, 0.18);
   for (const sx of [-1, 1] as const) {
-    part(skull, new THREE.SphereGeometry(0.07, 6, 6), bone, sx * 0.16, 0.02, -0.02, 0, 0, 0, 0.55, 0.78, 0.9);
+    part(skull, new THREE.BoxGeometry(0.1, 0.08, 0.12), bone, sx * 0.14, 0.0, 0.08);
   }
-  // Brow ridge + glabella
-  part(skull, new THREE.BoxGeometry(0.3, 0.05, 0.14), bone, 0, 0.135, 0.14);
-  part(skull, new THREE.BoxGeometry(0.055, 0.04, 0.08), bone, 0, 0.1, 0.18);
-  // Nasal bone
-  part(skull, new THREE.BoxGeometry(0.05, 0.09, 0.09), bone, 0, 0.02, 0.18);
-  // Zygomatic arches + maxilla
-  for (const sx of [-1, 1] as const) {
-    part(skull, new THREE.BoxGeometry(0.1, 0.065, 0.1), bone, sx * 0.135, -0.015, 0.1);
-    part(skull, new THREE.BoxGeometry(0.035, 0.04, 0.12), bone, sx * 0.155, 0.02, 0.0);
-  }
-  part(skull, new THREE.BoxGeometry(0.16, 0.045, 0.1), bone, 0, -0.05, 0.145);
 
-  const socket = glow(0x030000);
+  const socket = glow(0x020000);
   const eyeCol = opts.eye ?? 0xff6020;
   for (const sx of [-1, 1] as const) {
-    part(skull, new THREE.BoxGeometry(0.09, 0.08, 0.08), socket, sx * 0.075, 0.055, 0.175);
-    part(skull, new THREE.SphereGeometry(0.03, 6, 6), glow(eyeCol), sx * 0.072, 0.055, 0.22);
+    part(skull, new THREE.BoxGeometry(0.1, 0.09, 0.08), socket, sx * 0.078, 0.06, 0.18);
+    part(skull, new THREE.SphereGeometry(0.032, 6, 6), glow(eyeCol), sx * 0.076, 0.06, 0.23);
   }
-  part(skull, new THREE.BoxGeometry(0.038, 0.07, 0.06), socket, 0, -0.012, 0.225);
+  part(skull, new THREE.BoxGeometry(0.042, 0.075, 0.06), socket, 0, -0.01, 0.23);
 
   const jaw = tagged(0, -0.1, 0.06, 0.22 + hang * 1.4, 0, 0, 'jaw');
-  part(jaw, new THREE.BoxGeometry(0.2, 0.065, 0.14), bone, 0, -0.04 - hang * 0.3, 0.02);
+  part(jaw, new THREE.BoxGeometry(0.24, 0.08, 0.16), bone, 0, -0.05 - hang * 0.3, 0.03);
   for (const sx of [-1, 1] as const) {
-    part(jaw, new THREE.BoxGeometry(0.04, 0.1, 0.08), bone, sx * 0.09, 0.02, -0.02);
+    part(jaw, new THREE.BoxGeometry(0.045, 0.11, 0.08), bone, sx * 0.1, 0.02, -0.02);
   }
   for (let i = 0; i < 6; i++) {
-    part(jaw, new THREE.BoxGeometry(0.022, 0.06, 0.016), bone, -0.075 + i * 0.03, -0.1 - hang * 0.2, 0.1);
+    part(jaw, new THREE.BoxGeometry(0.024, 0.062, 0.018), bone, -0.08 + i * 0.032, -0.11 - hang * 0.2, 0.11);
   }
   skull.add(jaw);
 }
@@ -233,12 +223,9 @@ function dressScrabbler(g: THREE.Group, _bodyMat: THREE.MeshStandardMaterial): v
   head.castShadow = true;
   g.add(head);
   part(g, new THREE.ConeGeometry(0.15, 0.24, 6), headMat, 0, 0.36, 0.72, 1.2, 0, 0);
-  const horn = new THREE.Group();
-  horn.position.set(0, 0.52, 0.58);
-  horn.rotation.x = 0.55;
-  part(horn, new THREE.ConeGeometry(0.065, 0.38, 5), clawMat, 0, 0.2, 0);
-  part(horn, new THREE.ConeGeometry(0.028, 0.14, 4), clawMat, 0, 0.42, -0.02, 0.35, 0, 0);
-  g.add(horn);
+  // Rhinoceros horn — pale cone that sticks forward from the plaza
+  part(g, new THREE.ConeGeometry(0.075, 0.48, 5), clawMat, 0, 0.72, 0.58, 0.42, 0, 0);
+  part(g, new THREE.ConeGeometry(0.03, 0.14, 4), clawMat, 0, 0.94, 0.48, 0.25, 0, 0);
   part(g, new THREE.BoxGeometry(0.32, 0.035, 0.06), plateMat, 0, 0.46, 0.44);
 
   const eyeMat = glow(0xffee66);
@@ -627,8 +614,8 @@ function dressGravemage(g: THREE.Group): void {
     } else {
       const staff = new THREE.Group();
       part(staff, new THREE.CylinderGeometry(0.022, 0.03, 1.2, 6), wood, 0, 0.12, 0);
-      addSkull(staff, bone, 0, 0.8, 0.04, { tilt: 0.12, eye: 0xaa66ff, scale: 0.58 });
-      part(staff, new THREE.SphereGeometry(0.1, 10, 8), glow(0xaa66ff), 0, 1.02, 0);
+      addSkull(staff, bone, 0, 0.78, 0.04, { tilt: 0.12, eye: 0xaa66ff, scale: 0.72 });
+      part(staff, new THREE.SphereGeometry(0.11, 10, 8), glow(0xcc88ff), 0, 1.04, 0);
       staff.position.set(0.02, -0.2, 0.03);
       staff.rotation.set(0.18, 0.05, -0.1);
       markHeld(staff, 'staff');
@@ -767,14 +754,14 @@ function dressBonewretch(g: THREE.Group): void {
   clutch.add(femur);
   g.add(clutch);
 
-  const drag = tagged(0.36, 0.48, 0.04, 0.48, 0, 0.22, 'armR');
-  part(drag, new THREE.CylinderGeometry(0.04, 0.03, 0.4, 4), bone, 0, -0.18, 0.02, 0.22, 0, 0);
-  part(drag, new THREE.SphereGeometry(0.042, 5, 5), bone, 0, -0.38, 0.04);
-  part(drag, new THREE.CylinderGeometry(0.03, 0.022, 0.42, 4), bone, 0, -0.58, 0.1, 0.4, 0, 0);
-  part(drag, new THREE.SphereGeometry(0.08, 5, 5), bone, 0.05, -0.8, 0.14);
-  part(drag, new THREE.ConeGeometry(0.05, 0.16, 4), bone, 0.1, -0.92, 0.2, 1.15, 0, 0.45);
-  part(drag, new THREE.BoxGeometry(0.05, 0.22, 0.03), rag, -0.04, -0.5, -0.02, 0.3, 0, 0.2);
-  part(drag, new THREE.BoxGeometry(0.04, 0.16, 0.025), rot, 0.06, -0.7, 0.02, 0.45, 0, -0.15);
+  const drag = tagged(0.4, 0.44, 0.02, 0.12, 0, 0.06, 'armR');
+  part(drag, new THREE.CylinderGeometry(0.042, 0.032, 0.44, 4), bone, 0, -0.2, 0.02, 0.12, 0, 0);
+  part(drag, new THREE.SphereGeometry(0.044, 5, 5), bone, 0, -0.42, 0.03);
+  part(drag, new THREE.CylinderGeometry(0.032, 0.024, 0.48, 4), bone, 0, -0.66, 0.04, 0.18, 0, 0);
+  part(drag, new THREE.SphereGeometry(0.09, 5, 5), bone, 0.02, -0.92, 0.06);
+  part(drag, new THREE.ConeGeometry(0.055, 0.18, 4), bone, 0.06, -1.06, 0.1, 1.2, 0, 0.25);
+  part(drag, new THREE.BoxGeometry(0.055, 0.26, 0.03), rag, -0.05, -0.55, -0.02, 0.2, 0, 0.15);
+  part(drag, new THREE.BoxGeometry(0.045, 0.2, 0.025), rot, 0.06, -0.78, 0.02, 0.3, 0, -0.12);
   g.add(drag);
 
   const limp = tagged(-0.04, 0.3, 0.02, 0.2, 0, -0.2, 'legL');
@@ -901,13 +888,13 @@ function makeArrow(): THREE.Group {
   const fletch = mat({ color: 0x3a8a38, roughness: 0.5 });
   const nock = mat({ color: 0x2a2018, roughness: 0.7 });
   const arrow = new THREE.Group();
-  part(arrow, new THREE.CylinderGeometry(0.012, 0.012, 0.64, 6), wood, 0, 0, 0);
-  part(arrow, new THREE.ConeGeometry(0.028, 0.1, 5), steel, 0, 0.36, 0);
-  part(arrow, new THREE.BoxGeometry(0.018, 0.03, 0.02), nock, 0, -0.33, 0);
+  part(arrow, new THREE.CylinderGeometry(0.013, 0.013, 0.66, 6), wood, 0, 0, 0);
+  part(arrow, new THREE.ConeGeometry(0.038, 0.14, 5), steel, 0, 0.38, 0);
+  part(arrow, new THREE.BoxGeometry(0.02, 0.032, 0.022), nock, 0, -0.34, 0);
   for (let i = 0; i < 3; i++) {
     const a = (i / 3) * Math.PI * 2;
-    const vane = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.09, 0.008), fletch);
-    vane.position.set(Math.sin(a) * 0.02, -0.24, Math.cos(a) * 0.02);
+    const vane = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.12, 0.01), fletch);
+    vane.position.set(Math.sin(a) * 0.024, -0.24, Math.cos(a) * 0.024);
     vane.rotation.y = a;
     arrow.add(vane);
   }

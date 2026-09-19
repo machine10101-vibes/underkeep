@@ -5064,6 +5064,10 @@ export class Game {
   preparePass1024Shot(): void {
     this.preparePass1021Shot();
     this.hud.hideOverlay();
+    const mid = this.grid.tileToWorld(this.grid.heartPos.x, this.grid.heartPos.y);
+    this.camTarget.set(mid.x, 0.42, mid.z + 0.35);
+    this.renderer.camera.position.set(mid.x + 0.15, 3.35, mid.z + 6.2);
+    this.renderer.camera.lookAt(this.camTarget);
     this.hud.setTooltip('Minions and heroes — beetle, dragonfly, skull, salamander, mage, witch, wretch, knight, archer');
   }
 

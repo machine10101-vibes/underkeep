@@ -201,7 +201,7 @@ function dressScrabbler(g: THREE.Group, _bodyMat: THREE.MeshStandardMaterial): v
     const elytron = new THREE.Mesh(new THREE.CapsuleGeometry(0.18, 0.62, 4, 8), shellMat);
     elytron.rotation.x = Math.PI / 2;
     elytron.scale.set(1.12, 0.88, 0.28);
-    elytron.position.set(sx * 0.18, 0.46, -0.14);
+    elytron.position.set(sx * 0.2, 0.46, -0.14);
     elytron.rotation.z = sx * -0.1;
     elytron.castShadow = true;
     g.add(elytron);
@@ -209,7 +209,7 @@ function dressScrabbler(g: THREE.Group, _bodyMat: THREE.MeshStandardMaterial): v
     part(g, new THREE.BoxGeometry(0.04, 0.028, 0.44), plateMat, sx * 0.22, 0.54, -0.14);
     part(g, new THREE.BoxGeometry(0.05, 0.022, 0.12), glow(0x6a9030), sx * 0.18, 0.58, 0.12);
   }
-  part(g, new THREE.BoxGeometry(0.028, 0.07, 0.78), glow(0x9ac048), 0, 0.54, -0.12);
+  part(g, new THREE.BoxGeometry(0.04, 0.08, 0.82), glow(0xb8e050), 0, 0.56, -0.12);
 
   // Shield pronotum between head and wing-cases
   part(g, new THREE.BoxGeometry(0.5, 0.14, 0.3), shellMat, 0, 0.4, 0.3);
@@ -371,7 +371,7 @@ function dressSkitterwing(g: THREE.Group, bodyMat: THREE.MeshStandardMaterial): 
     emissive: 0x308870,
     emissiveIntensity: 0.35,
     transparent: true,
-    opacity: 0.55,
+    opacity: 0.72,
     side: THREE.DoubleSide,
     metalness: 0.08,
     roughness: 0.3,
@@ -498,7 +498,7 @@ function dressEmberling(g: THREE.Group): void {
   for (let i = 0; i < 7; i++) {
     part(g, new THREE.BoxGeometry(0.04, 0.03, 0.16), glow(0xff5018), (i % 2 ? 0.12 : -0.12), 0.46, 0.28 - i * 0.16);
   }
-  part(g, new THREE.BoxGeometry(0.07, 0.05, 1.15), glow(0xff8830), 0, 0.48, -0.08);
+  part(g, new THREE.BoxGeometry(0.09, 0.06, 1.2), glow(0xff9940), 0, 0.5, -0.08);
   for (let i = 0; i < 5; i++) {
     part(g, new THREE.SphereGeometry(0.035, 5, 5), lava, 0, 0.5, 0.3 - i * 0.2);
   }
@@ -585,8 +585,8 @@ function dressGravemage(g: THREE.Group): void {
   part(g, new THREE.SphereGeometry(0.22, 10, 8), robe, 0, 1.32, -0.16, 0, 0, 0, 1.28, 1.18, 1.22);
   part(g, new THREE.ConeGeometry(0.16, 0.62, 8), robe, 0, 1.76, -0.26, -0.55, 0, 0);
   part(g, new THREE.BoxGeometry(0.18, 0.08, 0.12), robe, 0, 1.36, 0.08);
-  part(g, new THREE.BoxGeometry(0.22, 0.2, 0.12), glow(0x04010c), 0, 1.18, 0.16);
-  part(g, new THREE.BoxGeometry(0.16, 0.12, 0.04), glow(0x120418), 0, 1.16, 0.22);
+  part(g, new THREE.BoxGeometry(0.24, 0.22, 0.14), glow(0x04010c), 0, 1.18, 0.18);
+  part(g, new THREE.BoxGeometry(0.18, 0.14, 0.05), glow(0x120418), 0, 1.16, 0.24);
   const eye = glow(0xee99ff);
   for (const sx of [-1, 1] as const) {
     part(g, new THREE.SphereGeometry(0.05, 6, 6), eye, sx * 0.058, 1.2, 0.24);
@@ -824,8 +824,8 @@ function dressHeroKnight(g: THREE.Group, bodyMat: THREE.MeshStandardMaterial): v
       const sword = new THREE.Group();
       part(sword, new THREE.CylinderGeometry(0.018, 0.022, 0.12, 6), mat({ color: 0x6a4820, roughness: 0.55 }), 0, 0, 0, Math.PI / 2, 0, 0);
       part(sword, new THREE.BoxGeometry(0.18, 0.035, 0.04), steel, 0, 0, 0.08);
-      part(sword, new THREE.BoxGeometry(0.05, 0.08, 0.52), steel, 0, 0.02, 0.36);
-      part(sword, new THREE.ConeGeometry(0.04, 0.12, 4), steel, 0, 0.02, 0.66, Math.PI / 2, 0, 0);
+      part(sword, new THREE.BoxGeometry(0.07, 0.1, 0.56), steel, 0, 0.02, 0.38);
+      part(sword, new THREE.ConeGeometry(0.05, 0.14, 4), steel, 0, 0.02, 0.7, Math.PI / 2, 0, 0);
       sword.position.set(0.03, -0.18, 0.06);
       sword.rotation.set(-0.55, 0.35, -0.25);
       markHeld(sword, 'sword');
@@ -869,7 +869,7 @@ function makeRecurveBow(): THREE.Group {
     new THREE.Vector3(-0.1, 0.28, 0),
     new THREE.Vector3(0.04, 0.42, 0),
   ]);
-  const stave = new THREE.Mesh(new THREE.TubeGeometry(curve, 28, 0.026, 7, false), wood);
+  const stave = new THREE.Mesh(new THREE.TubeGeometry(curve, 28, 0.032, 7, false), wood);
   stave.castShadow = true;
   bow.add(stave);
   part(bow, new THREE.CylinderGeometry(0.026, 0.026, 0.14, 6), wrap, 0, 0, 0);
@@ -923,8 +923,8 @@ function dressHeroArcher(g: THREE.Group, bodyMat: THREE.MeshStandardMaterial): v
 
   // One skull. Cowl wraps that same head — flattened cap and nape, face stays out.
   const headY = 1.18;
-  const headZ = 0.12;
-  addFace(g, skin, 0, headY, headZ, { eye: 0x1a2010, scale: 0.98 });
+  const headZ = 0.14;
+  addFace(g, skin, 0, headY, headZ, { eye: 0x1a2010, scale: 1.0 });
   part(g, new THREE.SphereGeometry(0.11, 8, 6), dark, 0, headY + 0.06, headZ - 0.04, 0, 0, 0, 1.08, 0.42, 0.8);
   part(g, new THREE.SphereGeometry(0.15, 10, 8), hood, 0, headY + 0.12, headZ - 0.06, 0, 0, 0, 1.15, 0.32, 0.95);
   part(g, new THREE.SphereGeometry(0.12, 8, 6), hood, 0, headY + 0.0, headZ - 0.12, 0, 0, 0, 1.05, 0.78, 0.45);

@@ -33,6 +33,8 @@ export interface SavedCreature {
   trainNeed: number;
   isHero: boolean;
   job?: string;
+  jobTarget?: { x: number; y: number } | null;
+  bedKey?: string | null;
   mood?: number;
   knockedOut?: boolean;
   isPrisoner?: boolean;
@@ -82,6 +84,8 @@ export interface SaveData {
   sentryKits?: number;
   goldEver?: number;
   heartHp?: number;
+  /** Pass 10.25 — Graveyard corpses waiting to raise. */
+  corpses?: Array<{ x: number; y: number; timer: number; fromHero: boolean }>;
 }
 
 function finiteNum(n: unknown): n is number {
@@ -137,16 +141,11 @@ export function validateSaveReason(
   // Playable session must have diggable terrain (unless game already over)
   if (!d.gameOver && diggable < 1) return 'no-diggable';
 
-  let scrabblers = 0;
   for (const c of d.creatures) {
     if (!c || typeof c !== 'object') return 'bad-creature';
     if (!VALID_KINDS.has(c.kind as string)) return 'bad-creature-kind';
     if (!finiteNum(c.x) || !finiteNum(c.y)) return 'bad-creature-pos';
-    if (c.kind === CreatureKind.Scrabbler) scrabblers++;
   }
-
-  // Never enter playing without ≥1 Scrabbler (accept gameOver saves without workers)
-  if (!d.gameOver && scrabblers < 1) return 'no-scrabbler';
 
   if (d.cam) {
     const cam = d.cam;

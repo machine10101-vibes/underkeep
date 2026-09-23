@@ -303,17 +303,12 @@ export class Game {
     }
   }
 
-  /** True when dungeon has heart + diggable earth + ≥1 Scrabbler, or match ended. */
+  /** True when dungeon has heart + diggable earth, or match ended. Workers can be re-forged. */
   private isPlayableOrEnded(): boolean {
     if (this.gameOver) return true;
     const heart = this.grid.get(this.grid.heartPos.x, this.grid.heartPos.y);
     if (!heart || heart.kind !== TileKind.Heart) return false;
-    const diggable = this.grid.tiles.some(
-      (t) => isDiggableKind(t.kind)
-    );
-    if (!diggable) return false;
-    const scrabblers = this.creatures.filter((c) => c.alive && c.isWorker).length;
-    return scrabblers >= 1;
+    return this.grid.tiles.some((t) => isDiggableKind(t.kind));
   }
 
   private syncAllEntityMeshes(): void {
@@ -514,6 +509,8 @@ export class Game {
           trainNeed: c.trainNeed,
           isHero: c.isHero,
           job: c.job,
+          jobTarget: c.jobTarget ? { x: c.jobTarget.x, y: c.jobTarget.y } : null,
+          bedKey: c.bedKey,
           mood: c.mood,
           knockedOut: c.knockedOut,
           isPrisoner: c.isPrisoner,
@@ -537,6 +534,7 @@ export class Game {
       sentryKits: this.sentryKits,
       goldEver: this.goldEver,
       heartHp: this.heartHp,
+      corpses: this.corpses.map((c) => ({ x: c.x, y: c.y, timer: c.timer, fromHero: c.fromHero })),
       cam: {
         tx: this.camTarget.x,
         tz: this.camTarget.z,
@@ -616,6 +614,7 @@ export class Game {
       if (c.mesh.parent) c.mesh.parent.remove(c.mesh);
     }
     this.creatures = [];
+    this.bedOwners.clear();
     for (const sc of data.creatures) {
       const c = this.spawnCreature(sc.kind, sc.x, sc.y);
       if (Number.isFinite(sc.wx) && Number.isFinite(sc.wz)) {
@@ -635,9 +634,38 @@ export class Game {
       c.convertProgress = sc.convertProgress ?? 0;
       const jobs = Object.values(JobType) as string[];
       if (sc.job && jobs.includes(sc.job)) c.job = sc.job as JobType;
+      const jt = sc.jobTarget;
+      if (jt && Number.isFinite(jt.x) && Number.isFinite(jt.y)) {
+        c.jobTarget = { x: jt.x, y: jt.y };
+      }
+      if (typeof sc.bedKey === 'string' && sc.bedKey.includes(',')) {
+        c.bedKey = sc.bedKey;
+        this.bedOwners.set(sc.bedKey, c.id);
+      }
+      // Scrabblers never eat/sleep. Jobs that need a tile without one go Idle so assignJobs can re-queue.
+      if (c.isWorker && (c.job === JobType.Eat || c.job === JobType.Sleep)) {
+        c.job = JobType.Idle;
+        c.jobTarget = null;
+      }
+      const needsTile =
+        c.job !== JobType.Idle &&
+        c.job !== JobType.Flee &&
+        c.job !== JobType.Wander &&
+        c.job !== JobType.Fight;
+      if (needsTile && !c.jobTarget) {
+        c.job = JobType.Idle;
+      }
       c.clampStats();
       c.syncMesh(this.time);
     }
+    this.corpses = (data.corpses ?? [])
+      .filter((c) => c && Number.isFinite(c.x) && Number.isFinite(c.y))
+      .map((c) => ({
+        x: c.x,
+        y: c.y,
+        timer: Number.isFinite(c.timer) ? c.timer : 0,
+        fromHero: !!c.fromHero,
+      }));
 
     const hw = this.grid.tileToWorld(this.grid.heartPos.x, this.grid.heartPos.y);
     if (
@@ -4663,6 +4691,8 @@ export class Game {
     fortifyCancelStops: boolean;
     flyerPathsHazard: boolean;
     heartHpSaved: boolean;
+    jobTargetSaved: boolean;
+    zeroWorkerSaveOk: boolean;
   } {
     this.hud.hideOverlay();
     const hx = this.grid.heartPos.x;
@@ -4822,6 +4852,30 @@ export class Game {
     const heartHpSaved = packed.heartHp === 321;
     this.heartHp = hpBefore;
 
+    const saver = this.creatures.find((c) => c.alive && c.isWorker);
+    let jobTargetSaved = false;
+    if (saver) {
+      const prevJob = saver.job;
+      const prevTarget = saver.jobTarget;
+      saver.job = JobType.Dig;
+      saver.jobTarget = { x: hx + 3, y: hy };
+      const jobPack = this.buildSave();
+      jobTargetSaved = jobPack.creatures.some(
+        (c) =>
+          c.kind === CreatureKind.Scrabbler &&
+          c.job === JobType.Dig &&
+          c.jobTarget?.x === hx + 3 &&
+          c.jobTarget?.y === hy
+      );
+      saver.job = prevJob;
+      saver.jobTarget = prevTarget;
+    }
+    const noWorkers = {
+      ...packed,
+      creatures: packed.creatures.filter((c) => c.kind !== CreatureKind.Scrabbler),
+    };
+    const zeroWorkerSaveOk = validateSaveReason(noWorkers, this.grid.width, this.grid.height) === null;
+
     return {
       unmarkedStaySolid,
       noTunnelJob,
@@ -4835,6 +4889,8 @@ export class Game {
       fortifyCancelStops,
       flyerPathsHazard,
       heartHpSaved,
+      jobTargetSaved,
+      zeroWorkerSaveOk,
     };
   }
 
@@ -5068,6 +5124,12 @@ export class Game {
     this.camTarget.set(mid.x, 0.42, mid.z + 0.35);
     this.renderer.camera.position.set(mid.x + 0.15, 3.35, mid.z + 6.2);
     this.renderer.camera.lookAt(this.camTarget);
+    this.hud.setTooltip('Minions and heroes — beetle, dragonfly, skull, salamander, mage, witch, wretch, knight, archer');
+  }
+
+  /** QA/screenshot: pass 10.25 species-true bodies on the plaza. */
+  preparePass1025Shot(): void {
+    this.preparePass1024Shot();
     this.hud.setTooltip('Minions and heroes — beetle, dragonfly, skull, salamander, mage, witch, wretch, knight, archer');
   }
 
@@ -5894,6 +5956,14 @@ export class Game {
       if (w.job === JobType.Fortify && w.jobTarget) {
         const ft = this.grid.get(w.jobTarget.x, w.jobTarget.y);
         if (!ft || ft.mark !== MarkType.Fortify || ft.kind !== TileKind.Earth || ft.fortified) {
+          w.job = JobType.Idle;
+          w.jobTarget = null;
+          w.setPath(null);
+        }
+      }
+      if (w.job === JobType.Claim && w.jobTarget) {
+        const ct = this.grid.get(w.jobTarget.x, w.jobTarget.y);
+        if (!ct || ct.kind !== TileKind.Dirt || (ct.mark !== MarkType.Claim && ct.claimedProgress >= 1)) {
           w.job = JobType.Idle;
           w.jobTarget = null;
           w.setPath(null);
@@ -6897,8 +6967,14 @@ export class Game {
       c.setPath(null);
       return;
     }
-    // Workers can eat/sleep too; Craft shares the workshop loop with minions
-    if (c.job === JobType.Eat || c.job === JobType.Sleep || c.job === JobType.Craft) {
+    // Scrabblers never eat/sleep. Craft shares the workshop loop with minions.
+    if (c.job === JobType.Eat || c.job === JobType.Sleep) {
+      c.job = JobType.Idle;
+      c.jobTarget = null;
+      c.setPath(null);
+      return;
+    }
+    if (c.job === JobType.Craft) {
       this.updateMinionJob(c, dt, arrived);
       return;
     }
@@ -7858,7 +7934,6 @@ export class Game {
         if (!tile || tile.kind === TileKind.Heart || tile.kind === TileKind.Rock) continue;
         if (tile.fortified) continue;
         if (tile.kind === TileKind.Gold) {
-          if (tile.goldAmount > 0) this.addGold(tile.goldAmount);
           tile.goldAmount = 0;
           tile.kind = TileKind.Dirt;
           tile.digProgress = 0;

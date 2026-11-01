@@ -1,6 +1,6 @@
 import { SpellId, ToolMode } from '../game/types';
 
-const ROOM_TOOLS: ToolMode[] = ['treasury', 'lair', 'hatchery', 'training', 'library', 'portal', 'guard', 'workshop', 'prison', 'torture', 'graveyard', 'temple', 'combatPit', 'door', 'sentry', 'rally', 'bridgeWood', 'bridgeStone'];
+const ROOM_TOOLS: ToolMode[] = ['treasury', 'lair', 'hatchery', 'training', 'library', 'portal', 'guard', 'workshop', 'prison', 'torture', 'graveyard', 'temple', 'combatPit', 'door', 'sentry', 'spike', 'rally', 'bridgeWood', 'bridgeStone'];
 
 export class HUD {
   private goldEl: HTMLElement;
@@ -45,6 +45,7 @@ export class HUD {
   onNewGame: (() => void) | null = null;
   onInspectorClose: (() => void) | null = null;
   onRosterSelect: ((creatureId: number) => void) | null = null;
+  onToggleMute: (() => void) | null = null;
 
   constructor() {
     this.goldEl = document.getElementById('gold-value')!;
@@ -98,7 +99,9 @@ export class HUD {
       btn.addEventListener('click', () => {
         const spell = (btn as HTMLElement).dataset.spell as SpellId;
         this.onSpell?.(spell);
-        if (spell === 'speed' || spell === 'lightning' || spell === 'possess') this.closeSheet('spells');
+        if (spell === 'speed' || spell === 'lightning' || spell === 'possess' || spell === 'caveIn' || spell === 'summon') {
+          this.closeSheet('spells');
+        }
       });
     });
     document.getElementById('overlay-btn')!.addEventListener('click', () => {
@@ -128,6 +131,36 @@ export class HUD {
       });
     });
     document.getElementById('mentor-dismiss')?.addEventListener('click', () => this.dismissMentor());
+    document.getElementById('btn-mute')?.addEventListener('click', () => this.onToggleMute?.());
+  }
+
+  setMuted(muted: boolean): void {
+    const btn = document.getElementById('btn-mute');
+    if (!btn) return;
+    btn.textContent = muted ? '🔇' : '🔊';
+    btn.title = muted ? 'Sound off — click to unmute' : 'Sound on — click to mute';
+    btn.setAttribute('aria-pressed', muted ? 'true' : 'false');
+  }
+
+  setSpellArmed(spell: SpellId, armed: boolean): void {
+    document.querySelectorAll(`.spell[data-spell="${spell}"]`).forEach((btn) => {
+      btn.classList.toggle('armed', armed);
+    });
+  }
+
+  /** Viewport-space combat / bounty text. Capped so a brawl can't leak DOM nodes. */
+  spawnFloater(x: number, y: number, text: string, color: string): void {
+    const root = document.getElementById('floaters');
+    if (!root) return;
+    while (root.childElementCount > 26) root.firstElementChild?.remove();
+    const el = document.createElement('div');
+    el.className = 'floater';
+    el.textContent = text;
+    el.style.left = `${x + (Math.random() - 0.5) * 14}px`;
+    el.style.top = `${y}px`;
+    el.style.color = color;
+    root.appendChild(el);
+    window.setTimeout(() => el.remove(), 900);
   }
 
   private sheetButtons(which: 'build' | 'spells' | 'roster'): HTMLElement[] {
@@ -555,4 +588,20 @@ export const MENTOR_LINES = {
   fleeLair: "Wounded minions flee toward the Lair!",
   dragWounded: "Scrabblers drag the wounded home to their beds.",
   allyKnocked: "A minion collapses! Scrabblers can haul them to a Lair bed.",
+  caveInArm: "Cave-In armed. Click earth, a gold seam, or a fortified wall. It crushes friend and foe — and buries the seam.",
+  caveIn: "The ceiling answers. Heroes learn what 'unsupported' means.",
+  caveInFriendly: "Cave-In lands — and some of yours were standing under it. Aim better, Keeper.",
+  caveInEmpty: "Stone crashes down on empty floor. Dramatic. Wasteful. Still satisfying.",
+  caveInGold: "The seam collapses! A handful of gold spills free. The rest is buried forever.",
+  spikeBuilt: "Spike plate set. Heroes can cross it — once, painfully, and then again.",
+  spikeFire: "Spikes bite. They'll reset. Heroes rarely do.",
+  summon: "The Ashreaver answers. Horns, hunger, and a fear that slows the righteous.",
+  summonLocked: "The Ashreaver will not come. Research in the Library, or raise a Temple, then call again.",
+  summonWaiting: "The Ashreaver still licks its wounds. Give it a moment.",
+  summonBusy: "One Ashreaver is already loose. That is plenty.",
+  championWave: "Wave 3 — Sir Brightbane leads the charge. He is not here to negotiate.",
+  championDown: "Sir Brightbane falls. The bounty is obscene. Drink it in.",
+  rivalAnger: "Your minions recognize their hero-kin. They are furious — and they hit harder for it.",
+  fearAura: "The Ashreaver's presence drags heroes' feet. Press them.",
+  bounty: "A hero's purse is yours. +%g gold.",
 };

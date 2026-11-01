@@ -75,10 +75,18 @@ export class Creature {
   selectRing: THREE.Object3D | null = null;
   /** Assigned Lair bed tile key "x,y" or null. */
   bedKey: string | null = null;
-  /** Remaining seconds of heal/feast mesh tint pulse. */
+  /** Remaining seconds of heal/feast/hit mesh tint pulse. */
   tintPulse = 0;
-  /** 'heal' green / 'feast' warm / null. */
-  tintMode: 'heal' | 'feast' | null = null;
+  /** 'heal' green / 'feast' warm / 'hit' red / null. */
+  tintMode: 'heal' | 'feast' | 'hit' | null = null;
+  /** Wave-3 boss flag (Sir Brightbane). */
+  isChampion = false;
+  /** Hero bounty already paid for this body. */
+  bountyPaid = false;
+  /** Counterpart hero has already soured this minion's mood. */
+  rivalAngered = false;
+  /** Fear / snare — movement multiplier while > 0. */
+  slowTimer = 0;
   private tintBase = new Map<THREE.Material, { emissive: THREE.Color; intensity: number }>();
 
   constructor(kind: CreatureKind, tileX: number, tileY: number, grid: Grid) {
@@ -237,7 +245,7 @@ export class Creature {
     return Number.isFinite(eff) ? Math.max(0.5, Math.min(1.25, eff)) : 0.85;
   }
 
-  pulseTint(mode: 'heal' | 'feast', seconds = 0.85): void {
+  pulseTint(mode: 'heal' | 'feast' | 'hit', seconds = 0.85): void {
     this.tintMode = mode;
     this.tintPulse = Math.max(this.tintPulse, seconds);
   }
@@ -268,6 +276,9 @@ export class Creature {
         if (this.tintMode === 'heal') {
           mat.emissive.setRGB(0.15 * pulse, 0.95 * pulse, 0.45 * pulse);
           mat.emissiveIntensity = Math.max(base.intensity, 0.85 + pulse * 0.7);
+        } else if (this.tintMode === 'hit') {
+          mat.emissive.setRGB(1.0 * pulse, 0.18 * pulse, 0.08 * pulse);
+          mat.emissiveIntensity = Math.max(base.intensity, 1.15);
         } else {
           mat.emissive.setRGB(1.0 * pulse, 0.55 * pulse, 0.12 * pulse);
           mat.emissiveIntensity = Math.max(base.intensity, 0.9 + pulse * 0.75);
@@ -303,7 +314,8 @@ export class Creature {
     if (this.pathIndex >= this.path.length) return true;
     const target = this.path[this.pathIndex];
     const w = grid.tileToWorld(target.x, target.y);
-    const spd = this.speed * (this.speedBuff > 0 ? 1.8 : 1) * TILE_SIZE;
+    const slow = this.slowTimer > 0 ? 0.55 : 1;
+    const spd = this.speed * (this.speedBuff > 0 ? 1.8 : 1) * slow * TILE_SIZE;
     const dx = w.x - this.wx;
     const dz = w.z - this.wz;
     const dist = Math.hypot(dx, dz);

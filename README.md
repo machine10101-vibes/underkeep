@@ -6,7 +6,7 @@ Original-IP dungeon management game inspired by **Dungeon Keeper 2** (3D). Dark-
 
 **https://machine10101-vibes.github.io/underkeep/?v=pass7.4**
 
-Pass 7.4: Temple prayer/mood/talisman, Combat Pit veteran leveling, creature roster sheet, flee & drag wounded to Lair (keeps Prison/Torture/Graveyard/efficiency + prior systems).
+Pass 8 (local): combat juice, Cave-In, Spike traps, hero bounties, Sir Brightbane on wave 3, Ashreaver call-in. Pages build above is still pass 7.4 until the next deploy.
 
 Works on desktop and phones (touch controls).
 
@@ -48,6 +48,10 @@ npm run preview
 | **R** | Lightning (mana) — strike nearest hero |
 | **T** | Heal (mana; Library research unlock) |
 | **P** | Possess (mana) — FP control one minion; Esc exits |
+| **V** | Cave-In (mana) — then click earth, gold, or a fortified wall |
+| **Z** | Call the Ashreaver (mana; Library research or a Temple) |
+| **I** | Spike trap (reusable, cheaper than Sentry) |
+| **🔊** | Mute toggle (top bar) |
 | **B** / **N** | Wooden / Stone bridge over lava or water |
 | **U** | Workshop room |
 | **J** / **K** / **H** | Prison / Torture Chamber / Graveyard |

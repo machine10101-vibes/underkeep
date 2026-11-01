@@ -104,6 +104,38 @@ html, body, #app {
 .tool:hover, .spell:hover, .sheet-toggle:hover { border-color: #c08040; color: #ffe0a0; box-shadow: 0 0 10px rgba(200,100,30,0.3); }
 .tool.active, .sheet-toggle.active { border-color: #e09030; background: linear-gradient(180deg, #5a3820, #2a1808); color: #ffe8b0; box-shadow: 0 0 14px rgba(220,120,40,0.45); }
 .spell:disabled { opacity: 0.4; cursor: not-allowed; }
+.spell.armed { border-color: #ff7040; color: #ffe0c0; box-shadow: 0 0 14px rgba(255, 80, 30, 0.65); }
+.hud-mute {
+  margin-left: 6px;
+  min-width: 36px;
+  height: 28px;
+  border-radius: 6px;
+  border: 1px solid #6a4828;
+  background: rgba(20, 12, 8, 0.85);
+  color: #f0d0a0;
+  cursor: pointer;
+  pointer-events: auto;
+}
+#floaters {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 40;
+  overflow: hidden;
+}
+.floater {
+  position: absolute;
+  font-weight: 800;
+  font-size: 15px;
+  letter-spacing: 0.02em;
+  text-shadow: 0 1px 2px #000, 0 0 6px #000;
+  animation: floater-up 0.85s ease-out forwards;
+  transform: translate(-50%, 0);
+  white-space: nowrap;
+}
+@keyframes floater-up {
+  to { transform: translate(-50%, -46px); opacity: 0; }
+}
 
 #pan-zone {
   display: none;

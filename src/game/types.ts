@@ -42,6 +42,8 @@ export enum DoorState {
 export enum TrapType {
   None = 0,
   Sentry = 1,
+  /** Reusable floor spikes — cheaper than Sentry, re-arms after a short cooldown. */
+  Spike = 2,
 }
 
 export enum MarkType {
@@ -61,6 +63,8 @@ export enum CreatureKind {
   Bonewretch = 'bonewretch',
   HeroKnight = 'hero_knight',
   HeroArcher = 'hero_archer',
+  /** Rare call-in. Original stand-in for the elite horned bruiser. */
+  Ashreaver = 'ashreaver',
 }
 
 export enum JobType {
@@ -129,6 +133,7 @@ export const ROOM_COST: Record<RoomType, number> = {
 
 export const DOOR_COST = 75;
 export const SENTRY_COST = 150;
+export const SPIKE_COST = 90;
 export const RALLY_COST = 40;
 export const BRIDGE_WOOD_COST = 60;
 export const BRIDGE_STONE_COST = 120;
@@ -173,6 +178,7 @@ export const CREATURE_STATS: Record<
   [CreatureKind.Bonewretch]: { hp: 55, speed: 2.8, damage: 11, goldWage: 0, color: 0xd8d0b8, scale: 0.72 },
   [CreatureKind.HeroKnight]: { hp: 120, speed: 2.2, damage: 18, goldWage: 0, color: 0xc0c8d8, scale: 0.85 },
   [CreatureKind.HeroArcher]: { hp: 70, speed: 2.5, damage: 14, goldWage: 0, color: 0x5080a0, scale: 0.7 },
+  [CreatureKind.Ashreaver]: { hp: 260, speed: 2.15, damage: 28, goldWage: 0, color: 0x8a1820, scale: 1.15 },
 };
 
 export type ToolMode =
@@ -189,6 +195,7 @@ export type ToolMode =
   | 'guard'
   | 'door'
   | 'sentry'
+  | 'spike'
   | 'rally'
   | 'bridgeWood'
   | 'bridgeStone'
@@ -199,7 +206,7 @@ export type ToolMode =
   | 'temple'
   | 'combatPit';
 
-export type SpellId = 'createWorker' | 'speed' | 'lightning' | 'heal' | 'possess';
+export type SpellId = 'createWorker' | 'speed' | 'lightning' | 'heal' | 'possess' | 'caveIn' | 'summon';
 
 /** Emberling shrugs lava; Skitterwing flies over hazards. */
 export function isHeatResistant(kind: CreatureKind): boolean {

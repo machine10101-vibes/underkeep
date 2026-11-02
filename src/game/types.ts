@@ -206,7 +206,7 @@ export type ToolMode =
   | 'temple'
   | 'combatPit';
 
-export type SpellId = 'createWorker' | 'speed' | 'lightning' | 'heal' | 'possess' | 'caveIn' | 'summon';
+export type SpellId = 'createWorker' | 'speed' | 'lightning' | 'heal' | 'possess' | 'caveIn' | 'summon' | 'reveal' | 'muster';
 
 /** Emberling shrugs lava; Skitterwing flies over hazards. */
 export function isHeatResistant(kind: CreatureKind): boolean {

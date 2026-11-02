@@ -87,6 +87,12 @@ export class Creature {
   rivalAngered = false;
   /** Fear / snare — movement multiplier while > 0. */
   slowTimer = 0;
+  /** Champion ward pool. Hits drain this before hit points. */
+  ward = 0;
+  wardMax = 0;
+  enraged = false;
+  private hpRoot: THREE.Group | null = null;
+  private hpFill: THREE.Mesh | null = null;
   private tintBase = new Map<THREE.Material, { emissive: THREE.Color; intensity: number }>();
 
   constructor(kind: CreatureKind, tileX: number, tileY: number, grid: Grid) {
@@ -110,7 +116,55 @@ export class Creature {
 
   setMesh(mesh: THREE.Group): void {
     this.mesh = mesh;
+    this.buildHpBar();
     this.syncMesh(0);
+  }
+
+  /** Overhead bar so a fight reads without opening the inspector. */
+  private buildHpBar(): void {
+    if (!this.mesh || this.hpRoot) return;
+    const geo = new THREE.PlaneGeometry(0.92, 0.12);
+    const root = new THREE.Group();
+    root.position.y = this.kind === CreatureKind.Skitterwing ? 1.85 : 1.62;
+    root.visible = false;
+    const bg = new THREE.Mesh(
+      geo,
+      new THREE.MeshBasicMaterial({ color: 0x140c08, transparent: true, opacity: 0.85, depthTest: false })
+    );
+    const fill = new THREE.Mesh(
+      geo,
+      new THREE.MeshBasicMaterial({ color: 0x3dcc66, depthTest: false })
+    );
+    fill.position.z = 0.02;
+    root.add(bg);
+    root.add(fill);
+    this.mesh.add(root);
+    this.hpRoot = root;
+    this.hpFill = fill;
+  }
+
+  private updateHpBar(): void {
+    if (!this.hpRoot || !this.hpFill) return;
+    const frac = this.maxHp > 0 ? this.hp / this.maxHp : 0;
+    const fighting = this.job === JobType.Fight || this.job === JobType.AttackMove;
+    const warded = this.wardMax > 0 && this.ward > 0;
+    const show =
+      this.alive &&
+      !this.held &&
+      (warded || this.enraged || this.isChampion || this.selected || fighting || frac < 0.98);
+    this.hpRoot.visible = show;
+    if (!show) return;
+    const shown = warded ? this.ward / this.wardMax : Math.max(0.04, frac);
+    this.hpFill.scale.x = shown;
+    this.hpFill.position.x = (shown - 1) * 0.46;
+    const mat = this.hpFill.material as THREE.MeshBasicMaterial;
+    if (warded) mat.color.set(0x9fd4ff);
+    else if (this.enraged || frac < 0.35) mat.color.set(0xff4040);
+    else if (frac < 0.65) mat.color.set(0xf0c040);
+    else mat.color.set(0x3dcc66);
+    this.hpRoot.rotation.x = -1.05;
+    this.hpRoot.rotation.y = -this.mesh.rotation.y;
+    this.hpRoot.rotation.z = -this.mesh.rotation.z;
   }
 
   /** Keep vitals in sane finite ranges (prevents NaN bar widths / HUD overflow). */
@@ -145,6 +199,7 @@ export class Creature {
           this.selectRing.rotation.z = time * 3;
         }
         if (this.pickaxe) this.pickaxe.visible = false;
+        this.updateHpBar();
         return;
       }
       if (this.knockedOut || this.isPrisoner) {
@@ -157,6 +212,7 @@ export class Creature {
           this.selectRing.rotation.z = time * 1.2;
         }
         if (this.pickaxe) this.pickaxe.visible = false;
+        this.updateHpBar();
         return;
       }
     const digging = this.job === JobType.Dig || this.job === JobType.Mine || this.job === JobType.Claim || this.job === JobType.Fortify;
@@ -229,6 +285,7 @@ export class Creature {
       if (this.tintPulse <= 0) this.tintMode = null;
     }
     this.applyTintVisual();
+    this.updateHpBar();
     } catch (err) {
       console.warn('[underkeep] syncMesh failed', err);
     }

@@ -6,7 +6,7 @@ Original-IP dungeon management game inspired by **Dungeon Keeper 2** (3D). Dark-
 
 **https://machine10101-vibes.github.io/underkeep/?v=pass7.4**
 
-Pass 8 (local): combat juice, Cave-In, Spike traps, hero bounties, Sir Brightbane on wave 3, Ashreaver call-in. Pages build above is still pass 7.4 until the next deploy.
+Pass 9 (local): pause and 2×/3× time, wave countdown, Sight and Muster, overhead health bars, Brightbane ward then enrage, minimap camera. Pages build above is still pass 7.4 until the next deploy.
 
 Works on desktop and phones (touch controls).
 
@@ -49,8 +49,13 @@ npm run preview
 | **T** | Heal (mana; Library research unlock) |
 | **P** | Possess (mana) — FP control one minion; Esc exits |
 | **V** | Cave-In (mana) — then click earth, gold, or a fortified wall |
+| **O** | Sight (mana) — then click to peel fog |
+| **X** | Muster (mana) — every minion surges toward heroes |
 | **Z** | Call the Ashreaver (mana; Library research or a Temple) |
 | **I** | Spike trap (reusable, cheaper than Sentry) |
+| **−** / **=** | Slower / faster simulation (pause, 1×, 2×, 3×) |
+| **\\** | Pause / resume |
+| **Minimap click** | Swing the camera there |
 | **🔊** | Mute toggle (top bar) |
 | **B** / **N** | Wooden / Stone bridge over lava or water |
 | **U** | Workshop room |

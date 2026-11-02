@@ -50,6 +50,9 @@ const LIGHTNING_COST = 40;
 const CAVEIN_COST = 48;
 const SUMMON_COST = 85;
 const SUMMON_COOLDOWN = 80;
+const REVEAL_COST = 22;
+const MUSTER_COST = 20;
+const CHAMPION_WARD = 120;
 
 export class Game {
   private grid: Grid;
@@ -88,6 +91,10 @@ export class Game {
   private rosterAcc = 0;
   /** Pass 8 — Cave-In waits for a tile click. */
   private caveInArmed = false;
+  /** Pass 9 — Sight waits for a tile click. */
+  private revealArmed = false;
+  /** 0 pause, 1 normal, 2–3 fast-forward. Camera always uses real time. */
+  private simSpeed: 0 | 1 | 2 | 3 = 1;
   /** Seconds until Ashreaver can be called again. */
   private ashreaverCd = 0;
   /** Spike trap re-arm time (seconds, game clock) keyed by "x,y". */
@@ -171,6 +178,9 @@ export class Game {
     this.hud.onRosterSelect = (id) => this.focusCreatureById(id);
     this.hud.setMuted(this.audio.isMuted());
     this.hud.onToggleMute = () => this.hud.setMuted(this.audio.toggleMute());
+    this.hud.onSpeed = (s) => this.setSimSpeed(s);
+    this.hud.onMinimap = (x, y) => this.focusMinimap(x, y);
+    this.hud.setSpeed(1);
 
     this.grid = new Grid(40, 40);
     this.renderer = new DungeonRenderer(canvas);
@@ -305,6 +315,11 @@ export class Game {
     this.researchRank = 0;
     this.healUnlocked = false;
     this.caveInArmed = false;
+    this.revealArmed = false;
+    this.simSpeed = 1;
+    this.hud.setSpeed(1);
+    this.hud.setSpellArmed('reveal', false);
+    document.body.classList.remove('paused');
     this.ashreaverCd = 0;
     this.spikeReady.clear();
     this.hud.setSpellArmed('caveIn', false);
@@ -445,6 +460,8 @@ export class Game {
           isHero: c.isHero,
           isChampion: c.isChampion || undefined,
           damage: c.damage,
+          ward: c.isChampion ? c.ward : undefined,
+          enraged: c.enraged || undefined,
         })),
       attracted: { ...this.attracted },
       researchProgress: this.researchProgress,
@@ -558,7 +575,15 @@ export class Game {
       c.mood = 72;
       c.isChampion = !!sc.isChampion;
       if (Number.isFinite(sc.damage) && (sc.damage ?? 0) > 0) c.damage = sc.damage as number;
-      if (c.isChampion) c.mesh.scale.multiplyScalar(1.18);
+      if (c.isChampion) {
+        c.mesh.scale.multiplyScalar(1.18);
+        c.wardMax = CHAMPION_WARD;
+        c.ward = Number.isFinite(sc.ward) ? Math.max(0, sc.ward as number) : CHAMPION_WARD;
+      }
+      if (sc.enraged) {
+        c.enraged = true;
+        c.speed *= 1.35;
+      }
       c.clampStats();
       c.syncMesh(this.time);
     }
@@ -704,6 +729,19 @@ export class Game {
       if (e.key.toLowerCase() === 'p') this.castSpell('possess');
       if (e.key.toLowerCase() === 'v') this.castSpell('caveIn');
       if (e.key.toLowerCase() === 'z') this.castSpell('summon');
+      if (e.key.toLowerCase() === 'o') this.castSpell('reveal');
+      if (e.key.toLowerCase() === 'x') this.castSpell('muster');
+      if (e.key === '\\') this.setSimSpeed(this.simSpeed === 0 ? 1 : 0);
+      if (e.key === '-' || e.key === '_') {
+        const order: Array<0 | 1 | 2 | 3> = [0, 1, 2, 3];
+        const i = Math.max(0, order.indexOf(this.simSpeed));
+        this.setSimSpeed(order[Math.max(0, i - 1)]);
+      }
+      if (e.key === '=' || e.key === '+') {
+        const order: Array<0 | 1 | 2 | 3> = [0, 1, 2, 3];
+        const i = Math.max(0, order.indexOf(this.simSpeed));
+        this.setSimSpeed(order[Math.min(3, i + 1)]);
+      }
       if (e.key.toLowerCase() === 'b') {
         this.tool = 'bridgeWood';
         this.hud.setActiveTool(this.tool);
@@ -728,6 +766,11 @@ export class Game {
           this.caveInArmed = false;
           this.hud.setSpellArmed('caveIn', false);
           this.hud.say('Cave-In dispelled.');
+        }
+        if (this.revealArmed) {
+          this.revealArmed = false;
+          this.hud.setSpellArmed('reveal', false);
+          this.hud.say('Sight dispelled.');
         }
       }
       if (e.key.toLowerCase() === 'l' && !e.metaKey && !e.ctrlKey) {
@@ -1075,6 +1118,10 @@ export class Game {
         this.resolveCaveIn(tx, ty);
         return;
       }
+      if (this.revealArmed) {
+        this.resolveReveal(tx, ty);
+        return;
+      }
       if (this.tool === 'select') {
         if (this.possessed) {
           // While possessing: click ground to move the vessel
@@ -1140,10 +1187,12 @@ export class Game {
 
   private handleSecondaryAt(tx: number, ty: number, worldHit?: THREE.Vector3): void {
     try {
-      if (this.caveInArmed) {
+      if (this.caveInArmed || this.revealArmed) {
         this.caveInArmed = false;
+        this.revealArmed = false;
         this.hud.setSpellArmed('caveIn', false);
-        this.hud.say('Cave-In dispelled.');
+        this.hud.setSpellArmed('reveal', false);
+        this.hud.say('Spell dispelled.');
         return;
       }
       // Hand tool: right-click / long-press = conclusive slap (hovered, selected, or held)
@@ -1250,6 +1299,7 @@ export class Game {
                       : TileKind[tile.kind];
       let tip = `(${tp.x},${tp.y}) ${kindLabel}${tile.fortified ? ' [fortified]' : ''}${room}${dig}`;
       if (this.caveInArmed) tip = `CAVE-IN · click earth, gold, or a fortified wall · ${tip}`;
+      if (this.revealArmed) tip = `SIGHT · click to peel fog · ${tip}`;
       if (this.tool === 'select') {
         const c = this.creatureAt(tp.x, tp.y);
         if (c && !c.isHero) {
@@ -1583,7 +1633,9 @@ export class Game {
                     ? 'Fleeing'
                     : jobRaw.charAt(0).toUpperCase() + jobRaw.slice(1);
       const groupN = this.selectedGroup.filter((x) => x.alive).length;
-      const kindLabel = c.isChampion ? 'Sir Brightbane' : (kindNames[c.kind] ?? String(c.kind));
+      let kindLabel = c.isChampion ? 'Sir Brightbane' : (kindNames[c.kind] ?? String(c.kind));
+      if (c.isChampion && c.ward > 0) kindLabel += ' · Ward';
+      if (c.enraged) kindLabel += ' · Enraged';
       this.hud.showInspector({
         kind: groupN > 1 ? `${kindLabel} (+${groupN - 1})` : kindLabel,
         job: groupN > 1 ? `${jobLabel} · squad ${groupN}` : jobLabel,
@@ -1951,8 +2003,66 @@ export class Game {
 
   private syncMissionHud(): void {
     this.hud.setObjective(`W${this.wavesCleared}/${WIN_WAVES} · ${Math.floor(this.gold)}/${GOLD_WIN_THRESHOLD}g`);
+    this.hud.setWaveLine(this.waveLineText(), this.waveLineMode());
     this.hud.setKits(this.doorKits, this.sentryKits);
     this.hud.setWorkerCost(this.workerCost());
+  }
+
+  private waveLineText(): string {
+    if (this.won) return 'The Underkeep stands';
+    if (this.gameOver) return 'The Heart is silent';
+    if (this.simSpeed === 0) {
+      const rest = this.heroWaveSpawned ? 'battle held' : `next wave ${this.formatWaveClock()}`;
+      return `PAUSED · ${rest}`;
+    }
+    const pace = this.simSpeed > 1 ? `${this.simSpeed}× · ` : '';
+    if (this.heroWaveSpawned) {
+      const left = this.creatures.filter(
+        (c) => c.alive && c.isHero && !c.knockedOut && !c.isPrisoner
+      ).length;
+      const n = Math.min(WIN_WAVES, this.wavesCleared + 1);
+      return left ? `${pace}Wave ${n} — ${left} hero${left === 1 ? '' : 'es'} in the halls` : `${pace}Wave breaking…`;
+    }
+    const next = this.wavesCleared + 1;
+    const who = next >= WIN_WAVES ? 'Sir Brightbane' : next === 2 ? 'knights & archers' : 'a knight patrol';
+    return `${pace}Next wave ${this.formatWaveClock()} — ${who}`;
+  }
+
+  private waveLineMode(): 'calm' | 'soon' | 'fight' | 'paused' {
+    if (this.simSpeed === 0) return 'paused';
+    if (this.heroWaveSpawned) return 'fight';
+    if (this.heroWaveTimer <= 15) return 'soon';
+    return 'calm';
+  }
+
+  private formatWaveClock(): string {
+    const secs = Math.max(0, Math.ceil(this.heroWaveTimer));
+    const m = Math.floor(secs / 60);
+    const s = secs % 60;
+    return `${m}:${s.toString().padStart(2, '0')}`;
+  }
+
+  private setSimSpeed(speed: 0 | 1 | 2 | 3): void {
+    const prev = this.simSpeed;
+    this.simSpeed = speed;
+    this.hud.setSpeed(speed);
+    this.syncMissionHud();
+    if (speed === 0 && prev !== 0) this.mentioneOnce('paused', MENTOR_LINES.paused);
+    else if (speed > 1 && prev <= 1) this.mentioneOnce('speedUp', MENTOR_LINES.speedUp);
+  }
+
+  /** Click the minimap to swing the keeper's view. */
+  private focusMinimap(tx: number, ty: number): void {
+    if (this.possessed) return;
+    if (!this.grid.inBounds(tx, ty)) return;
+    const cam = this.renderer.camera;
+    const ox = cam.position.x - this.camTarget.x;
+    const oy = cam.position.y;
+    const oz = cam.position.z - this.camTarget.z;
+    const w = this.grid.tileToWorld(tx, ty);
+    this.camTarget.set(w.x, 0, w.z);
+    cam.position.set(w.x + ox, oy, w.z + oz);
+    cam.lookAt(this.camTarget.x, 0, this.camTarget.z);
   }
 
   private updateMinimap(): void {
@@ -1995,6 +2105,10 @@ export class Game {
     if (spell !== 'caveIn' && this.caveInArmed) {
       this.caveInArmed = false;
       this.hud.setSpellArmed('caveIn', false);
+    }
+    if (spell !== 'reveal' && this.revealArmed) {
+      this.revealArmed = false;
+      this.hud.setSpellArmed('reveal', false);
     }
     if (spell === 'createWorker') {
       const cost = this.workerCost();
@@ -2113,6 +2227,29 @@ export class Game {
     }
     if (spell === 'summon') {
       this.summonAshreaver();
+      return;
+    }
+    if (spell === 'reveal') {
+      if (this.revealArmed) {
+        this.revealArmed = false;
+        this.hud.setSpellArmed('reveal', false);
+        this.hud.say('Sight dispelled.');
+        return;
+      }
+      if (this.mana < REVEAL_COST) {
+        this.hud.sayNow(`Sight needs ${REVEAL_COST} mana.`);
+        return;
+      }
+      this.caveInArmed = false;
+      this.hud.setSpellArmed('caveIn', false);
+      this.revealArmed = true;
+      this.hud.setSpellArmed('reveal', true);
+      this.audio.play('spell');
+      this.hud.sayNow(MENTOR_LINES.revealArm);
+      return;
+    }
+    if (spell === 'muster') {
+      this.musterMinions();
       return;
     }
     if (spell === 'possess') {
@@ -4098,23 +4235,24 @@ export class Game {
       this.gold = Math.max(0, this.gold);
       if (this.gold > this.goldEver) this.goldEver = this.gold;
 
+      const sim = !this.gameOver ? dt * this.simSpeed : 0;
       if (!this.gameOver) {
-        this.time += dt;
+        this.time += sim;
         try { this.updateCamera(dt); } catch (e) { console.warn('[underkeep] camera', e); }
-        try { this.regenMana(dt); } catch (e) { console.warn('[underkeep] mana', e); }
-        try { this.regenHatcheryFood(dt); } catch (e) { console.warn('[underkeep] food', e); }
-        try { this.assignJobs(dt); } catch (e) { console.warn('[underkeep] assignJobs', e); }
-        try { this.updateMoods(dt); } catch (e) { console.warn('[underkeep] moods', e); }
-        try { this.updateCreatures(dt); } catch (e) { console.warn('[underkeep] creatures', e); }
+        try { this.regenMana(sim); } catch (e) { console.warn('[underkeep] mana', e); }
+        try { this.regenHatcheryFood(sim); } catch (e) { console.warn('[underkeep] food', e); }
+        try { this.assignJobs(sim); } catch (e) { console.warn('[underkeep] assignJobs', e); }
+        try { this.updateMoods(sim); } catch (e) { console.warn('[underkeep] moods', e); }
+        try { this.updateCreatures(sim); } catch (e) { console.warn('[underkeep] creatures', e); }
         try { this.updateFearAura(); } catch (e) { console.warn('[underkeep] fear', e); }
-        if (this.ashreaverCd > 0) this.ashreaverCd = Math.max(0, this.ashreaverCd - dt);
-        try { this.updatePortal(dt); } catch (e) { console.warn('[underkeep] portal', e); }
-        try { this.updateHeroWave(dt); } catch (e) { console.warn('[underkeep] heroes', e); }
+        if (this.ashreaverCd > 0) this.ashreaverCd = Math.max(0, this.ashreaverCd - sim);
+        try { this.updatePortal(sim); } catch (e) { console.warn('[underkeep] portal', e); }
+        try { this.updateHeroWave(sim); } catch (e) { console.warn('[underkeep] heroes', e); }
         try { this.checkHeart(); } catch (e) { console.warn('[underkeep] heart', e); }
-        try { this.payWages(dt); } catch (e) { console.warn('[underkeep] wages', e); }
-        try { this.updateHazards(dt); } catch (e) { console.warn('[underkeep] hazards', e); }
+        try { this.payWages(sim); } catch (e) { console.warn('[underkeep] wages', e); }
+        try { this.updateHazards(sim); } catch (e) { console.warn('[underkeep] hazards', e); }
         try { this.checkMissionWin(); } catch (e) { console.warn('[underkeep] mission', e); }
-        this.saveAcc += dt;
+        this.saveAcc += sim;
         if (this.saveAcc >= 4) {
           this.saveAcc = 0;
           try { this.saveNow(); } catch (e) { console.warn('[underkeep] save', e); }
@@ -4169,7 +4307,7 @@ export class Game {
       this.templePrayCount = 0;
       for (const c of this.creatures) {
         if (!c.alive) continue;
-        if (c.prayerBuff > 0) c.prayerBuff = Math.max(0, c.prayerBuff - dt);
+        if (c.prayerBuff > 0) c.prayerBuff = Math.max(0, c.prayerBuff - (this.gameOver ? dt : dt * this.simSpeed));
         if (c.job === JobType.Pray && !c.isHero) this.templePrayCount++;
       }
       this.rosterAcc += dt;
@@ -4190,6 +4328,9 @@ export class Game {
       this.hud.setSpellAffordable('lightning', this.mana >= LIGHTNING_COST);
       this.hud.setSpellAffordable('heal', this.healUnlocked && this.mana >= 30);
       this.hud.setSpellAffordable('possess', this.possessed ? true : this.mana >= POSSESS_COST);
+      this.hud.setSpellAffordable('caveIn', this.caveInArmed || this.mana >= CAVEIN_COST);
+      this.hud.setSpellAffordable('reveal', this.revealArmed || this.mana >= REVEAL_COST);
+      this.hud.setSpellAffordable('muster', this.mana >= MUSTER_COST);
       this.syncMissionHud();
       this.minimapAcc += dt;
       if (this.minimapAcc >= 0.35) {
@@ -5990,11 +6131,46 @@ export class Game {
   /** Damage plus hit flash, floating number, and downed-state resolution. */
   private applyDamage(target: Creature, raw: number): void {
     if (!target.alive || target.hp <= 0) return;
-    const dmg = Math.max(1, Math.round(raw));
+    let dmg = Math.max(1, Math.round(raw));
+    if (target.isChampion && target.ward > 0) {
+      const absorbed = Math.min(target.ward, dmg);
+      target.ward = Math.max(0, target.ward - absorbed);
+      dmg -= absorbed;
+      if (target.ward <= 0) {
+        this.hud.sayNow(MENTOR_LINES.wardShatter);
+        this.renderer.addShake(0.42);
+        this.audio.play('hitHeavy');
+        try {
+          this.renderer.spawnFx(new THREE.Vector3(target.wx, 1.45, target.wz), 0xd0e8ff, 0.85);
+        } catch { /* ignore */ }
+      }
+      if (dmg <= 0) {
+        this.floatWorld(target.wx, target.wz, 'WARD', '#b8dcff');
+        this.audio.play('spell');
+        return;
+      }
+    }
     const before = target.hp > 0 && target.alive;
     target.takeDamage(dmg);
+    let justEnraged = false;
+    if (
+      target.isChampion &&
+      target.alive &&
+      target.hp > 0 &&
+      !target.enraged &&
+      target.hp <= target.maxHp * 0.45
+    ) {
+      justEnraged = true;
+      target.enraged = true;
+      target.speed *= 1.35;
+      target.damage = Math.max(1, Math.round(target.damage * 1.3));
+      target.pulseTint('feast', 1.5);
+      this.renderer.addShake(0.5);
+      this.audio.play('horn');
+      this.hud.sayNow(MENTOR_LINES.enrage);
+    }
     try {
-      target.pulseTint('hit', 0.32);
+      if (!justEnraged) target.pulseTint('hit', 0.32);
       this.floatWorld(target.wx, target.wz, `-${dmg}`, target.isHero ? '#ffd8a8' : '#ff7070');
       this.audio.play(dmg >= 28 ? 'hitHeavy' : 'hit');
       if (dmg >= 26) this.renderer.addShake(Math.min(0.5, dmg / 100));
@@ -6049,6 +6225,75 @@ export class Game {
       this.hud.sayNow(MENTOR_LINES.heroDown);
       this.renderer.spawnFx(new THREE.Vector3(target.wx, 1.2, target.wz), 0xffee88, 0.7);
     }
+  }
+
+  private resolveReveal(tx: number, ty: number): void {
+    if (!this.grid.inBounds(tx, ty)) return;
+    if (this.mana < REVEAL_COST) {
+      this.revealArmed = false;
+      this.hud.setSpellArmed('reveal', false);
+      this.hud.sayNow(`Sight needs ${REVEAL_COST} mana.`);
+      return;
+    }
+    if (!this.grid.revealArea(tx, ty, 5.2)) {
+      this.hud.say(MENTOR_LINES.revealEmpty);
+      return;
+    }
+    this.mana -= REVEAL_COST;
+    this.revealArmed = false;
+    this.hud.setSpellArmed('reveal', false);
+    this.fogDirty = true;
+    const w = this.grid.tileToWorld(tx, ty);
+    this.renderer.spawnFx(new THREE.Vector3(w.x, 0.6, w.z), 0x88c8ff, 0.7);
+    this.renderer.spawnFx(new THREE.Vector3(w.x, 1.4, w.z), 0xe8f4ff, 0.45);
+    this.audio.play('spell');
+    this.hud.sayNow(MENTOR_LINES.reveal);
+  }
+
+  private musterMinions(): void {
+    if (this.mana < MUSTER_COST) {
+      this.hud.sayNow(`Muster needs ${MUSTER_COST} mana.`);
+      return;
+    }
+    const heroes = this.creatures.filter(
+      (c) => c.alive && c.isHero && !c.knockedOut && !c.isPrisoner
+    );
+    const fighters = this.creatures.filter(
+      (c) => c.alive && !c.isHero && !c.isWorker && !c.held && !c.knockedOut && !c.isPrisoner
+    );
+    if (!fighters.length) {
+      this.hud.sayNow(MENTOR_LINES.musterNone);
+      return;
+    }
+    this.mana -= MUSTER_COST;
+    const heart = this.grid.heartPos;
+    for (const c of fighters) {
+      let tx = heart.x;
+      let ty = heart.y;
+      if (heroes.length) {
+        let best = heroes[0];
+        let bestD = Infinity;
+        for (const h of heroes) {
+          const d = Math.hypot(h.x - c.x, h.y - c.y);
+          if (d < bestD) {
+            bestD = d;
+            best = h;
+          }
+        }
+        tx = best.x;
+        ty = best.y;
+      }
+      if (c.bedKey) this.releaseBed(c);
+      c.job = JobType.AttackMove;
+      c.jobTarget = { x: tx, y: ty };
+      c.stunTimer = 0;
+      c.speedBuff = Math.max(c.speedBuff, 4);
+      const path = this.grid.findPath(c.x, c.y, tx, ty, this.pathOptsFor(c));
+      if (path) c.setPath(path);
+    }
+    this.audio.play('horn');
+    this.renderer.addShake(0.22);
+    this.hud.sayNow(MENTOR_LINES.muster);
   }
 
   private resolveCaveIn(tx: number, ty: number): void {
@@ -6632,6 +6877,8 @@ export class Game {
         h.maxHp = Math.floor(CREATURE_STATS[h.kind].hp * 2.6 * waveScale);
         h.hp = h.maxHp;
         h.damage = Math.floor(h.damage * 1.55);
+        h.wardMax = CHAMPION_WARD;
+        h.ward = CHAMPION_WARD;
         h.mesh.scale.multiplyScalar(1.2);
         h.pulseTint('feast', 2.2);
       } else {

@@ -6,7 +6,7 @@
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="mobile-web-app-capable" content="yes" />
     <title>Underkeep</title>
-    <meta name="underkeep-build" content="pass8" />
+    <meta name="underkeep-build" content="pass9" />
     <link rel="stylesheet" href="/src/style.css" />
   </head>
   <body class="booting">
@@ -28,7 +28,14 @@
           <div class="stat" id="stat-objective"><span class="label">Mission</span><span class="value" id="objective-value">—</span></div>
           <button type="button" id="btn-new-game" class="hud-new-game" title="Clear save and start a new dungeon">New Game</button>
           <button type="button" id="btn-mute" class="hud-mute" title="Sound on — click to mute" aria-pressed="false">🔊</button>
+          <div id="speed-bar" aria-label="Game speed">
+            <button type="button" data-speed="0" title="Pause (\)">⏸</button>
+            <button type="button" data-speed="1" class="active" title="Normal speed (− / =)">1×</button>
+            <button type="button" data-speed="2" title="Double speed">2×</button>
+            <button type="button" data-speed="3" title="Triple speed">3×</button>
+          </div>
         </div>
+        <div id="wave-line" data-mode="calm" aria-live="polite">The dark is quiet… for now.</div>
 
         <!-- Compact primary bar (desktop + mobile) — rooms/spells in sheets -->
         <div id="toolbar" class="desktop-toolbar primary-bar" aria-label="Primary tools">
@@ -87,6 +94,8 @@
             <button class="spell" data-spell="possess" title="Possess (P) — ride a minion, 35 mana">👁 Possess</button>
             <button class="spell" data-spell="caveIn" title="Cave-In (V) — 48 mana, click earth or a wall">💥 Cave-In</button>
             <button class="spell" data-spell="summon" title="Call Ashreaver (Z) — 85 mana, Library or Temple">☠ Ashreaver</button>
+            <button class="spell" data-spell="reveal" title="Sight (O) — 22 mana, click to peel fog">👁 Sight</button>
+            <button class="spell" data-spell="muster" title="Muster (X) — 20 mana, call every minion to the fight">📯 Muster</button>
           </div>
         </div>
 

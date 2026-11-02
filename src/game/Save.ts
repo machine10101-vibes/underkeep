@@ -34,6 +34,9 @@ export interface SavedCreature {
   /** Pass 8 — champion hero (Sir Brightbane) and scaled damage. */
   isChampion?: boolean;
   damage?: number;
+  /** Pass 9 — Brightbane ward remaining, and whether he has enraged. */
+  ward?: number;
+  enraged?: boolean;
 }
 
 export interface SaveData {

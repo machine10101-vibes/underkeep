@@ -46,6 +46,9 @@ export class HUD {
   onInspectorClose: (() => void) | null = null;
   onRosterSelect: ((creatureId: number) => void) | null = null;
   onToggleMute: (() => void) | null = null;
+  onSpeed: ((speed: 0 | 1 | 2 | 3) => void) | null = null;
+  onMinimap: ((tileX: number, tileY: number) => void) | null = null;
+  private mapLayout: { gw: number; gh: number; cell: number; ox: number; oy: number } | null = null;
 
   constructor() {
     this.goldEl = document.getElementById('gold-value')!;
@@ -99,7 +102,15 @@ export class HUD {
       btn.addEventListener('click', () => {
         const spell = (btn as HTMLElement).dataset.spell as SpellId;
         this.onSpell?.(spell);
-        if (spell === 'speed' || spell === 'lightning' || spell === 'possess' || spell === 'caveIn' || spell === 'summon') {
+        if (
+          spell === 'speed' ||
+          spell === 'lightning' ||
+          spell === 'possess' ||
+          spell === 'caveIn' ||
+          spell === 'summon' ||
+          spell === 'reveal' ||
+          spell === 'muster'
+        ) {
           this.closeSheet('spells');
         }
       });
@@ -132,6 +143,39 @@ export class HUD {
     });
     document.getElementById('mentor-dismiss')?.addEventListener('click', () => this.dismissMentor());
     document.getElementById('btn-mute')?.addEventListener('click', () => this.onToggleMute?.());
+    document.querySelectorAll('#speed-bar button').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const speed = Number((btn as HTMLElement).dataset.speed);
+        if (speed === 0 || speed === 1 || speed === 2 || speed === 3) this.onSpeed?.(speed);
+      });
+    });
+    this.minimap?.addEventListener('click', (e) => {
+      const layout = this.mapLayout;
+      const canvas = this.minimap;
+      if (!layout || !canvas) return;
+      const rect = canvas.getBoundingClientRect();
+      const px = ((e.clientX - rect.left) / rect.width) * canvas.width;
+      const py = ((e.clientY - rect.top) / rect.height) * canvas.height;
+      const x = Math.floor((px - layout.ox) / layout.cell);
+      const y = Math.floor((py - layout.oy) / layout.cell);
+      if (x < 0 || y < 0 || x >= layout.gw || y >= layout.gh) return;
+      this.onMinimap?.(x, y);
+    });
+  }
+
+  setSpeed(speed: 0 | 1 | 2 | 3): void {
+    document.querySelectorAll('#speed-bar button').forEach((btn) => {
+      const n = Number((btn as HTMLElement).dataset.speed);
+      btn.classList.toggle('active', n === speed);
+    });
+    document.body.classList.toggle('paused', speed === 0);
+  }
+
+  setWaveLine(text: string, mode: 'calm' | 'soon' | 'fight' | 'paused'): void {
+    const el = document.getElementById('wave-line');
+    if (!el) return;
+    el.textContent = text;
+    el.dataset.mode = mode;
   }
 
   setMuted(muted: boolean): void {
@@ -434,6 +478,7 @@ export class HUD {
     const cell = Math.min(W / gw, H / gh);
     const ox = (W - gw * cell) / 2;
     const oy = (H - gh * cell) / 2;
+    this.mapLayout = { gw, gh, cell, ox, oy };
     for (let y = 0; y < gh; y++) {
       for (let x = 0; x < gw; x++) {
         if (!opts.exploredAt(x, y)) continue;
@@ -604,4 +649,13 @@ export const MENTOR_LINES = {
   rivalAnger: "Your minions recognize their hero-kin. They are furious — and they hit harder for it.",
   fearAura: "The Ashreaver's presence drags heroes' feet. Press them.",
   bounty: "A hero's purse is yours. +%g gold.",
+  revealArm: "Sight armed. Click the dark — fog peels back in a wide ring. Rock does not.",
+  reveal: "The veil thins. Gold and corridors you had not earned yet are suddenly obvious.",
+  revealEmpty: "Nothing new in that ring. The dark there is already yours.",
+  muster: "Muster! Forks drop, beds empty, and your minions surge toward the intruders.",
+  musterNone: "Muster finds no one standing. Build a Portal, or wake the ones you have.",
+  wardShatter: "Brightbane's ward shatters. Now he can bleed.",
+  enrage: "Sir Brightbane enrages! He is faster, crueler, and done with mercy.",
+  paused: "Time holds. Look around, place your marks — the dungeon waits.",
+  speedUp: "The clock leans forward. Diggers, wages, and heroes all hurry.",
 };

@@ -929,6 +929,63 @@ export function makeCreatureMesh(color: number, scale: number, kind: string): TH
     );
     string.position.set(-0.2, 0.75, 0.05);
     g.add(string);
+  } else if (kind === 'ashreaver') {
+    // Elite call-in: horned bruiser, readable at overview zoom
+    const hide = new THREE.MeshStandardMaterial({
+      color: 0x6a1418,
+      roughness: 0.45,
+      metalness: 0.28,
+      emissive: 0x401008,
+      emissiveIntensity: 0.4,
+    });
+    const hornMat = new THREE.MeshStandardMaterial({
+      color: 0x2a1810,
+      roughness: 0.4,
+      metalness: 0.4,
+      emissive: 0xff4010,
+      emissiveIntensity: 0.35,
+    });
+    const body = new THREE.Mesh(new THREE.CapsuleGeometry(0.36, 0.58, 6, 10), hide);
+    body.position.y = 0.78;
+    body.castShadow = true;
+    g.add(body);
+    const head = new THREE.Mesh(new THREE.SphereGeometry(0.26, 10, 8), hide);
+    head.position.y = 1.36;
+    head.castShadow = true;
+    g.add(head);
+    for (const sx of [-1, 1]) {
+      const horn = new THREE.Mesh(new THREE.ConeGeometry(0.08, 0.46, 6), hornMat);
+      horn.position.set(sx * 0.14, 1.68, 0.02);
+      horn.rotation.z = sx * -0.4;
+      g.add(horn);
+      const eye = new THREE.Mesh(
+        new THREE.SphereGeometry(0.05, 6, 6),
+        new THREE.MeshStandardMaterial({ color: 0xffe080, emissive: 0xff4010, emissiveIntensity: 1.3 })
+      );
+      eye.position.set(sx * 0.09, 1.4, 0.2);
+      g.add(eye);
+      g.add(limb(new THREE.CylinderGeometry(0.08, 0.06, 0.42, 5), hide, sx * 0.14, 0.28, 0));
+    }
+    const haft = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.04, 0.045, 0.75, 5),
+      new THREE.MeshStandardMaterial({ color: 0x3a2418, roughness: 0.8 })
+    );
+    haft.position.set(0.48, 0.9, 0.08);
+    haft.rotation.z = 0.45;
+    g.add(haft);
+    const blade = new THREE.Mesh(
+      new THREE.BoxGeometry(0.14, 0.48, 0.05),
+      new THREE.MeshStandardMaterial({
+        color: 0xd0d6e0,
+        metalness: 0.88,
+        roughness: 0.22,
+        emissive: 0x801010,
+        emissiveIntensity: 0.45,
+      })
+    );
+    blade.position.set(0.7, 1.22, 0.08);
+    blade.castShadow = true;
+    g.add(blade);
   } else {
     // Generic fallback minion
     const body = new THREE.Mesh(new THREE.CapsuleGeometry(0.26, 0.45, 6, 10), bodyMat);
@@ -1905,6 +1962,39 @@ export function makeSentryTrapMesh(): THREE.Group {
   tip.rotation.z = -Math.PI / 2;
   tip.position.set(0.68, 0.95, 0);
   g.add(tip);
+  return g;
+}
+
+/** Reusable spike plate — sits flush on claimed floor. */
+export function makeSpikeTrapMesh(): THREE.Group {
+  const g = new THREE.Group();
+  const plate = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.55, 0.6, 0.08, 8),
+    new THREE.MeshStandardMaterial({ color: 0x4a4038, roughness: 0.72, metalness: 0.4 })
+  );
+  plate.position.y = 0.05;
+  plate.receiveShadow = true;
+  g.add(plate);
+  const spikeMat = new THREE.MeshStandardMaterial({
+    color: 0xd8dce6,
+    metalness: 0.88,
+    roughness: 0.25,
+    emissive: 0x802020,
+    emissiveIntensity: 0.28,
+  });
+  const spots: Array<[number, number]> = [
+    [0, 0],
+    [0.28, 0.12],
+    [-0.26, 0.1],
+    [0.1, -0.28],
+    [-0.14, -0.22],
+  ];
+  for (const [x, z] of spots) {
+    const s = new THREE.Mesh(new THREE.ConeGeometry(0.07, 0.38, 5), spikeMat);
+    s.position.set(x, 0.24, z);
+    s.castShadow = true;
+    g.add(s);
+  }
   return g;
 }
 

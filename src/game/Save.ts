@@ -31,6 +31,12 @@ export interface SavedCreature {
   sleepNeed: number;
   trainNeed: number;
   isHero: boolean;
+  /** Pass 8 — champion hero (Sir Brightbane) and scaled damage. */
+  isChampion?: boolean;
+  damage?: number;
+  /** Pass 9 — Brightbane ward remaining, and whether he has enraged. */
+  ward?: number;
+  enraged?: boolean;
 }
 
 export interface SaveData {
@@ -75,6 +81,12 @@ export interface SaveData {
   doorKits?: number;
   sentryKits?: number;
   goldEver?: number;
+  /** Pass 8 — Ashreaver summon cooldown remaining (seconds). */
+  ashreaverCd?: number;
+  /** Pass 10 — session tallies so a reload does not zero the end card. */
+  heroesDown?: number;
+  digFinds?: number;
+  doorsBroken?: number;
 }
 
 function finiteNum(n: unknown): n is number {

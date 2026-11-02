@@ -1,6 +1,6 @@
 import { SpellId, ToolMode } from '../game/types';
 
-const ROOM_TOOLS: ToolMode[] = ['treasury', 'lair', 'hatchery', 'training', 'library', 'portal', 'guard', 'workshop', 'prison', 'torture', 'graveyard', 'temple', 'combatPit', 'door', 'sentry', 'rally', 'bridgeWood', 'bridgeStone'];
+const ROOM_TOOLS: ToolMode[] = ['treasury', 'lair', 'hatchery', 'training', 'library', 'portal', 'guard', 'workshop', 'prison', 'torture', 'graveyard', 'temple', 'combatPit', 'door', 'sentry', 'spike', 'rally', 'bridgeWood', 'bridgeStone'];
 
 export class HUD {
   private goldEl: HTMLElement;
@@ -45,6 +45,10 @@ export class HUD {
   onNewGame: (() => void) | null = null;
   onInspectorClose: (() => void) | null = null;
   onRosterSelect: ((creatureId: number) => void) | null = null;
+  onToggleMute: (() => void) | null = null;
+  onSpeed: ((speed: 0 | 1 | 2 | 3) => void) | null = null;
+  onMinimap: ((tileX: number, tileY: number) => void) | null = null;
+  private mapLayout: { gw: number; gh: number; cell: number; ox: number; oy: number } | null = null;
 
   constructor() {
     this.goldEl = document.getElementById('gold-value')!;
@@ -98,7 +102,17 @@ export class HUD {
       btn.addEventListener('click', () => {
         const spell = (btn as HTMLElement).dataset.spell as SpellId;
         this.onSpell?.(spell);
-        if (spell === 'speed' || spell === 'lightning' || spell === 'possess') this.closeSheet('spells');
+        if (
+          spell === 'speed' ||
+          spell === 'lightning' ||
+          spell === 'possess' ||
+          spell === 'caveIn' ||
+          spell === 'summon' ||
+          spell === 'reveal' ||
+          spell === 'muster'
+        ) {
+          this.closeSheet('spells');
+        }
       });
     });
     document.getElementById('overlay-btn')!.addEventListener('click', () => {
@@ -128,6 +142,69 @@ export class HUD {
       });
     });
     document.getElementById('mentor-dismiss')?.addEventListener('click', () => this.dismissMentor());
+    document.getElementById('btn-mute')?.addEventListener('click', () => this.onToggleMute?.());
+    document.querySelectorAll('#speed-bar button').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const speed = Number((btn as HTMLElement).dataset.speed);
+        if (speed === 0 || speed === 1 || speed === 2 || speed === 3) this.onSpeed?.(speed);
+      });
+    });
+    this.minimap?.addEventListener('click', (e) => {
+      const layout = this.mapLayout;
+      const canvas = this.minimap;
+      if (!layout || !canvas) return;
+      const rect = canvas.getBoundingClientRect();
+      const px = ((e.clientX - rect.left) / rect.width) * canvas.width;
+      const py = ((e.clientY - rect.top) / rect.height) * canvas.height;
+      const x = Math.floor((px - layout.ox) / layout.cell);
+      const y = Math.floor((py - layout.oy) / layout.cell);
+      if (x < 0 || y < 0 || x >= layout.gw || y >= layout.gh) return;
+      this.onMinimap?.(x, y);
+    });
+  }
+
+  setSpeed(speed: 0 | 1 | 2 | 3): void {
+    document.querySelectorAll('#speed-bar button').forEach((btn) => {
+      const n = Number((btn as HTMLElement).dataset.speed);
+      btn.classList.toggle('active', n === speed);
+    });
+    document.body.classList.toggle('paused', speed === 0);
+  }
+
+  setWaveLine(text: string, mode: 'calm' | 'soon' | 'fight' | 'paused'): void {
+    const el = document.getElementById('wave-line');
+    if (!el) return;
+    el.textContent = text;
+    el.dataset.mode = mode;
+  }
+
+  setMuted(muted: boolean): void {
+    const btn = document.getElementById('btn-mute');
+    if (!btn) return;
+    btn.textContent = muted ? '🔇' : '🔊';
+    btn.title = muted ? 'Sound off — click to unmute' : 'Sound on — click to mute';
+    btn.setAttribute('aria-pressed', muted ? 'true' : 'false');
+  }
+
+  setSpellArmed(spell: SpellId, armed: boolean): void {
+    document.querySelectorAll(`.spell[data-spell="${spell}"]`).forEach((btn) => {
+      btn.classList.toggle('armed', armed);
+    });
+  }
+
+  /** Viewport-space combat / bounty text. Capped so a brawl can't leak DOM nodes. */
+  spawnFloater(x: number, y: number, text: string, color: string): void {
+    const root = document.getElementById('floaters');
+    if (!root) return;
+    while (root.childElementCount > 26) root.firstElementChild?.remove();
+    const el = document.createElement('div');
+    el.className = 'floater';
+    el.textContent = text;
+    el.style.left = `${x + (Math.random() - 0.5) * 14}px`;
+    el.style.top = `${y}px`;
+    el.style.color = color;
+    root.appendChild(el);
+    window.setTimeout(() => el.remove(), 900);
   }
 
   private sheetButtons(which: 'build' | 'spells' | 'roster'): HTMLElement[] {
@@ -401,6 +478,7 @@ export class HUD {
     const cell = Math.min(W / gw, H / gh);
     const ox = (W - gw * cell) / 2;
     const oy = (H - gh * cell) / 2;
+    this.mapLayout = { gw, gh, cell, ox, oy };
     for (let y = 0; y < gh; y++) {
       for (let x = 0; x < gw; x++) {
         if (!opts.exploredAt(x, y)) continue;
@@ -555,4 +633,39 @@ export const MENTOR_LINES = {
   fleeLair: "Wounded minions flee toward the Lair!",
   dragWounded: "Scrabblers drag the wounded home to their beds.",
   allyKnocked: "A minion collapses! Scrabblers can haul them to a Lair bed.",
+  caveInArm: "Cave-In armed. Click earth, a gold seam, or a fortified wall. It crushes friend and foe — and buries the seam.",
+  caveIn: "The ceiling answers. Heroes learn what 'unsupported' means.",
+  caveInFriendly: "Cave-In lands — and some of yours were standing under it. Aim better, Keeper.",
+  caveInEmpty: "Stone crashes down on empty floor. Dramatic. Wasteful. Still satisfying.",
+  caveInGold: "The seam collapses! A handful of gold spills free. The rest is buried forever.",
+  spikeBuilt: "Spike plate set. Heroes can cross it — once, painfully, and then again.",
+  spikeFire: "Spikes bite. They'll reset. Heroes rarely do.",
+  summon: "The Ashreaver answers. Horns, hunger, and a fear that slows the righteous.",
+  summonLocked: "The Ashreaver will not come. Research in the Library, or raise a Temple, then call again.",
+  summonWaiting: "The Ashreaver still licks its wounds. Give it a moment.",
+  summonBusy: "One Ashreaver is already loose. That is plenty.",
+  championWave: "Wave 3 — Sir Brightbane leads the charge. He is not here to negotiate.",
+  championDown: "Sir Brightbane falls. The bounty is obscene. Drink it in.",
+  rivalAnger: "Your minions recognize their hero-kin. They are furious — and they hit harder for it.",
+  fearAura: "The Ashreaver's presence drags heroes' feet. Press them.",
+  bounty: "A hero's purse is yours. +%g gold.",
+  revealArm: "Sight armed. Click the dark — fog peels back in a wide ring. Rock does not.",
+  reveal: "The veil thins. Gold and corridors you had not earned yet are suddenly obvious.",
+  revealEmpty: "Nothing new in that ring. The dark there is already yours.",
+  muster: "Muster! Forks drop, beds empty, and your minions surge toward the intruders.",
+  musterNone: "Muster finds no one standing. Build a Portal, or wake the ones you have.",
+  wardShatter: "Brightbane's ward shatters. Now he can bleed.",
+  enrage: "Sir Brightbane enrages! He is faster, crueler, and done with mercy.",
+  paused: "Time holds. Look around, place your marks — the dungeon waits.",
+  speedUp: "The clock leans forward. Diggers, wages, and heroes all hurry.",
+  doorBash: "Heroes are pounding a door. Wood remembers every blow.",
+  doorSplinter: "The door splinters. One more push and the corridor is theirs.",
+  doorBroken: "The door gives way. They are inside.",
+  doorBrace: "Iron bands on the timber. That door will outlast their shoulders.",
+  braceMax: "That door is already bound in iron. Spend the gold elsewhere.",
+  findGold: "A purse in the spoil. Someone died rich and careless.",
+  findMana: "A shard of old mana in the dirt. The dungeon remembers its makers.",
+  findBlade: "An old blade in the rubble. Your fighter takes it — and keeps it.",
+  streak2: "Two heroes down in a breath. The dark is feasting.",
+  streak3: "A slaughter. The Treasury sings.",
 };

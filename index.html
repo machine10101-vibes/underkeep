@@ -6,9 +6,9 @@
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="mobile-web-app-capable" content="yes" />
     <title>Underkeep</title>
-    <meta name="underkeep-build" content="pass10.25" />
-    <script type="module" crossorigin src="/underkeep/assets/index-CdMo-Xlw.js"></script>
-    <link rel="stylesheet" crossorigin href="/underkeep/assets/index-BIbF2Xti.css">
+    <meta name="underkeep-build" content="pass11" />
+    <script type="module" crossorigin src="/underkeep/assets/index-B2feMG3l.js"></script>
+    <link rel="stylesheet" crossorigin href="/underkeep/assets/index-C-WtGTFW.css">
   </head>
   <body class="booting">
     <div id="boot-splash" aria-live="polite">
@@ -31,11 +31,19 @@
           <div class="stat" id="stat-creatures"><span class="label">Minions</span><span class="value" id="creatures-value">0</span></div>
           <div class="stat" id="stat-objective"><span class="label">Mission</span><span class="value" id="objective-value">—</span></div>
           <button type="button" id="btn-new-game" class="hud-new-game" title="Clear save and start a new dungeon">New Game</button>
+          <button type="button" id="btn-mute" class="hud-mute" title="Sound on — click to mute" aria-pressed="false">🔊</button>
+          <div id="speed-bar" aria-label="Game speed">
+            <button type="button" data-speed="0" title="Pause (\)">⏸</button>
+            <button type="button" data-speed="1" class="active" title="Normal speed (− / =)">1×</button>
+            <button type="button" data-speed="2" title="Double speed">2×</button>
+            <button type="button" data-speed="3" title="Triple speed">3×</button>
+          </div>
         </div>
         <div id="mentor">
           <span id="mentor-text">The earth awaits your cruelty, Keeper.</span>
           <button type="button" id="mentor-dismiss" aria-label="Dismiss">✕</button>
         </div>
+        <div id="wave-line" data-mode="calm" aria-live="polite">The dark is quiet… for now.</div>
         </div>
 
         <!-- Compact primary bar (desktop + mobile) — rooms/spells in sheets -->
@@ -84,6 +92,7 @@
             <button class="tool room-tool" data-tool="sell" title="Sell a room — recover half the gold">💰 Sell<span class="cost">50%</span></button>
             <button class="tool room-tool" data-tool="door" title="Wooden Door — 75 gold (or Workshop kit)">🚪 Door<span class="cost">75g</span></button>
             <button class="tool room-tool" data-tool="sentry" title="Sentry Trap — 150 gold">🏹 Sentry<span class="cost">150g</span></button>
+            <button class="tool room-tool" data-tool="spike" title="Spike Trap — 90 gold (reusable, I)">⚔ Spikes<span class="cost">90g</span></button>
             <button class="tool room-tool" data-tool="rally" title="Rally Flag — 40 gold (call to arms)">🚩 Rally<span class="cost">40g</span></button>
             <button class="tool room-tool" data-tool="bridgeWood" title="Wooden Bridge — 60 gold (over lava/water)">🌉 Wood Bridge<span class="cost">60g</span></button>
             <button class="tool room-tool" data-tool="bridgeStone" title="Stone Bridge — 120 gold (over lava/water)">🪨 Stone Bridge<span class="cost">120g</span></button>
@@ -99,6 +108,8 @@
             <button class="spell" data-spell="possess" title="Possess (P) — ride a minion">👁 Possess</button>
             <button class="spell" data-spell="sight" title="Sight of Evil (I) — reveal fog">👁‍🗨 Sight</button>
             <button class="spell" data-spell="callToArms" title="Call to Arms (Z) — muster fighters">📯 Call</button>
+            <button class="spell" data-spell="caveIn" title="Cave-In (G) — click earth, gold, or a fortified wall">💥 Cave-In</button>
+            <button class="spell" data-spell="summon" title="Call Ashreaver (Shift+Z) — Library research or a Temple">☠ Ashreaver</button>
           </div>
         </div>
 
@@ -127,6 +138,7 @@
           <div class="insp-hint">Hand: click pick · shift-click multi · drag-box · click ground attack-move · right-click slap</div>
         </div>
         <div id="tooltip"></div>
+        <div id="floaters" aria-hidden="true"></div>
         <div id="touch-hint" class="mobile-only">Tap · Long-press slap · Drag pan · Pinch zoom</div>
       </div>
       <div id="studio" hidden>

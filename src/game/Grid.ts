@@ -621,6 +621,22 @@ export class Grid {
     return changed;
   }
 
+  /** Peel fog in a disc. Sight only — rock stays rock. */
+  revealArea(cx: number, cy: number, radius: number): boolean {
+    let changed = false;
+    const r2 = radius * radius;
+    for (const t of this.tiles) {
+      const dx = t.x - cx;
+      const dy = t.y - cy;
+      if (dx * dx + dy * dy > r2) continue;
+      if (!t.explored) {
+        t.explored = true;
+        changed = true;
+      }
+    }
+    return changed;
+  }
+
   /**
    * Expand LOS from all claimed/heart/dirt — call after claim or dig-open.
    * Cheap enough for coalesced rebuild path (not every chip).

@@ -16,6 +16,7 @@ import {
   DoorState,
   GOLD_WIN_THRESHOLD,
   HEART_MAX_HP,
+  HERO_WAVES,
   JobType,
   KIT_CAP,
   MarkType,
@@ -108,6 +109,7 @@ export class Game {
   private wavesCleared = 0;
   private doorKits = 0;
   private sentryKits = 0;
+  private spikeKits = 0;
   private goldEver = 600;
   private minimapAcc = 0;
   private nextKitIsDoor = true;
@@ -154,7 +156,14 @@ export class Game {
   private time = 0;
   private workerCostScale = 0;
   private portalCooldown = 0;
-  private attracted = { skitterwing: false, rattlekin: false, emberling: false, gravemage: false };
+  private attracted = {
+    skitterwing: false,
+    rattlekin: false,
+    emberling: false,
+    gravemage: false,
+    forgebrute: false,
+    ironhide: false,
+  };
   private heroWaveSpawned = false;
   private heroWaveTimer = FIRST_WAVE_GRACE; // counts down only after the keep is ready
   private gameOver = false;
@@ -390,12 +399,20 @@ export class Game {
     this.time = 0;
     this.workerCostScale = 0;
     this.portalCooldown = 0;
-    this.attracted = { skitterwing: false, rattlekin: false, emberling: false, gravemage: false };
+    this.attracted = {
+      skitterwing: false,
+      rattlekin: false,
+      emberling: false,
+      gravemage: false,
+      forgebrute: false,
+      ironhide: false,
+    };
     this.heroWaveSpawned = false;
     this.heroWaveTimer = FIRST_WAVE_GRACE;
     this.wavesCleared = 0;
     this.doorKits = 0;
     this.sentryKits = 0;
+    this.spikeKits = 0;
     this.goldEver = 600;
     this.minimapAcc = 0;
     this.nextKitIsDoor = true;
@@ -600,6 +617,7 @@ export class Game {
       wavesCleared: this.wavesCleared,
       doorKits: this.doorKits,
       sentryKits: this.sentryKits,
+      spikeKits: this.spikeKits,
       goldEver: this.goldEver,
       heartHp: this.heartHp,
       corpses: this.corpses.map((c) => ({ x: c.x, y: c.y, timer: c.timer, fromHero: c.fromHero })),
@@ -647,6 +665,8 @@ export class Game {
       rattlekin: !!data.attracted?.rattlekin,
       emberling: !!data.attracted?.emberling,
       gravemage: !!(data.attracted as { gravemage?: boolean } | undefined)?.gravemage,
+      forgebrute: !!(data.attracted as { forgebrute?: boolean } | undefined)?.forgebrute,
+      ironhide: !!(data.attracted as { ironhide?: boolean } | undefined)?.ironhide,
     };
     this.researchProgress = (data as SaveData & { researchProgress?: number }).researchProgress ?? 0;
     this.researchRank = (data as SaveData & { researchRank?: number }).researchRank ?? 0;
@@ -663,6 +683,7 @@ export class Game {
     this.wavesCleared = data.wavesCleared ?? 0;
     this.doorKits = data.doorKits ?? 0;
     this.sentryKits = data.sentryKits ?? 0;
+    this.spikeKits = data.spikeKits ?? 0;
     this.goldEver = data.goldEver ?? Math.max(data.gold, 600);
     this.heartHp = Math.max(0, Math.min(HEART_MAX_HP, data.heartHp ?? HEART_MAX_HP));
     this.ashreaverCd = Math.max(0, data.ashreaverCd ?? 0);
@@ -1509,7 +1530,7 @@ export class Game {
           ? ` · ${['', 'Treasury', 'Lair', 'Hatchery', 'Training', 'Library', 'Portal', 'Guard', 'Workshop', 'Prison', 'Torture Chamber', 'Graveyard', 'Temple', 'Combat Pit', 'Wagerden'][tile.room]}`
           : '';
       if (tile.room === RoomType.Hatchery) room += ` · food ${Math.floor(this.hatcheryFood)}`;
-      if (tile.room === RoomType.Workshop) room += ` · kits D${this.doorKits}/S${this.sentryKits}`;
+      if (tile.room === RoomType.Workshop) room += ` · kits D${this.doorKits}/S${this.sentryKits}/P${this.spikeKits}`;
       if (
         tile.room === RoomType.Lair ||
         tile.room === RoomType.Hatchery ||
@@ -1897,6 +1918,8 @@ export class Game {
         gravemage: 'Gravemage',
         thornwitch: 'Thornwitch',
         bonewretch: 'Bonewretch',
+        forgebrute: 'Forgebrute',
+        ironhide: 'Ironhide',
         hero_knight: 'Hero Knight',
         hero_archer: 'Hero Archer',
         ashreaver: 'Ashreaver',
@@ -2042,11 +2065,7 @@ export class Game {
       }
     } else if (this.tool === 'spike') {
       if (tile.kind === TileKind.Claimed && tile.trap === TrapType.None) {
-        if (this.gold < SPIKE_COST) {
-          this.hud.sayNow(`Spike plates cost ${SPIKE_COST} gold.`);
-          return;
-        }
-        this.gold -= SPIKE_COST;
+        if (!this.spendSpike()) return;
         tile.trap = TrapType.Spike;
         this.requestStructuralRebuild();
         this.audio.play('trap');
@@ -2390,10 +2409,83 @@ export class Game {
     return true;
   }
 
+  /** Forgebrute kits are free. Otherwise spike plates cost gold. */
+  private spendSpike(): boolean {
+    if (this.spikeKits > 0) {
+      this.spikeKits--;
+      this.hud.sayNow(`Spike kit spent (${this.spikeKits} left).`);
+      return true;
+    }
+    if (this.gold < SPIKE_COST) {
+      this.hud.sayNow(`Spike plates cost ${SPIKE_COST} gold — or a Forgebrute kit.`);
+      return false;
+    }
+    this.gold -= SPIKE_COST;
+    return true;
+  }
+
+  /** Library rank 2, or a large Workshop, lets the smith hammer spike plates. */
+  private spikesUnlocked(): boolean {
+    return this.researchRank >= 2 || this.grid.countRoom(RoomType.Workshop) >= 9;
+  }
+
+  private workshopNeedsKits(includeSpikes: boolean): boolean {
+    if (this.doorKits < KIT_CAP || this.sentryKits < KIT_CAP) return true;
+    return includeSpikes && this.spikesUnlocked() && this.spikeKits < KIT_CAP;
+  }
+
+  private craftOrdinal = 0;
+
+  /** Door, then sentry, then a spike plate when the smith is allowed to make one. */
+  private finishCraft(smith: boolean): 'door' | 'sentry' | 'spike' | null {
+    const choices: Array<'door' | 'sentry' | 'spike'> = ['door', 'sentry'];
+    if (smith && this.spikesUnlocked()) choices.push('spike');
+    for (let i = 0; i < choices.length; i++) {
+      const kind = choices[(this.craftOrdinal + i) % choices.length];
+      if (kind === 'door' && this.doorKits < KIT_CAP) {
+        this.doorKits++;
+        this.craftOrdinal++;
+        return 'door';
+      }
+      if (kind === 'sentry' && this.sentryKits < KIT_CAP) {
+        this.sentryKits++;
+        this.craftOrdinal++;
+        return 'sentry';
+      }
+      if (kind === 'spike' && this.spikeKits < KIT_CAP) {
+        this.spikeKits++;
+        this.craftOrdinal++;
+        return 'spike';
+      }
+    }
+    return null;
+  }
+
+  /** A planted foot. Heroes in front of the shell lose a step. */
+  private ironhideStomp(brute: Creature, target: Creature): void {
+    target.stunTimer = Math.max(target.stunTimer, 0.45);
+    const dx = target.wx - brute.wx;
+    const dz = target.wz - brute.wz;
+    const len = Math.hypot(dx, dz) || 1;
+    const nx = target.wx + (dx / len) * 0.55;
+    const nz = target.wz + (dz / len) * 0.55;
+    const tp = this.grid.worldToTile(nx, nz);
+    if (this.grid.inBounds(tp.x, tp.y) && this.grid.isWalkable(tp.x, tp.y, { allowHazard: true })) {
+      target.wx = nx;
+      target.wz = nz;
+      target.x = tp.x;
+      target.y = tp.y;
+      target.setPath(null);
+    }
+    this.renderer.addShake(0.14);
+    this.audio.play('hitHeavy');
+    this.mentioneOnce('ironhideStomp', MENTOR_LINES.ironhideStomp);
+  }
+
   private syncMissionHud(): void {
     this.hud.setObjective(`W${this.wavesCleared}/${WIN_WAVES} · ${Math.floor(this.gold)}/${GOLD_WIN_THRESHOLD}g`);
     this.hud.setWaveLine(this.waveLineText(), this.waveLineMode());
-    this.hud.setKits(this.doorKits, this.sentryKits);
+    this.hud.setKits(this.doorKits, this.sentryKits, this.spikeKits);
     this.hud.setWorkerCost(this.workerCost());
   }
 
@@ -2613,7 +2705,9 @@ export class Game {
       c.kind === CreatureKind.Emberling ||
       c.kind === CreatureKind.Skitterwing ||
       c.kind === CreatureKind.Thornwitch ||
-      c.kind === CreatureKind.Bonewretch
+      c.kind === CreatureKind.Bonewretch ||
+      c.kind === CreatureKind.Forgebrute ||
+      c.kind === CreatureKind.Ironhide
     );
   }
 
@@ -4007,6 +4101,8 @@ export class Game {
         gravemage: 'Gravemage',
         thornwitch: 'Thornwitch',
         bonewretch: 'Bonewretch',
+        forgebrute: 'Forgebrute',
+        ironhide: 'Ironhide',
         ashreaver: 'Ashreaver',
       };
       const rows = this.creatures
@@ -4911,7 +5007,14 @@ export class Game {
       t.mark = MarkType.None;
     }
     this.portalCooldown = 0;
-    this.attracted = { skitterwing: false, rattlekin: false, emberling: false, gravemage: false };
+    this.attracted = {
+      skitterwing: false,
+      rattlekin: false,
+      emberling: false,
+      gravemage: false,
+      forgebrute: false,
+      ironhide: false,
+    };
     this.updatePortal(1);
     const scoutAfterClaim = this.creatures.filter((c) => c.alive && !c.isWorker && !c.isHero).length;
     this.portalCooldown = 0;
@@ -6383,7 +6486,8 @@ export class Game {
         claimMarks.length === 0 &&
         fortMarks.length === 0 &&
         this.grid.countRoom(RoomType.Workshop) > 0 &&
-        (this.doorKits < KIT_CAP || this.sentryKits < KIT_CAP)
+        this.workshopNeedsKits(false) &&
+        !this.creatures.some((c) => c.alive && c.kind === CreatureKind.Forgebrute)
       ) {
         const shop = this.findRoomTile(RoomType.Workshop);
         if (shop) {
@@ -6571,7 +6675,8 @@ export class Game {
       // Needs accumulate over a real session, not a screenshot window
       const hasHatch = this.grid.countRoom(RoomType.Hatchery) > 0;
       const hasLair = this.grid.countRoom(RoomType.Lair) > 0;
-      c.hunger = Math.min(100, c.hunger + (hasHatch ? 1.15 : 0.7) * dt);
+      const glut = c.kind === CreatureKind.Ironhide ? 1.75 : 1;
+      c.hunger = Math.min(100, c.hunger + (hasHatch ? 1.15 : 0.7) * dt * glut);
       c.sleepNeed = Math.min(100, c.sleepNeed + (hasLair ? 0.95 : 0.55) * dt);
       c.trainNeed = Math.min(100, c.trainNeed + 1.1 * dt);
 
@@ -6621,7 +6726,8 @@ export class Game {
       // Never idle-wipe AttackMove here — handled as sticky above
 
       // Critical wound → Flee to Lair (Pass 7.4)
-      const critical = c.hp < c.maxHp * 0.35 && c.kind !== CreatureKind.Ashreaver;
+      const fleeAt = c.kind === CreatureKind.Ironhide ? 0.18 : 0.35;
+      const critical = c.hp < c.maxHp * fleeAt && c.kind !== CreatureKind.Ashreaver;
       const hurt = c.hp < c.maxHp * 0.65;
       if (critical && hasLair) {
         const bed = this.findFreeOrOwnedBed(c);
@@ -6642,12 +6748,15 @@ export class Game {
       }
 
       const isResearcher = c.kind === CreatureKind.Gravemage;
+      const isSmith = c.kind === CreatureKind.Forgebrute;
       const isFighter =
         c.kind === CreatureKind.Rattlekin ||
         c.kind === CreatureKind.Emberling ||
         c.kind === CreatureKind.Thornwitch ||
         c.kind === CreatureKind.Bonewretch ||
-        c.kind === CreatureKind.Ashreaver;
+        c.kind === CreatureKind.Ashreaver ||
+        c.kind === CreatureKind.Forgebrute ||
+        c.kind === CreatureKind.Ironhide;
 
       // Low mood → Temple prayer (Pass 7.4)
       if (c.mood < 58 && this.grid.countRoom(RoomType.Temple) > 0) {
@@ -6664,6 +6773,29 @@ export class Game {
       const invasion = this.creatures.some(
         (h) => h.alive && h.isHero && !h.knockedOut && !h.isPrisoner
       );
+      if (isSmith && !invasion && this.workshopNeedsKits(true) && this.grid.countRoom(RoomType.Workshop) > 0) {
+        const current = c.job === JobType.Craft && c.jobTarget ? this.grid.get(c.jobTarget.x, c.jobTarget.y) : null;
+        if (current?.room === RoomType.Workshop && c.jobTarget) {
+          if (c.path.length === 0 && (Math.round(c.x) !== c.jobTarget.x || Math.round(c.y) !== c.jobTarget.y)) {
+            const path = this.pathFor(c, c.jobTarget.x, c.jobTarget.y);
+            if (path) c.setPath(path);
+          }
+          continue;
+        }
+        const shop = this.findRoomTile(RoomType.Workshop);
+        if (shop) {
+          c.job = JobType.Craft;
+          c.jobTarget = shop;
+          c.workTimer = 0;
+          c.setPath(this.pathFor(c, shop.x, shop.y));
+          this.mentioneOnce('forgeWork', MENTOR_LINES.forgeWork);
+          continue;
+        }
+      }
+      if (c.job === JobType.Craft) {
+        c.job = JobType.Idle;
+        c.jobTarget = null;
+      }
       if (isResearcher && this.grid.countRoom(RoomType.Library) > 0 && !invasion) {
         const t = this.findRoomTile(RoomType.Library);
         if (t) {
@@ -6822,6 +6954,20 @@ export class Game {
           best = d;
           minion = c;
         }
+      }
+      // Ironhide is the wall. Heroes in earshot hit it before a softer body.
+      if (h.goldCarried <= 0) {
+        let wall: Creature | null = null;
+        let wallD = 6.2;
+        for (const c of this.creatures) {
+          if (!c.alive || c.kind !== CreatureKind.Ironhide || c.held || c.knockedOut) continue;
+          const d = Math.hypot(c.x - h.x, c.y - h.y);
+          if (d < wallD) {
+            wallD = d;
+            wall = c;
+          }
+        }
+        if (wall && (!minion || wallD <= best + 1.6)) minion = wall;
       }
       if (!minion && looting) {
         const treas = this.nearestTreasury(h.x, h.y);
@@ -7605,31 +7751,21 @@ export class Game {
         return;
       }
       c.setPath(null);
-      c.workTimer += dt * c.workEfficiency();
+      c.workTimer += dt * c.workEfficiency() * (c.kind === CreatureKind.Forgebrute ? 1.7 : 1);
       if (Math.random() < dt * 0.5) {
         this.renderer.spawnFx(new THREE.Vector3(c.wx, 0.7, c.wz), 0xffaa44, 0.3);
       }
-      // ~6s per kit at full efficiency
-      if (c.workTimer >= 6) {
+      const craftTime = c.kind === CreatureKind.Forgebrute ? 3.6 : 6;
+      if (c.workTimer >= craftTime) {
         c.workTimer = 0;
-        let made: 'door' | 'sentry' | null = null;
-        if (this.nextKitIsDoor && this.doorKits < KIT_CAP) {
-          this.doorKits++;
-          made = 'door';
-        } else if (this.sentryKits < KIT_CAP) {
-          this.sentryKits++;
-          made = 'sentry';
-        } else if (this.doorKits < KIT_CAP) {
-          this.doorKits++;
-          made = 'door';
-        }
-        this.nextKitIsDoor = !this.nextKitIsDoor;
+        const made = this.finishCraft(c.kind === CreatureKind.Forgebrute);
         if (made) {
-          this.hud.sayNow(MENTOR_LINES.craftKit.replace('%k', made === 'door' ? 'Door' : 'Sentry'));
-          this.renderer.spawnFx(new THREE.Vector3(c.wx, 1.1, c.wz), 0xffd070, 0.75);
+          const label = made === 'door' ? 'Door' : made === 'sentry' ? 'Sentry' : 'Spike';
+          this.hud.sayNow(MENTOR_LINES.craftKit.replace('%k', label));
+          this.renderer.spawnFx(new THREE.Vector3(c.wx, 1.1, c.wz), made === 'spike' ? 0xff6630 : 0xffd070, 0.75);
+          this.audio.play('trap');
         }
-        // Leave craft if both caps full
-        if (this.doorKits >= KIT_CAP && this.sentryKits >= KIT_CAP) {
+        if (!this.workshopNeedsKits(c.kind === CreatureKind.Forgebrute)) {
           c.job = JobType.Idle;
           c.jobTarget = null;
         }
@@ -7648,6 +7784,8 @@ export class Game {
         if (this.researchRank >= 1 && !this.healUnlocked) {
           this.healUnlocked = true;
           this.hud.sayNow(MENTOR_LINES.researchHeal);
+        } else if (this.researchRank === 2) {
+          this.hud.sayNow(MENTOR_LINES.tempered);
         } else {
           this.hud.sayNow(
             MENTOR_LINES.researchDone.replace('%r', String(this.researchRank))
@@ -7689,6 +7827,8 @@ export class Game {
         gravemage: 'Gravemage',
         thornwitch: 'Thornwitch',
         bonewretch: 'Bonewretch',
+        forgebrute: 'Forgebrute',
+        ironhide: 'Ironhide',
         ashreaver: 'Ashreaver',
       };
       const name = names[c.kind] ?? 'Minion';
@@ -8519,6 +8659,9 @@ export class Game {
       );
     }
     this.applyDamage(target, dmg);
+    if (c.kind === CreatureKind.Ironhide && target.alive && !target.knockedOut) {
+      this.ironhideStomp(c, target);
+    }
     if (c.kind === CreatureKind.Emberling) {
       for (const o of targets) {
         if (o === target || !o.alive || o.knockedOut) continue;
@@ -8553,6 +8696,8 @@ export class Game {
       gravemage: 'Gravemage',
       thornwitch: 'Thornwitch',
       bonewretch: 'Bonewretch',
+      forgebrute: 'Forgebrute',
+      ironhide: 'Ironhide',
       ashreaver: 'Ashreaver',
     };
     const label = names[kind] ?? 'minion';
@@ -8631,6 +8776,20 @@ export class Game {
       this.portalCooldown = 12;
       return;
     }
+    const workshop = this.grid.countRoom(RoomType.Workshop);
+    const pit = this.grid.countRoom(RoomType.CombatPit);
+    if (!this.attracted.forgebrute && workshop >= 4 && lair >= 3) {
+      this.admitThroughPortal(CreatureKind.Forgebrute, sx, sy, MENTOR_LINES.forgebrute);
+      this.attracted.forgebrute = true;
+      this.portalCooldown = 14;
+      return;
+    }
+    if (!this.attracted.ironhide && lair >= 4 && hatch >= 4 && (train >= 2 || pit >= 1)) {
+      this.admitThroughPortal(CreatureKind.Ironhide, sx, sy, MENTOR_LINES.ironhide);
+      this.attracted.ironhide = true;
+      this.portalCooldown = 16;
+      return;
+    }
 
     // Periodic extras while composition remains attractive
     if (this.attracted.rattlekin && lair >= 2 && hatch >= 1 && Math.random() < 0.12) {
@@ -8657,6 +8816,24 @@ export class Game {
         this.seatNewMinion(this.spawnCreature(CreatureKind.Emberling, sx, sy));
         this.portalCooldown = 30;
         this.hud.sayNow('An Emberling has entered the Underkeep.');
+        return;
+      }
+    }
+    if (this.attracted.forgebrute && workshop >= 8 && Math.random() < 0.1) {
+      const count = this.creatures.filter((c) => c.alive && c.kind === CreatureKind.Forgebrute).length;
+      if (count < 2) {
+        this.seatNewMinion(this.spawnCreature(CreatureKind.Forgebrute, sx, sy));
+        this.portalCooldown = 32;
+        this.hud.sayNow('A Forgebrute has entered the Underkeep.');
+        return;
+      }
+    }
+    if (this.attracted.ironhide && hatch >= 6 && lair >= 5 && Math.random() < 0.08) {
+      const count = this.creatures.filter((c) => c.alive && c.kind === CreatureKind.Ironhide).length;
+      if (count < 2) {
+        this.seatNewMinion(this.spawnCreature(CreatureKind.Ironhide, sx, sy));
+        this.portalCooldown = 36;
+        this.hud.sayNow('An Ironhide has entered the Underkeep.');
       }
     }
   }
@@ -8919,24 +9096,21 @@ export class Game {
       this.renderer.spawnFx(new THREE.Vector3(w.x, 1.2, w.z), 0xa0c0ff, 0.65);
       return h;
     };
-    // Wave 1 is a scouting raid; later waves bring the full party.
-    spawnHero(CreatureKind.HeroKnight, sx, sy);
-    spawnHero(CreatureKind.HeroArcher, sx - 1, sy);
-    if (waveNum >= 2) {
-      spawnHero(CreatureKind.HeroKnight, sx + 1, sy);
-    }
-    // Optional extra skirmisher if the dungeon is well developed
+    const party = HERO_WAVES[Math.min(HERO_WAVES.length - 1, Math.max(0, waveNum - 1))] ?? HERO_WAVES[0];
+    const slots: Array<[number, number]> = [
+      [0, 0],
+      [-1, 0],
+      [1, 0],
+      [0, 1],
+      [-1, 1],
+      [1, 1],
+    ];
+    party.forEach((kind, i) => {
+      const [ox, oy] = slots[i] ?? [0, 1];
+      spawnHero(kind, sx + ox, sy + oy);
+    });
     if (waveNum >= 2 && this.grid.countClaimed() >= 40) {
-      const k3 = this.spawnCreature(CreatureKind.HeroKnight, sx, sy + 1);
-      k3.job = JobType.Fight;
-      k3.jobTarget = { ...this.grid.heartPos };
-      k3.hp = Math.floor(k3.maxHp * waveScale);
-      k3.maxHp = k3.hp;
-      this.renderer.spawnFx(
-        new THREE.Vector3(k3.wx, 1.2, k3.wz),
-        0xa0c0ff,
-        0.5
-      );
+      spawnHero(CreatureKind.HeroKnight, sx, sy + 2);
     }
 
     if (waveNum >= WIN_WAVES) {

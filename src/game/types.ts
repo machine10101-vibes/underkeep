@@ -63,6 +63,10 @@ export enum CreatureKind {
   Gravemage = 'gravemage',
   Thornwitch = 'thornwitch',
   Bonewretch = 'bonewretch',
+  /** Workshop manufacturer. Original stand-in for the troll smith. */
+  Forgebrute = 'forgebrute',
+  /** Slow wall of iron. Original stand-in for the bile-demon tank. */
+  Ironhide = 'ironhide',
   HeroKnight = 'hero_knight',
   HeroArcher = 'hero_archer',
   /** Rare call-in. Original stand-in for the elite horned bruiser. */
@@ -160,6 +164,15 @@ export const PAYDAY_INTERVAL = 48;
 export const HEART_MAX_HP = 500;
 /** Survive this many hero waves to win (or hit gold threshold). */
 export const WIN_WAVES = 3;
+/**
+ * Hero parties by cleared-wave index. The last living knight of the final
+ * party is raised to Sir Brightbane. A developed keep may add one more knight.
+ */
+export const HERO_WAVES: CreatureKind[][] = [
+  [CreatureKind.HeroKnight, CreatureKind.HeroArcher],
+  [CreatureKind.HeroKnight, CreatureKind.HeroArcher, CreatureKind.HeroKnight],
+  [CreatureKind.HeroKnight, CreatureKind.HeroArcher, CreatureKind.HeroArcher, CreatureKind.HeroKnight],
+];
 /** First party never before this many seconds, even if the keep is ready. */
 export const FIRST_WAVE_MIN_TIME = 240;
 /** Seconds of warning after the keep is ready (Portal + Lair, or the fallback). */
@@ -201,6 +214,8 @@ export const CREATURE_STATS: Record<
   [CreatureKind.Gravemage]: { hp: 70, speed: 2.6, damage: 10, goldWage: 20, color: 0x7050c0, scale: 0.78 },
   [CreatureKind.Thornwitch]: { hp: 85, speed: 2.9, damage: 15, goldWage: 22, color: 0xa03060, scale: 0.78 },
   [CreatureKind.Bonewretch]: { hp: 55, speed: 3.2, damage: 11, goldWage: 0, color: 0xd8d0b8, scale: 0.72 },
+  [CreatureKind.Forgebrute]: { hp: 120, speed: 2.15, damage: 16, goldWage: 32, color: 0x8a4a28, scale: 1.05 },
+  [CreatureKind.Ironhide]: { hp: 240, speed: 1.55, damage: 20, goldWage: 48, color: 0x4a5560, scale: 1.22 },
   [CreatureKind.HeroKnight]: { hp: 120, speed: 2.55, damage: 18, goldWage: 0, color: 0xc0c8d8, scale: 0.85 },
   [CreatureKind.HeroArcher]: { hp: 70, speed: 2.9, damage: 14, goldWage: 0, color: 0x5080a0, scale: 0.7 },
   [CreatureKind.Ashreaver]: { hp: 260, speed: 2.15, damage: 28, goldWage: 0, color: 0x8a1820, scale: 1.15 },

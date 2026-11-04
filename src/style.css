@@ -162,6 +162,81 @@ html, body, #app {
   box-shadow: 0 0 15px rgba(220,100,25,.55), inset 0 0 9px rgba(255,161,50,.2);
 }
 .spell:disabled { opacity: 0.4; cursor: not-allowed; }
+.spell.armed { border-color: #ff7040; color: #ffe0c0; box-shadow: 0 0 14px rgba(255, 80, 30, 0.65); }
+.hud-mute {
+  margin-left: 6px;
+  min-width: 36px;
+  height: 28px;
+  border-radius: 6px;
+  border: 1px solid #6a4828;
+  background: rgba(20, 12, 8, 0.85);
+  color: #f0d0a0;
+  cursor: pointer;
+  pointer-events: auto;
+}
+#speed-bar {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+  margin-left: 4px;
+}
+#speed-bar button {
+  min-width: 32px;
+  height: 28px;
+  border-radius: 6px;
+  border: 1px solid #6a4828;
+  background: rgba(20, 12, 8, 0.85);
+  color: #f0d0a0;
+  cursor: pointer;
+  font-weight: 700;
+  font-size: 12px;
+}
+#speed-bar button.active {
+  border-color: #e09030;
+  color: #ffe8b0;
+  box-shadow: 0 0 10px rgba(220, 120, 40, 0.45);
+}
+#wave-line {
+  position: absolute;
+  top: calc(74px + env(safe-area-inset-top, 0px));
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 4px 12px;
+  border-radius: 999px;
+  background: rgba(12, 8, 6, 0.82);
+  border: 1px solid #5a3a1a;
+  color: #e8d2a8;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  pointer-events: none;
+  z-index: 5;
+  text-shadow: 0 1px 2px #000;
+}
+#wave-line[data-mode="soon"] { color: #ffb060; border-color: #a06020; }
+#wave-line[data-mode="fight"] { color: #ff8060; border-color: #a03020; }
+#wave-line[data-mode="paused"] { color: #ffe08a; border-color: #c0a040; }
+#minimap { cursor: pointer; }
+#floaters {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 40;
+  overflow: hidden;
+}
+.floater {
+  position: absolute;
+  font-weight: 800;
+  font-size: 15px;
+  letter-spacing: 0.02em;
+  text-shadow: 0 1px 2px #000, 0 0 6px #000;
+  animation: floater-up 0.85s ease-out forwards;
+  transform: translate(-50%, 0);
+  white-space: nowrap;
+}
+@keyframes floater-up {
+  to { transform: translate(-50%, -46px); opacity: 0; }
+}
 
 #pan-zone {
   display: none;
@@ -567,7 +642,7 @@ html, body, #app {
   border-radius: 8px;
   background: rgba(8, 6, 4, 0.88);
   box-shadow: 0 4px 18px rgba(0,0,0,0.55), inset 0 0 12px rgba(0,0,0,0.4);
-  pointer-events: none;
+  pointer-events: auto;
   z-index: 6;
   image-rendering: pixelated;
 }

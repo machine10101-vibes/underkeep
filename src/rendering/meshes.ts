@@ -1709,6 +1709,39 @@ export function makeSentryTrapMesh(): THREE.Group {
   return g;
 }
 
+/** Reusable spike plate — sits flush on claimed floor. */
+export function makeSpikeTrapMesh(): THREE.Group {
+  const g = new THREE.Group();
+  const plate = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.55, 0.6, 0.08, 8),
+    new THREE.MeshStandardMaterial({ color: 0x4a4038, roughness: 0.72, metalness: 0.4 })
+  );
+  plate.position.y = 0.05;
+  plate.receiveShadow = true;
+  g.add(plate);
+  const spikeMat = new THREE.MeshStandardMaterial({
+    color: 0xd8dce6,
+    metalness: 0.88,
+    roughness: 0.25,
+    emissive: 0x802020,
+    emissiveIntensity: 0.28,
+  });
+  const spots: Array<[number, number]> = [
+    [0, 0],
+    [0.28, 0.12],
+    [-0.26, 0.1],
+    [0.1, -0.28],
+    [-0.14, -0.22],
+  ];
+  for (const [x, z] of spots) {
+    const s = new THREE.Mesh(new THREE.ConeGeometry(0.07, 0.38, 5), spikeMat);
+    s.position.set(x, 0.24, z);
+    s.castShadow = true;
+    g.add(s);
+  }
+  return g;
+}
+
 /** Call-to-arms rally flag. */
 export function makeRallyFlagMesh(): THREE.Group {
   const g = new THREE.Group();

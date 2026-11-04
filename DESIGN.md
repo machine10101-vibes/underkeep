@@ -72,10 +72,9 @@ Pass 5: WebGL context-loss recovery + incremental dig visuals (no full rebuild p
 
 Pass 7.3: Prison capture, Torture→Thornwitch, Graveyard→Bonewretch, room-size efficiency.
 Pass 7.4: Temple prayer/mood/talisman, Combat Pit leveling, creature roster, flee/drag wounded to Lair.
-
 Pass 9 (play): Keeper marks beat chores — workers stay on tagged dig/claim, needs accrue over a real session instead of a demo spike, gold cannot be fortified, rooms/tools explain why they failed, first fighters arrive from a small Lair+Hatchery, heroes keep marching on the Heart.
-
-Gaps / later: richer pathing, audio, GLTF art upgrades.
+Pass 10.25: species silhouettes, save keeps jobs, and the published keeper loop.
+Pass 11 (on the live build): combat juice, Cave-In, spikes, Ashreaver, pause and fast-forward, doors that shut and break, dig caches, kill streaks, and archers who rob the Treasury.
 
 ## Visual north star (YT X35cKEjvgrc from 2:20)
 Feel targets only — original IP art:

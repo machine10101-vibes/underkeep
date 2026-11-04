@@ -24,6 +24,7 @@ import {
   makeRoomDecal,
   makeRoomProps,
   makeSentryTrapMesh,
+  makeSpikeTrapMesh,
   makeTorchMesh,
   TORCH_LIGHT,
   TORCH_LIGHT_CAP,
@@ -117,6 +118,8 @@ export class DungeonRenderer {
   private fxGlowGeo = new THREE.SphereGeometry(0.4, 10, 10);
   private readonly FX_CAP = 64;
   private digLoad = false;
+  /** Decaying camera kick (world units). Applied only for the render call. */
+  private shake = 0;
   private basePixelRatio = 1;
   private dirLight: THREE.DirectionalLight | null = null;
   private markOverlay = new THREE.Group();
@@ -581,6 +584,10 @@ export class DungeonRenderer {
       if (tile.trap === TrapType.Sentry) {
         const trap = makeSentryTrapMesh();
         trap.position.set(w.x + 0.15, 0.02, w.z - 0.15);
+        this.gridGroup.add(trap);
+      } else if (tile.trap === TrapType.Spike) {
+        const trap = makeSpikeTrapMesh();
+        trap.position.set(w.x, 0.02, w.z);
         this.gridGroup.add(trap);
       }
 
@@ -1187,8 +1194,40 @@ export class DungeonRenderer {
     }
   }
 
+  /** Add a short camera kick. Amount is world units, clamped. */
+  addShake(amount: number): void {
+    if (!Number.isFinite(amount) || amount <= 0) return;
+    this.shake = Math.min(1.15, this.shake + amount);
+  }
+
+  /** Project a world point to viewport pixels (for floating combat text). */
+  project(x: number, y: number, z: number): { x: number; y: number } | null {
+    const v = new THREE.Vector3(x, y, z);
+    v.project(this.camera);
+    if (v.z > 1) return null;
+    const rect = this.renderer.domElement.getBoundingClientRect();
+    return {
+      x: rect.left + (v.x * 0.5 + 0.5) * rect.width,
+      y: rect.top + (-v.y * 0.5 + 0.5) * rect.height,
+    };
+  }
+
   render(): void {
     if (this.contextLost) return;
+    let ox = 0;
+    let oy = 0;
+    let oz = 0;
+    if (this.shake > 0.02) {
+      ox = (Math.random() - 0.5) * this.shake;
+      oy = (Math.random() - 0.5) * this.shake * 0.55;
+      oz = (Math.random() - 0.5) * this.shake;
+      this.camera.position.x += ox;
+      this.camera.position.y += oy;
+      this.camera.position.z += oz;
+      this.shake *= 0.84;
+    } else {
+      this.shake = 0;
+    }
     try {
       if (this.useComposer && this.composer) {
         this.composer.render();
@@ -1209,6 +1248,12 @@ export class DungeonRenderer {
           this.contextLost = true;
           this.onContextLost?.();
         }
+      }
+    } finally {
+      if (ox !== 0 || oy !== 0 || oz !== 0) {
+        this.camera.position.x -= ox;
+        this.camera.position.y -= oy;
+        this.camera.position.z -= oz;
       }
     }
   }

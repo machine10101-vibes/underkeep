@@ -6,7 +6,7 @@ Original-IP dungeon management game inspired by **Dungeon Keeper 2** (3D). Dark-
 
 **https://machine10101-vibes.github.io/underkeep/?v=pass7.4**
 
-Pass 10 (local): heroes batter closed doors, brace a door with right-click, dig caches, kill streaks, and an end-of-session tally. Pages build above is still pass 7.4 until the next deploy.
+Pass 11 (local): doors shut after your minions pass, archers rob the Treasury and run for the breach, and killing them spills the purse back. Pages build above is still pass 7.4 until the next deploy.
 
 Works on desktop and phones (touch controls).
 
@@ -35,6 +35,7 @@ npm run preview
 |-------|--------|
 | **LMB** | Use tool · Hand: pick up · empty+selection: attack-move · shift-click: multi-select |
 | **RMB** | Slap creature · Cancel tile mark · Drop held creature · Door tool on a closed door braces it (45 gold) |
+| **Door left-click** | Place, latch open, or close. A latched-open door stays open. A closed door only swings for your minions, then shuts. |
 | **Space** | Drop held creature |
 | **WASD / Arrows** | Pan camera |
 | **Mouse wheel** | Zoom |

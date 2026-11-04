@@ -171,6 +171,8 @@ export function dressCreature(g: THREE.Group, kind: string, bodyMat: THREE.MeshS
   else if (kind === 'gravemage') dressGravemage(g);
   else if (kind === 'thornwitch') dressThornwitch(g);
   else if (kind === 'bonewretch') dressBonewretch(g);
+  else if (kind === 'forgebrute') dressForgebrute(g);
+  else if (kind === 'ironhide') dressIronhide(g);
   else if (kind === 'hero_knight' || kind === 'hero') dressHeroKnight(g, bodyMat);
   else if (kind === 'hero_archer') dressHeroArcher(g, bodyMat);
   else dressGeneric(g, bodyMat);
@@ -987,6 +989,69 @@ function dressHeroArcher(g: THREE.Group, bodyMat: THREE.MeshStandardMaterial): v
   quiver.position.set(-0.12, 0.86, -0.2);
   quiver.rotation.set(0.35, 0, -0.45);
   g.add(quiver);
+}
+
+/** Hunched smith: iron apron, anvil hump, one hammer arm. Reads wide from above. */
+function dressForgebrute(g: THREE.Group): void {
+  const hide = mat({ color: 0x6a3818, roughness: 0.72, metalness: 0.12 });
+  const iron = mat({ color: 0x8d9398, metalness: 0.72, roughness: 0.32 });
+  const soot = mat({ color: 0x2a241c, roughness: 0.84, metalness: 0.2 });
+  const ember = glow(0xff6a20);
+
+  part(g, new THREE.BoxGeometry(0.72, 0.42, 0.48), hide, 0, 0.62, 0.02);
+  part(g, new THREE.BoxGeometry(0.78, 0.16, 0.5), iron, 0, 0.46, 0.04);
+  part(g, new THREE.BoxGeometry(0.22, 0.08, 0.08), ember, 0, 0.58, 0.26);
+  // Anvil hump — the silhouette that says smith from the plaza
+  part(g, new THREE.BoxGeometry(0.46, 0.22, 0.28), iron, 0, 0.9, -0.12);
+  part(g, new THREE.BoxGeometry(0.28, 0.1, 0.18), soot, 0, 1.04, -0.1);
+
+  const head = new THREE.Mesh(new THREE.BoxGeometry(0.32, 0.26, 0.3), hide);
+  head.position.set(0, 0.92, 0.22);
+  head.castShadow = true;
+  g.add(head);
+  part(g, new THREE.BoxGeometry(0.2, 0.04, 0.04), ember, 0, 0.96, 0.36);
+  part(g, new THREE.BoxGeometry(0.34, 0.06, 0.08), iron, 0, 1.06, 0.2);
+
+  for (const sx of [-1, 1] as const) {
+    g.add(limb(new THREE.CylinderGeometry(0.09, 0.11, 0.34, 6), hide, sx * 0.18, 0.22, 0.02, 0, 0, 0, sx < 0 ? 'legL' : 'legR'));
+    part(g, new THREE.BoxGeometry(0.16, 0.06, 0.22), iron, sx * 0.18, 0.06, 0.04);
+  }
+
+  g.add(limb(new THREE.CylinderGeometry(0.07, 0.08, 0.36, 5), hide, -0.42, 0.62, 0.06, 0, 0, 0.4, 'armL'));
+  const armR = tagged(0.46, 0.7, 0.08, 0.4, 0, -0.5, 'armR');
+  part(armR, new THREE.CylinderGeometry(0.09, 0.1, 0.42, 6), hide, 0, -0.1, 0);
+  const hammer = new THREE.Group();
+  part(hammer, new THREE.CylinderGeometry(0.035, 0.035, 0.55, 5), soot, 0, -0.28, 0.05);
+  part(hammer, new THREE.BoxGeometry(0.28, 0.14, 0.16), iron, 0, -0.52, 0.05);
+  hammer.position.set(0, -0.22, 0.02);
+  markHeld(hammer, 'hammer');
+  armR.add(hammer);
+  g.add(armR);
+}
+
+/** Low wide shell. A moving wall: plates, dome, tusks, almost no neck. */
+function dressIronhide(g: THREE.Group): void {
+  const plate = mat({ color: 0x5c656e, metalness: 0.78, roughness: 0.28 });
+  const dark = mat({ color: 0x2c3238, metalness: 0.55, roughness: 0.4 });
+  const hide = mat({ color: 0x3a4038, roughness: 0.8 });
+  const tusk = mat({ color: 0xe6dcc0, roughness: 0.45, metalness: 0.15 });
+
+  part(g, new THREE.BoxGeometry(1.15, 0.38, 0.72), plate, 0, 0.42, 0);
+  part(g, new THREE.BoxGeometry(0.96, 0.16, 0.6), dark, 0, 0.66, 0);
+  part(g, new THREE.BoxGeometry(0.7, 0.1, 0.46), plate, 0, 0.78, 0.02);
+  const dome = new THREE.Mesh(new THREE.SphereGeometry(0.28, 10, 8), plate);
+  dome.scale.set(1.35, 0.7, 1.05);
+  dome.position.set(0, 0.92, 0.02);
+  dome.castShadow = true;
+  g.add(dome);
+  part(g, new THREE.BoxGeometry(0.16, 0.04, 0.04), glow(0xffd080), -0.1, 0.9, 0.26);
+  part(g, new THREE.BoxGeometry(0.16, 0.04, 0.04), glow(0xffd080), 0.1, 0.9, 0.26);
+  for (const sx of [-1, 1] as const) {
+    part(g, new THREE.ConeGeometry(0.05, 0.22, 5), tusk, sx * 0.16, 0.78, 0.34, 1.4, 0, sx * 0.2);
+    part(g, new THREE.SphereGeometry(0.045, 5, 5), dark, sx * 0.42, 0.62, 0.2);
+    g.add(limb(new THREE.CylinderGeometry(0.1, 0.12, 0.28, 6), hide, sx * 0.32, 0.16, 0.04, 0, 0, 0, sx < 0 ? 'legL' : 'legR'));
+    g.add(limb(new THREE.BoxGeometry(0.22, 0.12, 0.28), plate, sx * 0.58, 0.48, 0.08, 0, 0, sx * -0.15, sx < 0 ? 'armL' : 'armR'));
+  }
 }
 
 function dressGeneric(g: THREE.Group, bodyMat: THREE.MeshStandardMaterial): void {

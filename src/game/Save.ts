@@ -69,7 +69,14 @@ export interface SaveData {
   gold: number;
   mana: number;
   creatures: SavedCreature[];
-  attracted: { skitterwing: boolean; rattlekin: boolean; emberling: boolean; gravemage?: boolean };
+  attracted: {
+    skitterwing: boolean;
+    rattlekin: boolean;
+    emberling: boolean;
+    gravemage?: boolean;
+    forgebrute?: boolean;
+    ironhide?: boolean;
+  };
   researchProgress?: number;
   researchRank?: number;
   healUnlocked?: boolean;
@@ -88,6 +95,8 @@ export interface SaveData {
   wavesCleared?: number;
   doorKits?: number;
   sentryKits?: number;
+  /** Spike plates stocked by a Forgebrute. */
+  spikeKits?: number;
   goldEver?: number;
   heartHp?: number;
   /** Pass 10.25 — Graveyard corpses waiting to raise. */

@@ -75,6 +75,7 @@ Pass 7.4: Temple prayer/mood/talisman, Combat Pit leveling, creature roster, fle
 Pass 9 (play): Keeper marks beat chores — workers stay on tagged dig/claim, needs accrue over a real session instead of a demo spike, gold cannot be fortified, rooms/tools explain why they failed, first fighters arrive from a small Lair+Hatchery, heroes keep marching on the Heart.
 Pass 10.25: species silhouettes, save keeps jobs, and the published keeper loop.
 Pass 11 (on the live build): combat juice, Cave-In, spikes, Ashreaver, pause and fast-forward, doors that shut and break, dig caches, kill streaks, and archers who rob the Treasury.
+Pass 12: Forgebrute works the Workshop (spike plates at research rank 2 or a 9-tile shop). Ironhide is the hungry wall heroes hit first. Hero parties follow `HERO_WAVES`.
 
 ## Visual north star (YT X35cKEjvgrc from 2:20)
 Feel targets only — original IP art:

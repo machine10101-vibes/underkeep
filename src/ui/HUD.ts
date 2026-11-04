@@ -493,8 +493,8 @@ export class HUD {
     if (this.objectiveEl) this.objectiveEl.textContent = text;
   }
 
-  setKits(doorKits: number, sentryKits: number): void {
-    if (this.kitsValueEl) this.kitsValueEl.textContent = `D${doorKits} · S${sentryKits}`;
+  setKits(doorKits: number, sentryKits: number, spikeKits = 0): void {
+    if (this.kitsValueEl) this.kitsValueEl.textContent = `D${doorKits} · S${sentryKits} · P${spikeKits}`;
   }
 
   setWorkerCost(cost: number): void {
@@ -644,6 +644,11 @@ export const MENTOR_LINES = {
   rattlekin: "Rattlekin arrive — bony enthusiasm and questionable hygiene.",
   emberling: "An Emberling. Do try not to burn down your own treasury.",
   gravemage: "A Gravemage darkens the Portal. Point them at the Library — research feeds your spells.",
+  forgebrute: "A Forgebrute shoulders into the Workshop. The anvil is theirs — doors, sentries, and, once the Library tempers the ore, spike plates.",
+  ironhide: "An Ironhide fills the Portal. Slow, hungry, and almost impossible to walk past. Heroes will hit the wall first.",
+  forgeWork: "The Forgebrute has the bench. Scrabblers can keep digging.",
+  tempered: "Research rank 2. The Forgebrute can hammer spike plates.",
+  ironhideStomp: "The Ironhide plants a foot. That hero is not going anywhere for a moment.",
   researchHeal: "Library research unlocks Heal! Mend your bruised nightmares.",
   researchDone: "Research rank %r complete. Spells grow sharper in the dark.",
   levelUp: "Training pays off — a minion levels up!",
@@ -699,7 +704,7 @@ export const MENTOR_LINES = {
   heroesImminent: "Steel at the gate! Heroes arrive any moment.",
   heroEngage: "Heroes clash with your minions — doors and traps earn their keep.",
   heroDown: "A hero falls. The Underkeep drinks deep.",
-  workshopBuilt: "Workshop raised! Scrabblers craft door and Sentry kits — or pay less gold at the bench.",
+  workshopBuilt: "Workshop raised! A Forgebrute will claim the bench. Until then, Scrabblers craft door and Sentry kits — or pay less gold.",
   craftKit: "Workshop finished a %k kit. Place it free from Build.",
   craftBusy: "Scrabblers hammer in the Workshop. Kits will stack for doors and traps.",
   missionBrief: "Mission: Survive %w hero waves — or amass %g gold in the Treasury. Protect the Heart.",

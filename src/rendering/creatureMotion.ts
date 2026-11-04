@@ -51,6 +51,10 @@ export function walkCadence(kind: CreatureKind): number {
       return 11.5;
     case CreatureKind.Thornwitch:
       return 9.2;
+    case CreatureKind.Forgebrute:
+      return 5.4;
+    case CreatureKind.Ironhide:
+      return 4.2;
     case CreatureKind.HeroArcher:
       return 9.4;
     default:
@@ -62,6 +66,7 @@ export function attackDecayRate(kind: CreatureKind): number {
   switch (kind) {
     case CreatureKind.HeroKnight:
     case CreatureKind.Gravemage:
+    case CreatureKind.Ironhide:
       return 2.05;
     case CreatureKind.Rattlekin:
     case CreatureKind.Thornwitch:
@@ -92,6 +97,10 @@ export function combatHitColor(kind: CreatureKind): number {
       return 0xff3060;
     case CreatureKind.Bonewretch:
       return 0x70ff40;
+    case CreatureKind.Forgebrute:
+      return 0xff7a28;
+    case CreatureKind.Ironhide:
+      return 0xc5ced6;
     case CreatureKind.HeroKnight:
       return 0x88aaff;
     case CreatureKind.HeroArcher:
@@ -247,6 +256,8 @@ export function poseCreatureLimbs(root: THREE.Object3D, kind: CreatureKind, s: C
       else if (kind === CreatureKind.HeroKnight) amp = moving ? 0.48 : 0.035;
       else if (kind === CreatureKind.HeroArcher) amp = moving ? 0.4 : 0.04;
       else if (kind === CreatureKind.Thornwitch) amp = moving ? 0.5 : 0.055;
+      else if (kind === CreatureKind.Forgebrute) amp = moving ? 0.28 : 0.04;
+      else if (kind === CreatureKind.Ironhide) amp = moving ? 0.22 : 0.03;
       else if (kind === CreatureKind.Rattlekin) amp = moving ? 0.68 : 0.06;
       if (carry) amp *= kind === CreatureKind.HeroArcher ? 0.18 : 0.26;
       if (isFore) amp *= 0.55;
@@ -344,6 +355,9 @@ export function poseCreatureLimbs(root: THREE.Object3D, kind: CreatureKind, s: C
         dz += -p.wind * 0.32 + p.hit * 0.5;
       } else if (tool === 'femur') {
         dx += p.wind * 0.1 - p.hit * 0.2;
+      } else if (tool === 'hammer') {
+        dx += p.wind * 1.1 - p.hit * 1.6 - p.follow * 0.35;
+        dy += p.hit * 0.2;
       }
     }
 
@@ -412,6 +426,16 @@ export function poseCreatureBody(kind: CreatureKind, s: CreatureMotionState): Cr
     rotY = moving ? Math.sin(s.walkCycle) * 0.04 : 0;
     z = p.hit * 0.18;
     y = breath * 0.008;
+  } else if (kind === CreatureKind.Forgebrute) {
+    rotX = 0.16 + p.wind * -0.2 + p.hit * 0.55 + p.follow * 0.16;
+    rotZ = moving ? Math.sin(s.walkCycle) * 0.04 : breath * 0.012;
+    z = p.hit * 0.22;
+    y = moving ? Math.abs(Math.sin(s.walkCycle)) * 0.02 : 0;
+  } else if (kind === CreatureKind.Ironhide) {
+    rotX = 0.08 + p.wind * -0.06 + p.hit * 0.28;
+    rotZ = moving ? Math.sin(s.walkCycle) * 0.03 : 0;
+    z = p.hit * 0.16;
+    y = p.hit * 0.06;
   }
 
   return { y, z, rotX, rotZ, rotY };

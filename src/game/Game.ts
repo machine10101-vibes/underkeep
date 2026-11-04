@@ -109,10 +109,15 @@ export class Game {
   private spikeReady = new Map<string, number>();
   /** Closed-door integrity. Missing key means a fresh door (DOOR_HP). Not saved. */
   private doorHp = new Map<string, number>();
-  /** Session tallies — heroes downed, dig caches, doors smashed. */
+  /** Session tallies — heroes downed, dig caches, doors smashed, gold carried out. */
   private heroesDown = 0;
   private digFinds = 0;
   private doorsBroken = 0;
+  private goldStolen = 0;
+  /** Doors a creature shouldered. Player-latched doors are not in this set. */
+  private swungDoors = new Set<string>();
+  /** Sim time when a shouldered door may shut, if the tile is empty. */
+  private doorShutAt = new Map<string, number>();
   /** Sim-time stamps of recent hero downs, for the slaughter bonus. */
   private heroDownTimes: number[] = [];
   private audio = new KeeperAudio();
@@ -342,6 +347,9 @@ export class Game {
     this.heroesDown = 0;
     this.digFinds = 0;
     this.doorsBroken = 0;
+    this.goldStolen = 0;
+    this.swungDoors.clear();
+    this.doorShutAt.clear();
     this.heroDownTimes = [];
     this.hud.setSpellArmed('caveIn', false);
     this.exitPossession(true);
@@ -507,6 +515,7 @@ export class Game {
       heroesDown: this.heroesDown,
       digFinds: this.digFinds,
       doorsBroken: this.doorsBroken,
+      goldStolen: this.goldStolen,
       cam: {
         tx: this.camTarget.x,
         tz: this.camTarget.z,
@@ -566,6 +575,9 @@ export class Game {
     this.heroesDown = finiteSaveCount(data.heroesDown);
     this.digFinds = finiteSaveCount(data.digFinds);
     this.doorsBroken = finiteSaveCount(data.doorsBroken);
+    this.goldStolen = finiteSaveCount(data.goldStolen);
+    this.swungDoors.clear();
+    this.doorShutAt.clear();
     this.doorHp.clear();
     this.heroDownTimes = [];
     // Mid-wave-clear saves from pre-7.2: count a finished first wave
@@ -1345,6 +1357,8 @@ export class Game {
         const c = this.creatureAt(tp.x, tp.y);
         if (c && !c.isHero) {
           tip += ` · ${c.kind} mood ${Math.floor(c.mood)} · eff ${Math.round(c.workEfficiency() * 100)}%`;
+        } else if (c && c.isHero && c.goldCarried > 0) {
+          tip += ` · carrying ${Math.floor(c.goldCarried)} gold`;
         } else if (this.held) {
           tip += ' · drop here';
         }
@@ -1677,6 +1691,7 @@ export class Game {
       let kindLabel = c.isChampion ? 'Sir Brightbane' : (kindNames[c.kind] ?? String(c.kind));
       if (c.isChampion && c.ward > 0) kindLabel += ' · Ward';
       if (c.enraged) kindLabel += ' · Enraged';
+      if (c.isHero && c.goldCarried > 0) kindLabel += ` · ${Math.floor(c.goldCarried)}g`;
       this.hud.showInspector({
         kind: groupN > 1 ? `${kindLabel} (+${groupN - 1})` : kindLabel,
         job: groupN > 1 ? `${jobLabel} · squad ${groupN}` : jobLabel,
@@ -1729,11 +1744,13 @@ export class Game {
           this.saveNow();
         } else if (tile.door === DoorState.Closed) {
           tile.door = DoorState.Open;
+          this.forgetSwung(x, y);
           this.requestStructuralRebuild();
           this.hud.say(MENTOR_LINES.doorOpen);
           this.saveNow();
         } else {
           tile.door = DoorState.Closed;
+          this.forgetSwung(x, y);
           this.requestStructuralRebuild();
           this.hud.say(MENTOR_LINES.doorClosed);
           this.saveNow();
@@ -5246,18 +5263,42 @@ export class Game {
       }
     }
 
-    // heroes path to heart (closed doors block heroes) — they batter a sealed door
+    // Heroes: a loaded archer runs for the breach. Others fight, or an archer peels off to rob the Treasury.
     for (const h of this.creatures) {
       if (!h.alive || !h.isHero || h.stunTimer > 0 || h.knockedOut || h.isPrisoner) continue;
-      // Prefer nearest combat minion in wider aggro; else march on Heart
+      if (h.goldCarried > 0) {
+        const esc = this.escapeTile();
+        h.job = JobType.Flee;
+        h.jobTarget = esc;
+        if (Math.hypot(h.x - esc.x, h.y - esc.y) > 1.05) {
+          const path = this.grid.findPath(h.x, h.y, esc.x, esc.y, { forHero: true, allowHazard: true });
+          if (path) h.setPath(path);
+          else this.bashAdjacentDoor(h, esc);
+        } else h.setPath(null);
+        continue;
+      }
+      const looting = this.heroWantsLoot(h);
       let minion: Creature | null = null;
-      let best = 8.5;
+      let best = looting ? Math.max(2.4, this.strikeRange(h)) : 8.5;
       for (const c of this.creatures) {
-        if (!c.alive || c.isHero || c.isWorker || c.held) continue;
+        if (!c.alive || c.isHero || c.isWorker || c.held || c.knockedOut) continue;
         const d = Math.hypot(c.x - h.x, c.y - h.y);
         if (d < best) {
           best = d;
           minion = c;
+        }
+      }
+      if (!minion && looting) {
+        const treas = this.nearestTreasury(h.x, h.y);
+        if (treas) {
+          h.job = JobType.Fight;
+          h.jobTarget = treas;
+          if (Math.hypot(h.x - treas.x, h.y - treas.y) > 0.8) {
+            const path = this.grid.findPath(h.x, h.y, treas.x, treas.y, { forHero: true, allowHazard: true });
+            if (path) h.setPath(path);
+            else this.bashAdjacentDoor(h, treas);
+          } else h.setPath(null);
+          continue;
         }
       }
       if (minion) {
@@ -5266,19 +5307,17 @@ export class Game {
         if (Math.hypot(h.x - minion.x, h.y - minion.y) > this.strikeRange(h) * 0.82) {
           const path = this.grid.findPath(h.x, h.y, minion.x, minion.y, { forHero: true, allowHazard: true });
           if (path) h.setPath(path);
-          else this.bashAdjacentDoor(h);
+          else this.bashAdjacentDoor(h, { x: minion.x, y: minion.y });
         } else h.setPath(null);
       } else {
         h.job = JobType.Fight;
         const hx = this.grid.heartPos.x;
         const hy = this.grid.heartPos.y;
         if (h.path.length === 0 || Math.random() < 0.045) {
-          // path toward heart — closed doors block; a sealed mouth gets battered
           const path = this.grid.findPath(h.x, h.y, hx, hy, { forHero: true, allowHazard: true });
           if (path) h.setPath(path);
           else if (!this.bashAdjacentDoor(h)) {
-            // approach nearest walkable toward heart
-            let best: Vec2 | null = null;
+            let bestTile: Vec2 | null = null;
             let bestD = Infinity;
             for (const t of this.grid.tiles) {
               if (!this.grid.isWalkable(t.x, t.y) && t.kind !== TileKind.Heart) continue;
@@ -5286,10 +5325,10 @@ export class Game {
               const from = Math.hypot(t.x - h.x, t.y - h.y);
               if (d < bestD && from < 20) {
                 bestD = d;
-                best = { x: t.x, y: t.y };
+                bestTile = { x: t.x, y: t.y };
               }
             }
-            if (best) h.setPath(this.grid.findPath(h.x, h.y, best.x, best.y, { forHero: true, allowHazard: true }));
+            if (bestTile) h.setPath(this.grid.findPath(h.x, h.y, bestTile.x, bestTile.y, { forHero: true, allowHazard: true }));
           }
         }
       }
@@ -5498,12 +5537,18 @@ export class Game {
 
       const arrived = c.moveAlongPath(dt, this.grid);
 
-      // Creatures open closed doors they stand on; heroes cannot.
+      // Friendlies shoulder a closed door. It shuts once they leave. A latched-open door stays open.
       if (!c.isHero) {
-        const doorTile = this.grid.get(c.x, c.y);
+        const doorTile = this.grid.get(Math.round(c.x), Math.round(c.y));
         if (doorTile && doorTile.door === DoorState.Closed) {
           doorTile.door = DoorState.Open;
+          const key = this.doorKey(doorTile.x, doorTile.y);
+          this.swungDoors.add(key);
+          this.doorShutAt.set(key, this.time + 0.65);
           this.requestStructuralRebuild();
+          this.mentioneOnce('doorSwing', MENTOR_LINES.doorSwing);
+        } else if (doorTile && doorTile.door === DoorState.Open && this.swungDoors.has(this.doorKey(doorTile.x, doorTile.y))) {
+          this.doorShutAt.set(this.doorKey(doorTile.x, doorTile.y), this.time + 0.65);
         }
       } else {
         this.triggerTrapsForHero(c);
@@ -5517,6 +5562,33 @@ export class Game {
         this.updateHeroJob(c, dt);
       }
     }
+    this.settleDoors();
+  }
+
+  /** Shoulder-opened doors shut once no friendly is standing on them. */
+  private settleDoors(): void {
+    let changed = false;
+    for (const key of [...this.swungDoors]) {
+      const shutAt = this.doorShutAt.get(key) ?? 0;
+      if (this.time < shutAt) continue;
+      const [x, y] = key.split(',').map(Number);
+      const tile = this.grid.get(x, y);
+      if (!tile || tile.door !== DoorState.Open) {
+        this.forgetSwung(x, y);
+        continue;
+      }
+      const held = this.creatures.some(
+        (c) => c.alive && !c.isHero && !c.held && Math.round(c.x) === x && Math.round(c.y) === y
+      );
+      if (held) {
+        this.doorShutAt.set(key, this.time + 0.35);
+        continue;
+      }
+      tile.door = DoorState.Closed;
+      this.forgetSwung(x, y);
+      changed = true;
+    }
+    if (changed) this.requestStructuralRebuild();
   }
 
   /** Sentry fires once. Spikes re-arm after a short cooldown. */
@@ -6129,6 +6201,13 @@ export class Game {
   }
 
   private updateHeroJob(c: Creature, dt: number): void {
+    if (c.goldCarried <= 0) this.tryStealTreasury(c);
+    if (!c.alive) return;
+    if (c.goldCarried > 0) {
+      if (this.tryHeroEscape(c)) return;
+      this.doCombat(c, dt);
+      return;
+    }
     // damage heart if adjacent
     const hx = this.grid.heartPos.x;
     const hy = this.grid.heartPos.y;
@@ -6183,16 +6262,98 @@ export class Game {
 
   private dropDoor(x: number, y: number): void {
     this.doorHp.delete(this.doorKey(x, y));
+    this.forgetSwung(x, y);
   }
 
-  /** Smash the closed door nearest the Heart. True while a door is in reach (even between blows). */
-  private bashAdjacentDoor(h: Creature): boolean {
-    const heart = this.grid.heartPos;
+  private forgetSwung(x: number, y: number): void {
+    const key = this.doorKey(x, y);
+    this.swungDoors.delete(key);
+    this.doorShutAt.delete(key);
+  }
+
+  /** Archers peel off to rob a Treasury once the hoard is worth the trip. */
+  private heroWantsLoot(h: Creature): boolean {
+    if (h.isChampion || h.kind !== CreatureKind.HeroArcher || h.goldCarried > 0) return false;
+    if (this.gold < 60) return false;
+    return this.grid.countRoom(RoomType.Treasury) > 0;
+  }
+
+  private nearestTreasury(x: number, y: number): Vec2 | null {
+    let best: Vec2 | null = null;
+    let bestD = Infinity;
+    for (const t of this.grid.tiles) {
+      if (t.room !== RoomType.Treasury) continue;
+      const d = Math.hypot(t.x - x, t.y - y);
+      if (d < bestD) {
+        bestD = d;
+        best = { x: t.x, y: t.y };
+      }
+    }
+    return best;
+  }
+
+  /** Northernmost walkable tile — the breach a looter runs for. */
+  private escapeTile(): Vec2 {
+    const hx = this.grid.heartPos.x;
+    let best: Vec2 | null = null;
+    for (const t of this.grid.tiles) {
+      if (!this.grid.isWalkable(t.x, t.y)) continue;
+      if (
+        !best ||
+        t.y < best.y ||
+        (t.y === best.y && Math.abs(t.x - hx) < Math.abs(best.x - hx))
+      ) {
+        best = { x: t.x, y: t.y };
+      }
+    }
+    return best ?? { x: hx, y: this.grid.heartPos.y };
+  }
+
+  private tryStealTreasury(h: Creature): void {
+    if (h.isChampion || h.kind !== CreatureKind.HeroArcher || h.goldCarried > 0) return;
+    if (this.gold < 36) return;
+    const tile = this.grid.get(Math.round(h.x), Math.round(h.y));
+    if (!tile || tile.room !== RoomType.Treasury) return;
+    const purse = Math.min(120, this.gold, Math.max(36, Math.round(this.gold * 0.08)));
+    if (purse <= 0) return;
+    this.gold -= purse;
+    h.goldCarried = purse;
+    h.setPath(null);
+    this.floatWorld(h.wx, h.wz, `-${purse}g`, '#ffd24a');
+    this.audio.play('gold');
+    this.hud.sayNow(MENTOR_LINES.lootStart);
+  }
+
+  /** True when the looter has left the dungeon with the purse. */
+  private tryHeroEscape(h: Creature): boolean {
+    const here = this.grid.get(Math.round(h.x), Math.round(h.y));
+    if (here?.room === RoomType.Treasury) return false;
+    const esc = this.escapeTile();
+    if (Math.hypot(h.x - esc.x, h.y - esc.y) > 1.05) return false;
+    const sack = Math.floor(h.goldCarried);
+    h.goldCarried = 0;
+    this.goldStolen += sack;
+    h.alive = false;
+    h.setPath(null);
+    try {
+      this.renderer.removeEntityMesh(h.mesh);
+    } catch {
+      /* ignore */
+    }
+    this.floatWorld(h.wx, h.wz, `ESCAPED ${sack}g`, '#ffb060');
+    this.audio.play('horn');
+    this.hud.sayNow(`${MENTOR_LINES.lootEscape} (${sack} gold)`);
+    return true;
+  }
+
+  /** Smash the closed door nearest the goal. True while a door is in reach (even between blows). */
+  private bashAdjacentDoor(h: Creature, goal?: Vec2): boolean {
+    const aim = goal ?? this.grid.heartPos;
     let door: { x: number; y: number } | null = null;
     let best = Infinity;
     for (const n of this.grid.neighbors4(Math.round(h.x), Math.round(h.y))) {
       if (n.door !== DoorState.Closed) continue;
-      const d = Math.hypot(n.x - heart.x, n.y - heart.y);
+      const d = Math.hypot(n.x - aim.x, n.y - aim.y);
       if (d < best) {
         best = d;
         door = n;
@@ -6223,7 +6384,7 @@ export class Game {
     if (next <= 0) {
       const tile = this.grid.get(door.x, door.y);
       if (tile) tile.door = DoorState.None;
-      this.doorHp.delete(key);
+      this.dropDoor(door.x, door.y);
       this.doorsBroken++;
       this.requestStructuralRebuild();
       this.hud.sayNow(MENTOR_LINES.doorBroken);
@@ -6330,7 +6491,7 @@ export class Game {
     const m = Math.floor(t / 60);
     const s = t % 60;
     const ss = s < 10 ? `0${s}` : String(s);
-    return `Heroes fallen ${this.heroesDown} · Finds ${this.digFinds} · Doors lost ${this.doorsBroken} · Time ${m}:${ss}`;
+    return `Heroes fallen ${this.heroesDown} · Finds ${this.digFinds} · Doors lost ${this.doorsBroken} · Slipped ${this.goldStolen}g · Time ${m}:${ss}`;
   }
 
   private floatWorld(wx: number, wz: number, text: string, color: string): void {
@@ -6401,6 +6562,14 @@ export class Game {
   }
 
   private resolveDown(target: Creature): void {
+    if (target.isHero && target.goldCarried > 0) {
+      const sack = Math.floor(target.goldCarried);
+      target.goldCarried = 0;
+      this.gold += sack;
+      this.floatWorld(target.wx, target.wz, `RECOVERED +${sack}g`, '#ffd24a');
+      this.audio.play('gold');
+      this.hud.sayNow(MENTOR_LINES.lootRecover);
+    }
     if (target.isHero && !target.bountyPaid) {
       target.bountyPaid = true;
       const bounty = target.isChampion ? 90 : target.kind === CreatureKind.HeroArcher ? 24 : 36;

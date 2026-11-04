@@ -70,7 +70,10 @@ Pass 7.3: Prison capture, Torture→Thornwitch, Graveyard→Bonewretch, room-siz
 Pass 7.4: Temple prayer/mood/talisman, Combat Pit leveling, creature roster, flee/drag wounded to Lair.
 Pass 8: Combat juice (floating numbers, hit flash, camera kick, procedural SFX), Cave-In, reusable Spike traps, hero bounties, ranged Gravemages and archers, Emberling splash, Thornwitch leech, rival anger, escalating waves with Sir Brightbane, Ashreaver call-in.
 Pass 9: Pause and fast-forward, wave countdown, Sight and Muster, overhead bars, Brightbane ward then enrage, minimap pan.
-Pass 10: Heroes batter sealed doors, right-click brace, dig caches, kill streaks, session tally on victory and defeat. Gaps / later: GLTF art upgrades.
+Pass 10: Heroes batter sealed doors, right-click brace, dig caches, kill streaks, session tally on victory and defeat.
+Pass 11: Doors shut behind friendlies (a latched-open door stays open). Archers rob the Treasury and run for the breach; killing them returns the purse. The tally counts gold that slipped out.
+
+Audit after pass 11 — still thin, on purpose not faked: Forgebrute (workshop maker) and Ironhide (tank) are not in the roster. Graveyard raises Bonewretches only, no second undead. No mana vault, no hero gate, no spell research choices. GLTF art later. Gold is one treasury number, not piles on the tiles.
 
 ## Visual north star (YT X35cKEjvgrc from 2:20)
 Feel targets only — original IP art:

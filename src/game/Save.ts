@@ -87,6 +87,8 @@ export interface SaveData {
   heroesDown?: number;
   digFinds?: number;
   doorsBroken?: number;
+  /** Pass 11 — gold heroes carried out of the dungeon. */
+  goldStolen?: number;
 }
 
 function finiteNum(n: unknown): n is number {

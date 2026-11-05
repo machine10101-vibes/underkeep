@@ -180,6 +180,13 @@ const CATALOG: CatalogEntry[] = [
     build: () => creatureMesh(CreatureKind.Ironhide),
   },
   {
+    id: 'ashreaver',
+    name: 'Ashreaver',
+    group: 'Minions',
+    poses: CREATURE_POSES,
+    build: () => creatureMesh(CreatureKind.Ashreaver),
+  },
+  {
     id: 'hero-knight',
     name: 'Hero Knight',
     group: 'Enemies',

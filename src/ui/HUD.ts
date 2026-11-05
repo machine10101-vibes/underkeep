@@ -516,6 +516,8 @@ export class HUD {
     heartY: number;
     portalX: number;
     portalY: number;
+    gateX?: number;
+    gateY?: number;
     kindAt: (x: number, y: number) => number;
     exploredAt: (x: number, y: number) => boolean;
     roomAt: (x: number, y: number) => number;
@@ -552,6 +554,7 @@ export class HUD {
         else if (kind === 8) color = '#2060a0';
         else if (kind === 9 || kind === 10) color = '#8a7050';
         else if (kind === 11) color = '#40e0c0'; // Gem
+        else if (kind === 12) color = '#d0dcff'; // Hero Gate
         if (kind === 4 && room === 8) color = '#a07840'; // Workshop
         if (kind === 4 && room === 7) color = '#607080'; // Guard
         if (kind === 4 && room === 9) color = '#506070'; // Prison
@@ -597,6 +600,13 @@ export class HUD {
       ctx.arc(px, py, Math.max(2.5, cell * 1.35), 0, Math.PI * 2);
       ctx.stroke();
     }
+    if ((opts.gateX ?? 0) > 0 || (opts.gateY ?? 0) > 0) {
+      const gx = ox + ((opts.gateX ?? 0) + 0.5) * cell;
+      const gy = oy + ((opts.gateY ?? 0) + 0.5) * cell;
+      ctx.strokeStyle = '#d0dcff';
+      ctx.lineWidth = 1.5;
+      ctx.strokeRect(gx - cell * 0.7, gy - cell * 0.7, cell * 1.4, cell * 1.4);
+    }
   }
 
   showOverlay(title: string, msg: string, btn = 'Continue', secondaryBtn?: string): void {
@@ -624,6 +634,8 @@ export const MENTOR_LINES = {
   start: "A Portal sleeps in the rock. Dig to it. Claim it. Then the hungry things will come.",
   portalCannotBuild: "Portals cannot be built. Dig to the gateway buried in the earth and claim it.",
   portalCannotSell: "The Portal cannot be sold or destroyed. It is a wound in the world, not a floor tile.",
+  gateCannotSell: "The Hero Gate is not yours to sell. Meet them in front of it.",
+  heroGate: "Heroes pour through the north arch. The Hero Gate is the mouth of every raid.",
   portalClaimed: "The Portal is yours. Beds and chickens decide who crosses. No Lair, and the veil stays shut.",
   portalSack: "Back through the veil. Wasteful — but the Portal does not argue.",
   needLair: "They will not come without a bed. Raise a Lair.",

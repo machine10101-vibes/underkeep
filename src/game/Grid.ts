@@ -7,6 +7,8 @@ export class Grid {
   heartPos: Vec2 = { x: 0, y: 0 };
   /** Center of the map-placed Portal chamber (DK2: found, not built). */
   portalPos: Vec2 = { x: 0, y: 0 };
+  /** North arch the hero parties march through. */
+  gatePos: Vec2 = { x: 0, y: 0 };
 
   constructor(width = 48, height = 48) {
     this.width = width;
@@ -214,6 +216,7 @@ export class Grid {
 
     // Neutral Portal chamber — buried in the earth; the Keeper must dig to it
     this.placeMapPortal();
+    this.placeHeroGate();
 
     // Place a few torches on claimed tiles near walls
     this.refreshTorches();
@@ -243,6 +246,54 @@ export class Grid {
     const fallback = { x: Math.max(5, hx - 10), y: Math.max(5, Math.min(this.height - 6, hy)) };
     this.carvePortalChamber(fallback.x, fallback.y);
     this.portalPos = fallback;
+  }
+
+  /**
+   * The Hero Gate sits at the north mouth of the starter corridor.
+   * It is a walkable arch, not a room, and waves enter through it.
+   */
+  private placeHeroGate(): void {
+    const x = this.heartPos.x;
+    const y = Math.max(3, this.heartPos.y - 8);
+    const t = this.get(x, y);
+    if (!t || t.kind === TileKind.Heart || t.kind === TileKind.Rock) return;
+    t.kind = TileKind.HeroGate;
+    t.room = RoomType.None;
+    t.fortified = false;
+    t.goldAmount = 0;
+    t.mark = MarkType.None;
+    t.door = DoorState.None;
+    t.trap = TrapType.None;
+    t.explored = true;
+    this.gatePos = { x, y };
+  }
+
+  /** Old saves have no arch. Stamp the north mouth when that tile is still open floor. */
+  restoreHeroGate(): void {
+    const existing = this.tiles.find((t) => t.kind === TileKind.HeroGate);
+    if (existing) {
+      existing.room = RoomType.None;
+      existing.fortified = false;
+      existing.explored = true;
+      this.gatePos = { x: existing.x, y: existing.y };
+      return;
+    }
+    const x = this.heartPos.x;
+    const y = Math.max(3, this.heartPos.y - 8);
+    const t = this.get(x, y);
+    if (
+      t &&
+      t.room === RoomType.None &&
+      (t.kind === TileKind.Claimed || t.kind === TileKind.Dirt || t.kind === TileKind.Earth)
+    ) {
+      t.kind = TileKind.HeroGate;
+      t.fortified = false;
+      t.goldAmount = 0;
+      t.explored = true;
+      this.gatePos = { x, y };
+      return;
+    }
+    this.gatePos = { x: 0, y: 0 };
   }
 
   private portalChamberFits(cx: number, cy: number): boolean {
@@ -365,6 +416,7 @@ export class Grid {
       t.kind === TileKind.Dirt ||
       t.kind === TileKind.Claimed ||
       t.kind === TileKind.Heart ||
+      t.kind === TileKind.HeroGate ||
       t.kind === TileKind.BridgeWood ||
       t.kind === TileKind.BridgeStone
     ) {
@@ -387,6 +439,7 @@ export class Grid {
         (n.kind === TileKind.Dirt ||
           n.kind === TileKind.Claimed ||
           n.kind === TileKind.Heart ||
+          n.kind === TileKind.HeroGate ||
           n.kind === TileKind.BridgeWood ||
           n.kind === TileKind.BridgeStone)
     );
@@ -526,7 +579,7 @@ export class Grid {
 
   hasAdjacentClaimed(x: number, y: number): boolean {
     return this.neighbors4(x, y).some(
-      (t) => t.kind === TileKind.Claimed || t.kind === TileKind.Heart
+      (t) => t.kind === TileKind.Claimed || t.kind === TileKind.Heart || t.kind === TileKind.HeroGate
     );
   }
 
@@ -553,6 +606,7 @@ export class Grid {
         (n.kind === TileKind.Dirt ||
           n.kind === TileKind.Claimed ||
           n.kind === TileKind.Heart ||
+          n.kind === TileKind.HeroGate ||
           n.kind === TileKind.BridgeWood ||
           n.kind === TileKind.BridgeStone)
       ) {
@@ -577,6 +631,7 @@ export class Grid {
       if (
         t.kind === TileKind.Claimed ||
         t.kind === TileKind.Heart ||
+        t.kind === TileKind.HeroGate ||
         t.kind === TileKind.Dirt
       ) {
         t.explored = true;
@@ -589,6 +644,7 @@ export class Grid {
       if (
         t.kind !== TileKind.Claimed &&
         t.kind !== TileKind.Heart &&
+        t.kind !== TileKind.HeroGate &&
         t.kind !== TileKind.Dirt
       ) {
         continue;
@@ -648,6 +704,7 @@ export class Grid {
       if (
         t.kind !== TileKind.Claimed &&
         t.kind !== TileKind.Heart &&
+        t.kind !== TileKind.HeroGate &&
         t.kind !== TileKind.Dirt
       ) {
         continue;

@@ -15,6 +15,7 @@ import {
   makeGoldTopNuggets,
   makeGoldVeinGeo,
   makeHeartGeo,
+  makeHeroGateMesh,
   makeRockGeo,
   makeLavaMesh,
   makeWaterMesh,
@@ -502,6 +503,23 @@ export class DungeonRenderer {
         });
         this.gridGroup.add(water);
         this.tileMeshes.set(key, water);
+        continue;
+      }
+      if (tile.kind === TileKind.HeroGate) {
+        const floor = new THREE.Mesh(makeFloorGeo(), floorMaterial(TileKind.HeroGate, RoomType.None));
+        floor.position.set(w.x, 0, w.z);
+        floor.receiveShadow = true;
+        floor.userData.tileX = tile.x;
+        floor.userData.tileY = tile.y;
+        this.gridGroup.add(floor);
+        const arch = makeHeroGateMesh();
+        arch.position.set(w.x, 0, w.z);
+        arch.traverse((o) => {
+          o.userData.tileX = tile.x;
+          o.userData.tileY = tile.y;
+        });
+        this.gridGroup.add(arch);
+        this.tileMeshes.set(key, arch);
         continue;
       }
       if (tile.kind === TileKind.BridgeWood || tile.kind === TileKind.BridgeStone) {

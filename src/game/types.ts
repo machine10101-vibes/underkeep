@@ -13,6 +13,7 @@ export enum TileKind {
   BridgeWood = 9,
   BridgeStone = 10,
   Gem = 11,      // infinite gold seam — never depletes
+  HeroGate = 12, // north arch — heroes enter here; cannot be dug or sold
 }
 
 export enum RoomType {

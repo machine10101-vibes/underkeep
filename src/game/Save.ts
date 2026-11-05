@@ -16,6 +16,7 @@ const VALID_TILE_KINDS = new Set<number>([
   TileKind.BridgeWood,
   TileKind.BridgeStone,
   TileKind.Gem,
+  TileKind.HeroGate,
 ]);
 
 export interface SavedCreature {

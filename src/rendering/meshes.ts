@@ -714,6 +714,17 @@ export function floorMaterial(kind: TileKind, room: RoomType): THREE.MeshStandar
       })
     );
   }
+  if (kind === TileKind.HeroGate) {
+    return cachedMat('floor-hero-gate', () =>
+      new THREE.MeshStandardMaterial({
+        color: 0x6a645c,
+        roughness: 0.55,
+        metalness: 0.35,
+        emissive: 0x1a2438,
+        emissiveIntensity: 0.35,
+      })
+    );
+  }
   if (kind === TileKind.Heart) {
     return texturedMat('floor-heart', heartFloorTex(), {
       metalness: 0.3,
@@ -945,11 +956,36 @@ export function tileMaterial(kind: TileKind, fortified: boolean, _room: RoomType
       return floorMaterial(TileKind.BridgeWood, RoomType.None);
     case TileKind.BridgeStone:
       return floorMaterial(TileKind.BridgeStone, RoomType.None);
+    case TileKind.HeroGate:
+      return floorMaterial(TileKind.HeroGate, RoomType.None);
     default:
       return cachedMat('default', () => new THREE.MeshStandardMaterial({ color: 0x555555 }));
   }
 }
 
+
+export function makeHeroGateMesh(): THREE.Group {
+  const g = new THREE.Group();
+  const stone = new THREE.MeshStandardMaterial({ color: 0x3e3834, metalness: 0.4, roughness: 0.48 });
+  const glow = new THREE.MeshBasicMaterial({ color: 0xd0dcff, transparent: true, opacity: 0.85 });
+  for (const sx of [-0.62, 0.62]) {
+    const pillar = new THREE.Mesh(new THREE.BoxGeometry(0.28, 1.65, 0.32), stone);
+    pillar.position.set(sx, 0.82, 0);
+    pillar.castShadow = true;
+    g.add(pillar);
+  }
+  const lintel = new THREE.Mesh(new THREE.BoxGeometry(1.62, 0.26, 0.36), stone);
+  lintel.position.set(0, 1.68, 0);
+  lintel.castShadow = true;
+  g.add(lintel);
+  const veil = new THREE.Mesh(new THREE.PlaneGeometry(0.72, 1.05), glow);
+  veil.position.set(0, 0.95, 0);
+  g.add(veil);
+  const veilSide = veil.clone();
+  veilSide.rotation.y = Math.PI / 2;
+  g.add(veilSide);
+  return g;
+}
 
 /** 1–2 readable 3D props per room tile (Treasury chests/gold, Lair bedrolls, etc.). */
 export function makeRoomProps(room: RoomType, variant = 0): THREE.Group | null {

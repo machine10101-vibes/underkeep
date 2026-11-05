@@ -655,6 +655,7 @@ export class Game {
     unpackTiles(this.grid.tiles, data.tiles);
     this.grid.heartPos = { x: data.heartPos.x, y: data.heartPos.y };
     this.grid.restorePortalPos();
+    this.grid.restoreHeroGate();
     // Pre-6.5 saves lack explored flags — seed from claimed territory once
     if (!this.grid.tiles.some((tile) => tile.explored)) {
       this.grid.seedExploration();
@@ -1596,7 +1597,9 @@ export class Game {
                     ? 'Wood Bridge'
                     : tile.kind === TileKind.BridgeStone
                       ? 'Stone Bridge'
-                      : TileKind[tile.kind];
+                      : tile.kind === TileKind.HeroGate
+                        ? 'Hero Gate'
+                        : TileKind[tile.kind];
       let tip = `(${tp.x},${tp.y}) ${kindLabel}${tile.fortified ? ' [fortified]' : ''}${room}${dig}`;
       if (this.caveInArmed) tip = `CAVE-IN · click earth, gold, or a fortified wall · ${tip}`;
       if (this.revealArmed) tip = `SIGHT · click to peel fog · ${tip}`;
@@ -2562,6 +2565,8 @@ export class Game {
       heartY: this.grid.heartPos.y,
       portalX: this.grid.portalPos.x,
       portalY: this.grid.portalPos.y,
+      gateX: this.grid.gatePos.x,
+      gateY: this.grid.gatePos.y,
       kindAt: (x, y) => this.grid.get(x, y)?.kind ?? 0,
       exploredAt: (x, y) => !!this.grid.get(x, y)?.explored,
       roomAt: (x, y) => this.grid.get(x, y)?.room ?? 0,
@@ -2655,6 +2660,10 @@ export class Game {
     }
     if (tile.room === RoomType.Portal) {
       if (!this.lastPaint) this.hud.sayNow(MENTOR_LINES.portalCannotSell);
+      return;
+    }
+    if (tile.kind === TileKind.HeroGate) {
+      if (!this.lastPaint) this.hud.sayNow(MENTOR_LINES.gateCannotSell);
       return;
     }
     if (tile.door !== DoorState.None) {
@@ -9140,24 +9149,32 @@ export class Game {
     this.hud.say(MENTOR_LINES.heroes);
     this.audio.play('horn');
     this.renderer.addShake(waveNum >= WIN_WAVES ? 0.5 : 0.26);
+    const gateTile = this.grid.get(this.grid.gatePos.x, this.grid.gatePos.y);
+    const throughGate = gateTile?.kind === TileKind.HeroGate;
+    if (throughGate) this.mentioneOnce('heroGate', MENTOR_LINES.heroGate);
 
-    // Spawn at north edge — carve a clear entry corridor so pathing/fight loop reads
+    // Spawn at the Hero Gate when the arch is standing; otherwise the north breach.
     const cx = this.grid.heartPos.x;
     const hy = this.grid.heartPos.y;
     let sy = 2;
     let sx = cx;
-    for (let y = 2; y < Math.min(hy - 1, this.grid.height / 2); y++) {
-      if (this.grid.isWalkable(cx, y)) {
-        sy = y;
-        sx = cx;
-        break;
+    if (throughGate) {
+      sx = this.grid.gatePos.x;
+      sy = this.grid.gatePos.y;
+    } else {
+      for (let y = 2; y < Math.min(hy - 1, this.grid.height / 2); y++) {
+        if (this.grid.isWalkable(cx, y)) {
+          sy = y;
+          sx = cx;
+          break;
+        }
       }
     }
     // Carve 3-wide dirt corridor from spawn toward heart for readable approach
     for (let y = sy; y <= Math.min(sy + 4, hy - 2); y++) {
       for (let x = cx - 1; x <= cx + 1; x++) {
         const tile = this.grid.get(x, y);
-        if (!tile || tile.kind === TileKind.Heart || tile.kind === TileKind.Rock) continue;
+        if (!tile || tile.kind === TileKind.Heart || tile.kind === TileKind.Rock || tile.kind === TileKind.HeroGate) continue;
         if (tile.fortified) continue;
         if (tile.kind === TileKind.Gold) {
           tile.goldAmount = 0;
@@ -9176,7 +9193,7 @@ export class Game {
     }
     if (!this.grid.isWalkable(sx, sy)) {
       const tile = this.grid.get(sx, sy);
-      if (tile && tile.kind !== TileKind.Rock && tile.kind !== TileKind.Heart) {
+      if (tile && tile.kind !== TileKind.Rock && tile.kind !== TileKind.Heart && tile.kind !== TileKind.HeroGate) {
         tile.kind = TileKind.Dirt;
         this.gridDirty = true;
       }

@@ -78,6 +78,7 @@ Pass 10.25: species silhouettes, save keeps jobs, and the published keeper loop.
 Pass 11 (on the live build): combat juice, Cave-In, spikes, Ashreaver, pause and fast-forward, doors that shut and break, dig caches, kill streaks, and archers who rob the Treasury.
 Pass 12: Forgebrute works the Workshop (spike plates at research rank 2 or a 9-tile shop). Ironhide is the hungry wall heroes hit first. Hero parties follow `HERO_WAVES`.
 Pass 13: a Graveyard of six tiles raises a Nightleech from a hero corpse (starved captives stay Bonewretches). A Thornwitch in the Torture chamber converts faster. Two minions in the Combat Pit level faster. Temple tiles raise the mana ceiling.
+Pass 14: the north arch is a Hero Gate. Raids enter through it. It cannot be dug or sold. Door the claimed tile in front of it.
 
 ## Visual north star (YT X35cKEjvgrc from 2:20)
 Feel targets only — original IP art:

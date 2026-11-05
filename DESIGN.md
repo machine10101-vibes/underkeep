@@ -81,6 +81,7 @@ Pass 13: a Graveyard of six tiles raises a Nightleech from a hero corpse (starve
 Pass 14: the north arch is a Hero Gate. Raids enter through it. It cannot be dug or sold. Door the claimed tile in front of it.
 Pass 15: Library rank 3 is Dread Scholarship — every mana spell costs a fifth less. A missed payday names the gold still owed.
 Pass 16: the Ashreaver has its own silhouette — horned cinder colossus, ember crown, slow stride.
+Pass 17: before the first raid, the wave line and the Mission stat name the missing step (claim the Portal, build a Lair, claim more land). The Mission stat stays visible on a phone.
 
 ## Visual north star (YT X35cKEjvgrc from 2:20)
 Feel targets only — original IP art:

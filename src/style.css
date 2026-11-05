@@ -672,7 +672,8 @@ html, body, #app {
     bottom: calc(110px + env(safe-area-inset-bottom, 0px));
     font-size: 10px;
   }
-  #stat-objective { display: none; }
+  #stat-objective { display: flex; min-width: 0; }
+  #stat-objective .value { font-size: 11px; max-width: 34vw; }
 }
 
 

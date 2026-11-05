@@ -2497,19 +2497,42 @@ export class Game {
   }
 
   private syncMissionHud(): void {
-    this.hud.setObjective(`W${this.wavesCleared}/${WIN_WAVES} · ${Math.floor(this.gold)}/${GOLD_WIN_THRESHOLD}g`);
+    const step = this.openingStep();
+    this.hud.setObjective(
+      step
+        ? step.short
+        : `Wave ${this.wavesCleared}/${WIN_WAVES} · ${Math.floor(this.gold)}/${GOLD_WIN_THRESHOLD}g`
+    );
     this.hud.setWaveLine(this.waveLineText(), this.waveLineMode());
     this.hud.setKits(this.doorKits, this.sentryKits, this.spikeKits);
     this.hud.setWorkerCost(this.workerCost());
   }
 
+  /** What the keeper still owes before the first raid will leave the Hero Gate. */
+  private openingStep(): { short: string; line: string } | null {
+    if (this.won || this.gameOver || this.heroWaveSpawned || this.wavesCleared > 0) return null;
+    if (this.firstInvasionReady()) return null;
+    if (!this.grid.hasClaimedPortal()) {
+      return { short: 'Claim Portal', line: 'Dig out the Portal and claim it — the Hero Gate stays shut' };
+    }
+    if (this.grid.countRoom(RoomType.Lair) < 2) {
+      return { short: 'Build Lair', line: 'Build a Lair, two tiles — imps will not cross a bedless Portal' };
+    }
+    if (this.grid.countClaimed() < 16) {
+      return { short: 'Claim land', line: 'Claim more of the dig — the raid waits on a larger keep' };
+    }
+    return { short: 'Hold', line: 'The Hero Gate waits. Hold the Heart until the first party is due' };
+  }
+
   private waveLineText(): string {
     if (this.won) return 'The Underkeep stands';
     if (this.gameOver) return 'The Heart is silent';
+    const step = this.openingStep();
     if (this.simSpeed === 0) {
-      const rest = this.heroWaveSpawned ? 'battle held' : `next wave ${this.formatWaveClock()}`;
+      const rest = step ? step.line : this.heroWaveSpawned ? 'battle held' : `next wave ${this.formatWaveClock()}`;
       return `PAUSED · ${rest}`;
     }
+    if (step) return step.line;
     const pace = this.simSpeed > 1 ? `${this.simSpeed}× · ` : '';
     if (this.heroWaveSpawned) {
       const left = this.creatures.filter(

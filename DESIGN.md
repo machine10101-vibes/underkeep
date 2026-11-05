@@ -56,7 +56,8 @@ Vite + TypeScript + Three.js (+ postprocessing). Blender for later art. Godot on
 | Tank | Bile Demon | Ironhide |
 | Torture specialist | Dark Mistress | Thornwitch |
 | Undead (skeleton) | Skeleton | Bonewretch |
-| Elite call-in | Horned Reaper | Phase 3 unique |
+| Grave drinker | Vampire | Nightleech |
+| Elite call-in | Horned Reaper | Ashreaver |
 
 ## Phase 1 implementation status (game/)
 
@@ -76,6 +77,7 @@ Pass 9 (play): Keeper marks beat chores — workers stay on tagged dig/claim, ne
 Pass 10.25: species silhouettes, save keeps jobs, and the published keeper loop.
 Pass 11 (on the live build): combat juice, Cave-In, spikes, Ashreaver, pause and fast-forward, doors that shut and break, dig caches, kill streaks, and archers who rob the Treasury.
 Pass 12: Forgebrute works the Workshop (spike plates at research rank 2 or a 9-tile shop). Ironhide is the hungry wall heroes hit first. Hero parties follow `HERO_WAVES`.
+Pass 13: a Graveyard of six tiles raises a Nightleech from a hero corpse (starved captives stay Bonewretches). A Thornwitch in the Torture chamber converts faster. Two minions in the Combat Pit level faster. Temple tiles raise the mana ceiling.
 
 ## Visual north star (YT X35cKEjvgrc from 2:20)
 Feel targets only — original IP art:

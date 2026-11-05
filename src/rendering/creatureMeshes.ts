@@ -171,6 +171,7 @@ export function dressCreature(g: THREE.Group, kind: string, bodyMat: THREE.MeshS
   else if (kind === 'gravemage') dressGravemage(g);
   else if (kind === 'thornwitch') dressThornwitch(g);
   else if (kind === 'bonewretch') dressBonewretch(g);
+  else if (kind === 'nightleech') dressNightleech(g);
   else if (kind === 'forgebrute') dressForgebrute(g);
   else if (kind === 'ironhide') dressIronhide(g);
   else if (kind === 'hero_knight' || kind === 'hero') dressHeroKnight(g, bodyMat);
@@ -989,6 +990,34 @@ function dressHeroArcher(g: THREE.Group, bodyMat: THREE.MeshStandardMaterial): v
   quiver.position.set(-0.12, 0.86, -0.2);
   quiver.rotation.set(0.35, 0, -0.45);
   g.add(quiver);
+}
+
+/** Tall narrow drinker: pale wedge face, red eyes, a cloak that reads as a diamond from above. */
+function dressNightleech(g: THREE.Group): void {
+  const cloak = mat({ color: 0x3a0818, roughness: 0.72, metalness: 0.16 });
+  const lining = mat({ color: 0x6a1028, roughness: 0.55, metalness: 0.22 });
+  const pale = mat({ color: 0xe4d2c4, roughness: 0.48 });
+  const eye = glow(0xff2030);
+
+  part(g, new THREE.ConeGeometry(0.34, 1.15, 7), cloak, 0, 0.72, 0, Math.PI, 0, 0);
+  part(g, new THREE.ConeGeometry(0.16, 0.7, 5), lining, 0, 0.55, 0.08, Math.PI, 0, 0);
+  const hem = tagged(0, 0.22, 0, 0, 0, 0, 'hair');
+  part(hem, new THREE.BoxGeometry(0.62, 0.06, 0.36), cloak, 0, 0, 0);
+  g.add(hem);
+
+  const head = new THREE.Mesh(new THREE.SphereGeometry(0.13, 8, 7), pale);
+  head.scale.set(0.85, 1.25, 0.8);
+  head.position.set(0, 1.28, 0.06);
+  head.castShadow = true;
+  g.add(head);
+  part(g, new THREE.BoxGeometry(0.05, 0.02, 0.02), eye, -0.045, 1.32, 0.14);
+  part(g, new THREE.BoxGeometry(0.05, 0.02, 0.02), eye, 0.045, 1.32, 0.14);
+  part(g, new THREE.ConeGeometry(0.03, 0.08, 4), pale, 0, 1.16, 0.12, 1.6, 0, 0);
+
+  for (const sx of [-1, 1] as const) {
+    g.add(limb(new THREE.CylinderGeometry(0.035, 0.04, 0.42, 5), cloak, sx * 0.2, 0.78, 0.04, 0.15, 0, sx * 0.35, sx < 0 ? 'armL' : 'armR'));
+    g.add(limb(new THREE.CylinderGeometry(0.04, 0.045, 0.36, 5), pale, sx * 0.08, 0.2, 0.02, 0, 0, 0, sx < 0 ? 'legL' : 'legR'));
+  }
 }
 
 /** Hunched smith: iron apron, anvil hump, one hammer arm. Reads wide from above. */

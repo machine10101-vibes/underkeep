@@ -43,6 +43,8 @@ export function walkCadence(kind: CreatureKind): number {
       return 6.6;
     case CreatureKind.Bonewretch:
       return 6.8;
+    case CreatureKind.Nightleech:
+      return 6.2;
     case CreatureKind.Gravemage:
       return 5.6;
     case CreatureKind.HeroKnight:
@@ -70,6 +72,7 @@ export function attackDecayRate(kind: CreatureKind): number {
       return 2.05;
     case CreatureKind.Rattlekin:
     case CreatureKind.Thornwitch:
+    case CreatureKind.Nightleech:
       return 2.35;
     case CreatureKind.HeroArcher:
       return 2.2;
@@ -97,6 +100,8 @@ export function combatHitColor(kind: CreatureKind): number {
       return 0xff3060;
     case CreatureKind.Bonewretch:
       return 0x70ff40;
+    case CreatureKind.Nightleech:
+      return 0xff2048;
     case CreatureKind.Forgebrute:
       return 0xff7a28;
     case CreatureKind.Ironhide:
@@ -255,6 +260,7 @@ export function poseCreatureLimbs(root: THREE.Object3D, kind: CreatureKind, s: C
       else if (kind === CreatureKind.Gravemage) amp = moving ? 0.14 : 0.035;
       else if (kind === CreatureKind.HeroKnight) amp = moving ? 0.48 : 0.035;
       else if (kind === CreatureKind.HeroArcher) amp = moving ? 0.4 : 0.04;
+      else if (kind === CreatureKind.Nightleech) amp = moving ? 0.18 : 0.04;
       else if (kind === CreatureKind.Thornwitch) amp = moving ? 0.5 : 0.055;
       else if (kind === CreatureKind.Forgebrute) amp = moving ? 0.28 : 0.04;
       else if (kind === CreatureKind.Ironhide) amp = moving ? 0.22 : 0.03;
@@ -394,6 +400,11 @@ export function poseCreatureBody(kind: CreatureKind, s: CreatureMotionState): Cr
     rotX = 0.12 + p.wind * 0.14 + p.hit * 0.44 + p.follow * 0.14;
     z = p.hit * 0.2;
     y = moving ? 0 : breath * 0.01;
+  } else if (kind === CreatureKind.Nightleech) {
+    y = 0.04 + Math.sin(s.time * 1.6) * 0.03;
+    rotX = breath * 0.015 + p.wind * -0.08 + p.hit * 0.22;
+    rotZ = Math.sin(s.time * 1.1) * 0.02;
+    z = p.hit * 0.16;
   } else if (kind === CreatureKind.Gravemage) {
     y = Math.sin(s.time * 2.2) * 0.055 + p.wind * 0.08 + p.hit * 0.02;
     rotX = breath * 0.02 - p.wind * 0.1 - p.hit * 0.32 - p.follow * 0.08;

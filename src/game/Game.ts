@@ -15,12 +15,15 @@ import {
   DOOR_COST,
   DoorState,
   GOLD_WIN_THRESHOLD,
+  GRAVEYARD_LEECH_TILES,
   HEART_MAX_HP,
   HERO_WAVES,
   JobType,
   KIT_CAP,
   MarkType,
+  NIGHTLEECH_CAP,
   PAYDAY_INTERVAL,
+  PIT_SPAR_MULT,
   POSSESS_COST,
   RALLY_COST,
   ROOM_COST,
@@ -29,8 +32,10 @@ import {
   SIGHT_COST,
   SPIKE_COST,
   SpellId,
+  TEMPLE_MANA_PER_TILE,
   TILE_SIZE,
   TRAINING_GOLD_PER_SEC,
+  TORTURE_WITCH_RATE,
   ToolMode,
   TrapType,
   Vec2,
@@ -1548,10 +1553,12 @@ export class Game {
         room += ` · prisoners ${n}`;
       }
       if (tile.room === RoomType.Graveyard) {
+        const yard = this.grid.countRoom(RoomType.Graveyard);
         room += ` · corpses ${this.corpses.length}`;
+        room += yard >= GRAVEYARD_LEECH_TILES ? ' · drinks heroes' : ` · ${GRAVEYARD_LEECH_TILES - yard} to drink`;
       }
       if (tile.room === RoomType.Temple) {
-        room += ` · praying ${this.templePrayCount}`;
+        room += ` · praying ${this.templePrayCount} · vault +${this.grid.countRoom(RoomType.Temple) * TEMPLE_MANA_PER_TILE}`;
       }
       if (tile.room === RoomType.CombatPit) {
         const pitters = this.creatures.filter(
@@ -1918,6 +1925,7 @@ export class Game {
         gravemage: 'Gravemage',
         thornwitch: 'Thornwitch',
         bonewretch: 'Bonewretch',
+        nightleech: 'Nightleech',
         forgebrute: 'Forgebrute',
         ironhide: 'Ironhide',
         hero_knight: 'Hero Knight',
@@ -2706,6 +2714,7 @@ export class Game {
       c.kind === CreatureKind.Skitterwing ||
       c.kind === CreatureKind.Thornwitch ||
       c.kind === CreatureKind.Bonewretch ||
+      c.kind === CreatureKind.Nightleech ||
       c.kind === CreatureKind.Forgebrute ||
       c.kind === CreatureKind.Ironhide
     );
@@ -2992,7 +3001,8 @@ export class Game {
   }
 
   private maxMana(): number {
-    return MANA_MAX_BASE + Math.floor(this.grid.countClaimed() * 0.5);
+    const temple = this.grid.countRoom(RoomType.Temple);
+    return MANA_MAX_BASE + Math.floor(this.grid.countClaimed() * 0.5) + temple * TEMPLE_MANA_PER_TILE;
   }
 
 
@@ -4101,6 +4111,7 @@ export class Game {
         gravemage: 'Gravemage',
         thornwitch: 'Thornwitch',
         bonewretch: 'Bonewretch',
+        nightleech: 'Nightleech',
         forgebrute: 'Forgebrute',
         ironhide: 'Ironhide',
         ashreaver: 'Ashreaver',
@@ -6675,7 +6686,7 @@ export class Game {
       // Needs accumulate over a real session, not a screenshot window
       const hasHatch = this.grid.countRoom(RoomType.Hatchery) > 0;
       const hasLair = this.grid.countRoom(RoomType.Lair) > 0;
-      const glut = c.kind === CreatureKind.Ironhide ? 1.75 : 1;
+      const glut = c.kind === CreatureKind.Ironhide ? 1.75 : c.kind === CreatureKind.Nightleech ? 0.4 : 1;
       c.hunger = Math.min(100, c.hunger + (hasHatch ? 1.15 : 0.7) * dt * glut);
       c.sleepNeed = Math.min(100, c.sleepNeed + (hasLair ? 0.95 : 0.55) * dt);
       c.trainNeed = Math.min(100, c.trainNeed + 1.1 * dt);
@@ -6719,14 +6730,19 @@ export class Game {
         }
         c.job = JobType.Idle;
       }
-      // Drop Guard only when re-evaluating (may re-assign immediately)
+      // Drop Guard only when re-evaluating. A Thornwitch holding the Torture chamber stays.
       if (c.job === JobType.Guard) {
-        c.job = JobType.Idle;
+        const post = c.jobTarget ? this.grid.get(c.jobTarget.x, c.jobTarget.y) : null;
+        const torment =
+          c.kind === CreatureKind.Thornwitch &&
+          post?.room === RoomType.Torture &&
+          this.prisonerNeedsTorment();
+        if (!torment) c.job = JobType.Idle;
       }
       // Never idle-wipe AttackMove here — handled as sticky above
 
       // Critical wound → Flee to Lair (Pass 7.4)
-      const fleeAt = c.kind === CreatureKind.Ironhide ? 0.18 : 0.35;
+      const fleeAt = c.kind === CreatureKind.Ironhide ? 0.18 : c.kind === CreatureKind.Nightleech ? 0.22 : 0.35;
       const critical = c.hp < c.maxHp * fleeAt && c.kind !== CreatureKind.Ashreaver;
       const hurt = c.hp < c.maxHp * 0.65;
       if (critical && hasLair) {
@@ -6747,6 +6763,18 @@ export class Game {
         if (this.assignSleep(c)) continue;
       }
 
+      if (c.job === JobType.Guard && c.kind === CreatureKind.Thornwitch && c.jobTarget) {
+        const post = this.grid.get(c.jobTarget.x, c.jobTarget.y);
+        if (post?.room === RoomType.Torture && this.prisonerNeedsTorment()) {
+          const onTile = Math.round(c.x) === c.jobTarget.x && Math.round(c.y) === c.jobTarget.y;
+          if (!onTile && c.path.length === 0) {
+            const path = this.pathFor(c, c.jobTarget.x, c.jobTarget.y);
+            if (path) c.setPath(path);
+          }
+          continue;
+        }
+      }
+
       const isResearcher = c.kind === CreatureKind.Gravemage;
       const isSmith = c.kind === CreatureKind.Forgebrute;
       const isFighter =
@@ -6754,11 +6782,29 @@ export class Game {
         c.kind === CreatureKind.Emberling ||
         c.kind === CreatureKind.Thornwitch ||
         c.kind === CreatureKind.Bonewretch ||
+        c.kind === CreatureKind.Nightleech ||
         c.kind === CreatureKind.Ashreaver ||
         c.kind === CreatureKind.Forgebrute ||
         c.kind === CreatureKind.Ironhide;
 
-      // Low mood → Temple prayer (Pass 7.4)
+      const invasion = this.creatures.some(
+        (h) => h.alive && h.isHero && !h.knockedOut && !h.isPrisoner
+      );
+      if (
+        c.kind === CreatureKind.Thornwitch &&
+        !invasion &&
+        this.prisonerNeedsTorment() &&
+        this.grid.countRoom(RoomType.Torture) > 0
+      ) {
+        const chamber = this.findRoomTile(RoomType.Torture);
+        if (chamber) {
+          c.job = JobType.Guard;
+          c.jobTarget = chamber;
+          c.setPath(this.pathFor(c, chamber.x, chamber.y));
+          this.mentioneOnce('witchTorment', MENTOR_LINES.witchTorment);
+          continue;
+        }
+      }
       if (c.mood < 58 && this.grid.countRoom(RoomType.Temple) > 0) {
         const t = this.findRoomTile(RoomType.Temple);
         if (t) {
@@ -6770,9 +6816,6 @@ export class Game {
       }
 
       // Researchers → Library (spell research over time)
-      const invasion = this.creatures.some(
-        (h) => h.alive && h.isHero && !h.knockedOut && !h.isPrisoner
-      );
       if (isSmith && !invasion && this.workshopNeedsKits(true) && this.grid.countRoom(RoomType.Workshop) > 0) {
         const current = c.job === JobType.Craft && c.jobTarget ? this.grid.get(c.jobTarget.x, c.jobTarget.y) : null;
         if (current?.room === RoomType.Workshop && c.jobTarget) {
@@ -7817,9 +7860,20 @@ export class Game {
       }
       this.gold = Math.max(0, this.gold - trainCost);
       c.trainNeed = Math.max(0, c.trainNeed - 30 * dt);
-      c.workTimer += dt;
       const tileRoom = this.grid.get(c.x, c.y)?.room;
       const onPit = tileRoom === RoomType.CombatPit;
+      const sparring =
+        onPit &&
+        this.creatures.some(
+          (o) =>
+            o !== c &&
+            o.alive &&
+            !o.isHero &&
+            o.job === JobType.Train &&
+            this.grid.get(Math.round(o.x), Math.round(o.y))?.room === RoomType.CombatPit
+        );
+      c.workTimer += dt * (sparring ? PIT_SPAR_MULT : 1);
+      if (sparring) this.mentioneOnce('pitSpar', MENTOR_LINES.pitSpar);
       const names: Record<string, string> = {
         rattlekin: 'Rattlekin',
         emberling: 'Emberling',
@@ -7827,6 +7881,7 @@ export class Game {
         gravemage: 'Gravemage',
         thornwitch: 'Thornwitch',
         bonewretch: 'Bonewretch',
+        nightleech: 'Nightleech',
         forgebrute: 'Forgebrute',
         ironhide: 'Ironhide',
         ashreaver: 'Ashreaver',
@@ -8023,6 +8078,7 @@ export class Game {
   private strikeRange(c: Creature): number {
     if (c.kind === CreatureKind.Gravemage) return 2.75;
     if (c.kind === CreatureKind.HeroArcher) return 3.15;
+    if (c.kind === CreatureKind.Nightleech) return 1.7;
     if (c.kind === CreatureKind.Skitterwing) return 1.75;
     if (c.kind === CreatureKind.Ashreaver) return 1.75;
     return c.isHero ? 1.65 : 1.55;
@@ -8031,6 +8087,7 @@ export class Game {
   /** Hero species that sour a minion's mood and sharpen their blows. */
   private rivalKind(kind: CreatureKind): CreatureKind | null {
     if (kind === CreatureKind.Rattlekin) return CreatureKind.HeroKnight;
+    if (kind === CreatureKind.Nightleech) return CreatureKind.HeroKnight;
     if (kind === CreatureKind.Skitterwing) return CreatureKind.HeroArcher;
     return null;
   }
@@ -8672,6 +8729,11 @@ export class Game {
       c.hp = Math.min(c.maxHp, c.hp + dmg * 0.32);
       c.pulseTint('heal', 0.28);
     }
+    if (c.kind === CreatureKind.Nightleech && c.alive) {
+      c.hp = Math.min(c.maxHp, c.hp + dmg * 0.45);
+      c.hunger = Math.max(0, c.hunger - 22);
+      c.pulseTint('heal', 0.28);
+    }
     } catch (err) {
       console.warn('[underkeep] doCombat failed', err);
     }
@@ -8696,6 +8758,7 @@ export class Game {
       gravemage: 'Gravemage',
       thornwitch: 'Thornwitch',
       bonewretch: 'Bonewretch',
+      nightleech: 'Nightleech',
       forgebrute: 'Forgebrute',
       ironhide: 'Ironhide',
       ashreaver: 'Ashreaver',
@@ -8882,7 +8945,6 @@ export class Game {
   }
 
   private raiseBonewretch(x: number, y: number, mentor: string): void {
-    // Prefer a Graveyard tile
     const gy = this.findRoomTile(RoomType.Graveyard);
     const sx = gy?.x ?? x;
     const sy = gy?.y ?? y;
@@ -8892,6 +8954,41 @@ export class Game {
     b.sleepNeed = 0;
     this.hud.sayNow(mentor);
     this.renderer.spawnFx(new THREE.Vector3(b.wx, 1.1, b.wz), 0x80ff60, 0.75);
+  }
+
+  /** A mature yard drinks a hero corpse. Everyone else still comes back as bones. */
+  private raiseFromYard(x: number, y: number, fromHero: boolean): void {
+    const yard = this.grid.countRoom(RoomType.Graveyard);
+    const leeches = this.creatures.filter((c) => c.alive && c.kind === CreatureKind.Nightleech).length;
+    const cap = Math.min(NIGHTLEECH_CAP, Math.floor(yard / GRAVEYARD_LEECH_TILES));
+    if (fromHero && yard >= GRAVEYARD_LEECH_TILES && leeches < cap) {
+      const gy = this.findRoomTile(RoomType.Graveyard);
+      const sx = gy?.x ?? x;
+      const sy = gy?.y ?? y;
+      const n = this.spawnCreature(CreatureKind.Nightleech, sx, sy);
+      n.mood = 70;
+      n.hunger = 30;
+      n.sleepNeed = 10;
+      this.hud.sayNow(MENTOR_LINES.nightleech);
+      this.renderer.spawnFx(new THREE.Vector3(n.wx, 1.3, n.wz), 0xff2040, 0.85);
+      return;
+    }
+    this.raiseBonewretch(x, y, MENTOR_LINES.boneRaised);
+  }
+
+  private prisonerNeedsTorment(): boolean {
+    return this.creatures.some((c) => c.alive && c.isPrisoner && c.convertProgress < 100);
+  }
+
+  private thornwitchInTorture(): boolean {
+    return this.creatures.some(
+      (c) =>
+        c.alive &&
+        c.kind === CreatureKind.Thornwitch &&
+        !c.held &&
+        !c.knockedOut &&
+        this.grid.get(Math.round(c.x), Math.round(c.y))?.room === RoomType.Torture
+    );
   }
 
   /** Prison hold, Torture conversion, Graveyard corpse → Bonewretch, starve path. */
@@ -8930,7 +9027,8 @@ export class Game {
       }
       // Conversion when Torture exists
       if (hasTorture) {
-        const rate = onTorture ? 9 : 4.5; // % per second
+        const witch = onTorture && this.thornwitchInTorture();
+        const rate = witch ? TORTURE_WITCH_RATE : onTorture ? 9 : 4.5;
         const before = c.convertProgress;
         c.convertProgress = Math.min(100, c.convertProgress + rate * dt);
         if (before < 40 && c.convertProgress >= 40) {
@@ -8964,7 +9062,7 @@ export class Game {
         const onGy = this.grid.get(corpse.x, corpse.y)?.room === RoomType.Graveyard;
         corpse.timer += dt * (onGy ? 1.6 : 1);
         if (corpse.timer >= 8) {
-          this.raiseBonewretch(corpse.x, corpse.y, MENTOR_LINES.boneRaised);
+          this.raiseFromYard(corpse.x, corpse.y, corpse.fromHero);
         } else {
           remain.push(corpse);
         }

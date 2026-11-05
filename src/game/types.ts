@@ -63,6 +63,8 @@ export enum CreatureKind {
   Gravemage = 'gravemage',
   Thornwitch = 'thornwitch',
   Bonewretch = 'bonewretch',
+  /** Graveyard drinker. Original stand-in for the vampire. Hero corpses only. */
+  Nightleech = 'nightleech',
   /** Workshop manufacturer. Original stand-in for the troll smith. */
   Forgebrute = 'forgebrute',
   /** Slow wall of iron. Original stand-in for the bile-demon tank. */
@@ -183,6 +185,16 @@ export const FIRST_WAVE_FALLBACK = 480;
 export const GOLD_WIN_THRESHOLD = 2500;
 /** Max manufactured kits stored from Workshop. */
 export const KIT_CAP = 5;
+/** Hero corpses in a yard this large rise as Nightleeches. Smaller yards still make Bonewretches. */
+export const GRAVEYARD_LEECH_TILES = 6;
+/** One Nightleech per mature yard, never more than this. */
+export const NIGHTLEECH_CAP = 3;
+/** Each Temple tile raises the mana ceiling. Prayer still fills it. */
+export const TEMPLE_MANA_PER_TILE = 8;
+/** Torture conversion % per second when a Thornwitch is in the chamber. */
+export const TORTURE_WITCH_RATE = 15;
+/** Combat Pit levels faster when two minions share the floor. */
+export const PIT_SPAR_MULT = 1.35;
 
 
 export const ROOM_NAMES: Record<RoomType, string> = {
@@ -214,6 +226,7 @@ export const CREATURE_STATS: Record<
   [CreatureKind.Gravemage]: { hp: 70, speed: 2.6, damage: 10, goldWage: 20, color: 0x7050c0, scale: 0.78 },
   [CreatureKind.Thornwitch]: { hp: 85, speed: 2.9, damage: 15, goldWage: 22, color: 0xa03060, scale: 0.78 },
   [CreatureKind.Bonewretch]: { hp: 55, speed: 3.2, damage: 11, goldWage: 0, color: 0xd8d0b8, scale: 0.72 },
+  [CreatureKind.Nightleech]: { hp: 110, speed: 2.75, damage: 17, goldWage: 0, color: 0x6a1028, scale: 0.88 },
   [CreatureKind.Forgebrute]: { hp: 120, speed: 2.15, damage: 16, goldWage: 32, color: 0x8a4a28, scale: 1.05 },
   [CreatureKind.Ironhide]: { hp: 240, speed: 1.55, damage: 20, goldWage: 48, color: 0x4a5560, scale: 1.22 },
   [CreatureKind.HeroKnight]: { hp: 120, speed: 2.55, damage: 18, goldWage: 0, color: 0xc0c8d8, scale: 0.85 },

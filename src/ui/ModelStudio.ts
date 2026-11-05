@@ -158,6 +158,13 @@ const CATALOG: CatalogEntry[] = [
     build: () => creatureMesh(CreatureKind.Bonewretch),
   },
   {
+    id: 'nightleech',
+    name: 'Nightleech',
+    group: 'Minions',
+    poses: CREATURE_POSES,
+    build: () => creatureMesh(CreatureKind.Nightleech),
+  },
+  {
     id: 'forgebrute',
     name: 'Forgebrute',
     group: 'Minions',

@@ -1412,11 +1412,11 @@ export class Game {
         // Armed Possess spell — click a minion to enter them
         if (this.possessArmed && c && !c.isHero) {
           this.possessArmed = false;
-          if (this.mana < POSSESS_COST) {
+          if (this.mana < this.manaPrice(POSSESS_COST)) {
             this.hud.say('Not enough mana to Possess.');
             return;
           }
-          this.mana -= POSSESS_COST;
+          this.mana -= this.manaPrice(POSSESS_COST);
           this.enterPossession(c);
           return;
         }
@@ -1547,6 +1547,9 @@ export class Game {
         if (sz > 0) {
           room += ` · size ${sz}`;
           if (bonus > 0) room += ` · +${Math.round(bonus * 100)}% eff`;
+        }
+        if (tile.room === RoomType.Library) {
+          room += ` · rank ${this.researchRank}${this.researchRank >= 3 ? ' · spells −20%' : ''}`;
         }
       }
       if (tile.room === RoomType.Prison) {
@@ -2703,11 +2706,11 @@ export class Game {
   }
 
   private castSightAt(x: number, y: number): void {
-    if (this.mana < SIGHT_COST) {
+    if (this.mana < this.manaPrice(SIGHT_COST)) {
       this.hud.sayNow('Not enough mana for Sight of Evil.');
       return;
     }
-    this.mana -= SIGHT_COST;
+    this.mana -= this.manaPrice(SIGHT_COST);
     const changed = this.grid.revealAround(x, y, 4);
     if (changed) this.fogDirty = true;
     const w = this.grid.tileToWorld(x, y);
@@ -2730,7 +2733,7 @@ export class Game {
   }
 
   private musterAt(x: number, y: number): void {
-    if (this.mana < CALL_TO_ARMS_COST) {
+    if (this.mana < this.manaPrice(CALL_TO_ARMS_COST)) {
       this.hud.sayNow('Not enough mana to Call to Arms.');
       return;
     }
@@ -2741,7 +2744,7 @@ export class Game {
       this.callArmed = true;
       return;
     }
-    this.mana -= CALL_TO_ARMS_COST;
+    this.mana -= this.manaPrice(CALL_TO_ARMS_COST);
     for (const t of this.grid.tiles) t.rally = false;
     if (tile && tile.kind === TileKind.Claimed) tile.rally = true;
     this.requestStructuralRebuild();
@@ -2856,8 +2859,8 @@ export class Game {
       return;
     }
     if (spell === 'speed') {
-      if (this.mana < SPEED_COST) return;
-      this.mana -= SPEED_COST;
+      if (this.mana < this.manaPrice(SPEED_COST)) return;
+      this.mana -= this.manaPrice(SPEED_COST);
       for (const c of this.creatures) {
         if (c.alive && !c.isHero) c.speedBuff = Math.max(c.speedBuff, 6);
       }
@@ -2866,12 +2869,12 @@ export class Game {
       return;
     }
     if (spell === 'lightning') {
-      if (this.mana < LIGHTNING_COST) return;
+      if (this.mana < this.manaPrice(LIGHTNING_COST)) return;
       const heroes = this.creatures.filter(
         (c) => c.alive && c.isHero && !c.knockedOut && !c.isPrisoner
       );
       if (!heroes.length) return;
-      this.mana -= LIGHTNING_COST;
+      this.mana -= this.manaPrice(LIGHTNING_COST);
       const target = heroes.reduce((a, b) => {
         const da = Math.hypot(a.x - this.grid.heartPos.x, a.y - this.grid.heartPos.y);
         const db = Math.hypot(b.x - this.grid.heartPos.x, b.y - this.grid.heartPos.y);
@@ -2894,7 +2897,7 @@ export class Game {
         this.hud.say('Heal is sealed. Staff a Library with Gravemages to research it.');
         return;
       }
-      const cost = 30;
+      const cost = this.manaPrice(30);
       if (this.mana < cost) return;
       this.mana -= cost;
       let healed = 0;
@@ -2918,8 +2921,8 @@ export class Game {
         this.hud.say('Cave-In dispelled.');
         return;
       }
-      if (this.mana < CAVEIN_COST) {
-        this.hud.sayNow(`Cave-In needs ${CAVEIN_COST} mana.`);
+      if (this.mana < this.manaPrice(CAVEIN_COST)) {
+        this.hud.sayNow(`Cave-In needs ${this.manaPrice(CAVEIN_COST)} mana.`);
         return;
       }
       this.possessArmed = false;
@@ -2940,8 +2943,8 @@ export class Game {
         this.hud.say('Sight dispelled.');
         return;
       }
-      if (this.mana < REVEAL_COST) {
-        this.hud.sayNow(`Sight needs ${REVEAL_COST} mana.`);
+      if (this.mana < this.manaPrice(REVEAL_COST)) {
+        this.hud.sayNow(`Sight needs ${this.manaPrice(REVEAL_COST)} mana.`);
         return;
       }
       this.caveInArmed = false;
@@ -2961,7 +2964,7 @@ export class Game {
         this.exitPossession();
         return;
       }
-      if (this.mana < POSSESS_COST) {
+      if (this.mana < this.manaPrice(POSSESS_COST)) {
         this.hud.say('Not enough mana to Possess.');
         return;
       }
@@ -2970,7 +2973,7 @@ export class Game {
         (this.held && this.held.alive && !this.held.isHero ? this.held : null) ||
         (this.selected && this.selected.alive && !this.selected.isHero ? this.selected : null);
       if (target) {
-        this.mana -= POSSESS_COST;
+        this.mana -= this.manaPrice(POSSESS_COST);
         if (this.held === target) {
           // Drop from Hand into possession
           target.held = false;
@@ -2986,7 +2989,7 @@ export class Game {
       return;
     }
     if (spell === 'sight') {
-      if (this.mana < SIGHT_COST) {
+      if (this.mana < this.manaPrice(SIGHT_COST)) {
         this.hud.sayNow('Not enough mana for Sight of Evil.');
         return;
       }
@@ -2997,7 +3000,7 @@ export class Game {
       return;
     }
     if (spell === 'callToArms') {
-      if (this.mana < CALL_TO_ARMS_COST) {
+      if (this.mana < this.manaPrice(CALL_TO_ARMS_COST)) {
         this.hud.sayNow('Not enough mana to Call to Arms.');
         return;
       }
@@ -3007,6 +3010,11 @@ export class Game {
       this.hud.sayNow('Call to Arms armed — click claimed land to plant the banner.');
       return;
     }
+  }
+
+  /** Research rank 3 — Dread Scholarship — cuts every mana spell by a fifth. */
+  private manaPrice(base: number): number {
+    return this.researchRank >= 3 ? Math.max(1, Math.round(base * 0.8)) : base;
   }
 
   private maxMana(): number {
@@ -3912,7 +3920,6 @@ export class Game {
       this.gold = 8;
       this.wageAcc = PAYDAY_INTERVAL;
       this.payWages(0.01);
-      this.hud.sayNow(MENTOR_LINES.paydayFail);
       this.hud.setTooltip('Payday — empty Treasury crashes moods');
     } else if (focus === 'lava') {
       const focusW = this.grid.tileToWorld(hx + 2, hy + 5);
@@ -5949,15 +5956,15 @@ export class Game {
         portalCap: this.portalCap(),
       });
       this.hud.setSpellAffordable('createWorker', this.gold >= this.workerCost());
-      this.hud.setSpellAffordable('speed', this.mana >= SPEED_COST);
-      this.hud.setSpellAffordable('lightning', this.mana >= LIGHTNING_COST);
-      this.hud.setSpellAffordable('heal', this.healUnlocked && this.mana >= 30);
-      this.hud.setSpellAffordable('possess', this.possessed ? true : this.mana >= POSSESS_COST);
-      this.hud.setSpellAffordable('sight', this.mana >= SIGHT_COST);
-      this.hud.setSpellAffordable('callToArms', this.mana >= CALL_TO_ARMS_COST);
-      this.hud.setSpellAffordable('caveIn', this.caveInArmed || this.mana >= CAVEIN_COST);
-      this.hud.setSpellAffordable('reveal', this.revealArmed || this.mana >= REVEAL_COST);
-      this.hud.setSpellAffordable('muster', this.mana >= MUSTER_COST);
+      this.hud.setSpellAffordable('speed', this.mana >= this.manaPrice(SPEED_COST));
+      this.hud.setSpellAffordable('lightning', this.mana >= this.manaPrice(LIGHTNING_COST));
+      this.hud.setSpellAffordable('heal', this.healUnlocked && this.mana >= this.manaPrice(30));
+      this.hud.setSpellAffordable('possess', this.possessed ? true : this.mana >= this.manaPrice(POSSESS_COST));
+      this.hud.setSpellAffordable('sight', this.mana >= this.manaPrice(SIGHT_COST));
+      this.hud.setSpellAffordable('callToArms', this.mana >= this.manaPrice(CALL_TO_ARMS_COST));
+      this.hud.setSpellAffordable('caveIn', this.caveInArmed || this.mana >= this.manaPrice(CAVEIN_COST));
+      this.hud.setSpellAffordable('reveal', this.revealArmed || this.mana >= this.manaPrice(REVEAL_COST));
+      this.hud.setSpellAffordable('muster', this.mana >= this.manaPrice(MUSTER_COST));
       this.syncMissionHud();
       this.minimapAcc += dt;
       if (this.minimapAcc >= 0.35) {
@@ -6009,13 +6016,16 @@ export class Game {
       // Small mood bump for paid wages
       for (const c of payees) this.safeMood(c, (Number.isFinite(c.mood) ? c.mood : 72) + 4);
     } else {
-      // Empty / short Treasury — drain what remains, mood crash
+      const short = due - this.gold;
       this.gold = 0;
       for (const c of payees) {
         this.safeMood(c, (Number.isFinite(c.mood) ? c.mood : 72) - 32);
         c.leaveWarned = true;
       }
-      this.hud.sayNow(MENTOR_LINES.paydayFail);
+      const line = MENTOR_LINES.paydayFail.replace('%g', String(short)).replace('%d', String(due));
+      this.hud.sayNow(line);
+      const heart = this.grid.tileToWorld(this.grid.heartPos.x, this.grid.heartPos.y);
+      this.floatWorld(heart.x, heart.z, `SHORT ${short}g`, '#ff8866');
       this.paydayToastCooldown = 8;
     }
   }
@@ -7832,12 +7842,17 @@ export class Game {
       }
       if (this.researchProgress >= 100) {
         this.researchProgress = 0;
+        const prevRank = this.researchRank;
         this.researchRank = Math.min(3, this.researchRank + 1);
-        if (this.researchRank >= 1 && !this.healUnlocked) {
+        if (prevRank >= 3) {
+          this.hud.sayNow(MENTOR_LINES.researchCapped);
+        } else if (this.researchRank >= 1 && !this.healUnlocked) {
           this.healUnlocked = true;
           this.hud.sayNow(MENTOR_LINES.researchHeal);
         } else if (this.researchRank === 2) {
           this.hud.sayNow(MENTOR_LINES.tempered);
+        } else if (this.researchRank >= 3) {
+          this.hud.sayNow(MENTOR_LINES.scholarship);
         } else {
           this.hud.sayNow(
             MENTOR_LINES.researchDone.replace('%r', String(this.researchRank))
@@ -8463,17 +8478,17 @@ export class Game {
 
   private resolveReveal(tx: number, ty: number): void {
     if (!this.grid.inBounds(tx, ty)) return;
-    if (this.mana < REVEAL_COST) {
+    if (this.mana < this.manaPrice(REVEAL_COST)) {
       this.revealArmed = false;
       this.hud.setSpellArmed('reveal', false);
-      this.hud.sayNow(`Sight needs ${REVEAL_COST} mana.`);
+      this.hud.sayNow(`Sight needs ${this.manaPrice(REVEAL_COST)} mana.`);
       return;
     }
     if (!this.grid.revealArea(tx, ty, 5.2)) {
       this.hud.say(MENTOR_LINES.revealEmpty);
       return;
     }
-    this.mana -= REVEAL_COST;
+    this.mana -= this.manaPrice(REVEAL_COST);
     this.revealArmed = false;
     this.hud.setSpellArmed('reveal', false);
     this.fogDirty = true;
@@ -8485,8 +8500,8 @@ export class Game {
   }
 
   private musterMinions(): void {
-    if (this.mana < MUSTER_COST) {
-      this.hud.sayNow(`Muster needs ${MUSTER_COST} mana.`);
+    if (this.mana < this.manaPrice(MUSTER_COST)) {
+      this.hud.sayNow(`Muster needs ${this.manaPrice(MUSTER_COST)} mana.`);
       return;
     }
     const heroes = this.creatures.filter(
@@ -8499,7 +8514,7 @@ export class Game {
       this.hud.sayNow(MENTOR_LINES.musterNone);
       return;
     }
-    this.mana -= MUSTER_COST;
+    this.mana -= this.manaPrice(MUSTER_COST);
     const heart = this.grid.heartPos;
     for (const c of fighters) {
       let tx = heart.x;
@@ -8541,13 +8556,13 @@ export class Game {
       this.hud.sayNow('Cave-In needs earth, a gold seam, or a fortified wall — not open floor.');
       return;
     }
-    if (this.mana < CAVEIN_COST) {
+    if (this.mana < this.manaPrice(CAVEIN_COST)) {
       this.caveInArmed = false;
       this.hud.setSpellArmed('caveIn', false);
-      this.hud.sayNow(`Cave-In needs ${CAVEIN_COST} mana.`);
+      this.hud.sayNow(`Cave-In needs ${this.manaPrice(CAVEIN_COST)} mana.`);
       return;
     }
-    this.mana -= CAVEIN_COST;
+    this.mana -= this.manaPrice(CAVEIN_COST);
     this.caveInArmed = false;
     this.hud.setSpellArmed('caveIn', false);
     const wasGold = tile.kind === TileKind.Gold;
@@ -8614,8 +8629,8 @@ export class Game {
       this.hud.sayNow(MENTOR_LINES.summonLocked);
       return;
     }
-    if (this.mana < SUMMON_COST) {
-      this.hud.sayNow(`Calling the Ashreaver costs ${SUMMON_COST} mana.`);
+    if (this.mana < this.manaPrice(SUMMON_COST)) {
+      this.hud.sayNow(`Calling the Ashreaver costs ${this.manaPrice(SUMMON_COST)} mana.`);
       return;
     }
     const hx = this.grid.heartPos.x;
@@ -8644,7 +8659,7 @@ export class Game {
       sx = claimed.x;
       sy = claimed.y;
     }
-    this.mana -= SUMMON_COST;
+    this.mana -= this.manaPrice(SUMMON_COST);
     this.ashreaverCd = SUMMON_COOLDOWN;
     const c = this.spawnCreature(CreatureKind.Ashreaver, sx, sy);
     c.mood = 92;

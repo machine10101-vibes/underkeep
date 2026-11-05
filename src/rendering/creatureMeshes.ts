@@ -174,6 +174,7 @@ export function dressCreature(g: THREE.Group, kind: string, bodyMat: THREE.MeshS
   else if (kind === 'nightleech') dressNightleech(g);
   else if (kind === 'forgebrute') dressForgebrute(g);
   else if (kind === 'ironhide') dressIronhide(g);
+  else if (kind === 'ashreaver') dressAshreaver(g);
   else if (kind === 'hero_knight' || kind === 'hero') dressHeroKnight(g, bodyMat);
   else if (kind === 'hero_archer') dressHeroArcher(g, bodyMat);
   else dressGeneric(g, bodyMat);
@@ -1080,6 +1081,44 @@ function dressIronhide(g: THREE.Group): void {
     part(g, new THREE.SphereGeometry(0.045, 5, 5), dark, sx * 0.42, 0.62, 0.2);
     g.add(limb(new THREE.CylinderGeometry(0.1, 0.12, 0.28, 6), hide, sx * 0.32, 0.16, 0.04, 0, 0, 0, sx < 0 ? 'legL' : 'legR'));
     g.add(limb(new THREE.BoxGeometry(0.22, 0.12, 0.28), plate, sx * 0.58, 0.48, 0.08, 0, 0, sx * -0.15, sx < 0 ? 'armL' : 'armR'));
+  }
+}
+
+/** Elite summon: a horned cinder colossus. The crown of embers reads from the plaza. */
+function dressAshreaver(g: THREE.Group): void {
+  const cinder = mat({ color: 0x2a100c, roughness: 0.62, metalness: 0.28 });
+  const ash = mat({ color: 0x4a2014, roughness: 0.5, metalness: 0.34 });
+  const horn = mat({ color: 0x1a0c0a, roughness: 0.4, metalness: 0.55 });
+  const ember = glow(0xff5010);
+  const core = glow(0xffd060);
+
+  part(g, new THREE.BoxGeometry(0.62, 0.92, 0.4), cinder, 0, 0.78, 0);
+  part(g, new THREE.BoxGeometry(0.22, 0.55, 0.06), ember, 0, 0.82, 0.2);
+  part(g, new THREE.BoxGeometry(0.08, 0.22, 0.04), core, 0, 0.9, 0.24);
+
+  const head = new THREE.Mesh(new THREE.BoxGeometry(0.36, 0.32, 0.32), ash);
+  head.position.set(0, 1.38, 0.04);
+  head.castShadow = true;
+  g.add(head);
+  part(g, new THREE.BoxGeometry(0.08, 0.04, 0.04), core, -0.1, 1.42, 0.2);
+  part(g, new THREE.BoxGeometry(0.08, 0.04, 0.04), core, 0.1, 1.42, 0.2);
+  part(g, new THREE.ConeGeometry(0.07, 0.55, 5), horn, -0.14, 1.78, 0, 0, 0, 0.35);
+  part(g, new THREE.ConeGeometry(0.07, 0.55, 5), horn, 0.14, 1.78, 0, 0, 0, -0.35);
+  part(g, new THREE.SphereGeometry(0.05, 6, 5), ember, -0.14, 2.08, 0);
+  part(g, new THREE.SphereGeometry(0.05, 6, 5), ember, 0.14, 2.08, 0);
+
+  const crown = tagged(0, 1.62, 0, 0, 0, 0, 'hair');
+  for (let i = 0; i < 4; i++) {
+    const a = (i / 4) * Math.PI * 2;
+    part(crown, new THREE.SphereGeometry(0.045, 5, 4), ember, Math.cos(a) * 0.22, 0.06, Math.sin(a) * 0.16);
+  }
+  g.add(crown);
+
+  for (const sx of [-1, 1] as const) {
+    g.add(limb(new THREE.CylinderGeometry(0.08, 0.1, 0.48, 6), cinder, sx * 0.16, 0.28, 0.02, 0, 0, 0, sx < 0 ? 'legL' : 'legR'));
+    const arm = limb(new THREE.BoxGeometry(0.14, 0.72, 0.14), ash, sx * 0.42, 0.78, 0.06, 0.15, 0, sx * 0.2, sx < 0 ? 'armL' : 'armR');
+    g.add(arm);
+    part(g, new THREE.BoxGeometry(0.16, 0.08, 0.1), ember, sx * 0.48, 0.4, 0.1);
   }
 }
 

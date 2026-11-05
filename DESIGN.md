@@ -80,6 +80,7 @@ Pass 12: Forgebrute works the Workshop (spike plates at research rank 2 or a 9-t
 Pass 13: a Graveyard of six tiles raises a Nightleech from a hero corpse (starved captives stay Bonewretches). A Thornwitch in the Torture chamber converts faster. Two minions in the Combat Pit level faster. Temple tiles raise the mana ceiling.
 Pass 14: the north arch is a Hero Gate. Raids enter through it. It cannot be dug or sold. Door the claimed tile in front of it.
 Pass 15: Library rank 3 is Dread Scholarship — every mana spell costs a fifth less. A missed payday names the gold still owed.
+Pass 16: the Ashreaver has its own silhouette — horned cinder colossus, ember crown, slow stride.
 
 ## Visual north star (YT X35cKEjvgrc from 2:20)
 Feel targets only — original IP art:

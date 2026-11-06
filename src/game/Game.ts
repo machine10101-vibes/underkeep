@@ -544,6 +544,7 @@ export class Game {
 
     this.hud.say(MENTOR_LINES.start);
     if (this.grid.layout === 'cleft') this.hud.say(MENTOR_LINES.cleft);
+    if (this.grid.layout === 'stair') this.hud.say(MENTOR_LINES.stair);
     if (showIntro) {
       this.hud.showOverlay(
         'Mission Briefing',
@@ -673,7 +674,7 @@ export class Game {
     this.grid.heartPos = { x: data.heartPos.x, y: data.heartPos.y };
     this.grid.restorePortalPos();
     const savedLayout = (data as SaveData & { layout?: string }).layout;
-    if (savedLayout === 'basin' || savedLayout === 'cleft') this.grid.layout = savedLayout;
+    if (savedLayout === 'basin' || savedLayout === 'cleft' || savedLayout === 'stair') this.grid.layout = savedLayout;
     this.grid.restoreHeroGate();
     // Pre-6.5 saves lack explored flags — seed from claimed territory once
     if (!this.grid.tiles.some((tile) => tile.explored)) {

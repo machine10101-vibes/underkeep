@@ -41,7 +41,7 @@ try {
 let last = performance.now();
 let frameErrors = 0;
 function frame(now: number): void {
-  const dt = Math.min(0.05, (now - last) / 1000);
+  const dt = Math.min(0.05, Math.max(0, (now - last) / 1000));
   last = now;
   if (game) {
     try {

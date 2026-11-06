@@ -91,6 +91,7 @@ Pass 23: a captive standing in the Prison drips a ransom (knights 80, archers 48
 Pass 24: when the goal tile itself cannot be reached, a creature walks to the nearest open neighbor instead of standing still.
 Pass 25: anyone carrying gold wears a bag, and a Prison captive wears it while the ransom purse still has coins.
 Pass 26: minions take the nearest open seat in a room (Training, Pit, Library, Temple, Workshop, Guard, Wagerden, Hatchery, Prison, Graveyard). A second body takes the next seat. Gold hauls to the nearest Treasury.
+Pass 27: a short payday makes paid minions sulk for 40 seconds — no training, prayer, gambling, research, or guard post. Mood climbs at half speed. A second short purse while they are still sulking sends the lowest-mood minion out. Ashreaver stays. A backwards frame step no longer rewinds the clock.
 
 ## Visual north star (YT X35cKEjvgrc from 2:20)
 Feel targets only — original IP art:

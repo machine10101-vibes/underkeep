@@ -24,6 +24,7 @@ import {
   MarkType,
   NIGHTLEECH_CAP,
   PAYDAY_INTERVAL,
+  PAYDAY_SULK_SEC,
   PIT_SPAR_MULT,
   PRISON_RANSOM_CAP,
   PRISON_RANSOM_CHAMPION,
@@ -608,6 +609,7 @@ export class Game {
           isPrisoner: c.isPrisoner,
           convertProgress: c.convertProgress,
           ransomPaid: c.ransomPaid || undefined,
+          sulkFor: c.sulkFor > 0 ? c.sulkFor : undefined,
           isChampion: c.isChampion || undefined,
           damage: c.damage,
           ward: c.isChampion ? c.ward : undefined,
@@ -752,6 +754,7 @@ export class Game {
       c.isPrisoner = !!sc.isPrisoner;
       c.convertProgress = sc.convertProgress ?? 0;
       c.ransomPaid = sc.ransomPaid ?? 0;
+      c.sulkFor = sc.sulkFor ?? 0;
       const jobs = Object.values(JobType) as string[];
       if (sc.job && jobs.includes(sc.job)) c.job = sc.job as JobType;
       const jt = sc.jobTarget;
@@ -1624,6 +1627,7 @@ export class Game {
         const c = this.creatureAt(tp.x, tp.y);
         if (c && !c.isHero) {
           tip += ` · ${c.kind} mood ${Math.floor(c.mood)} · eff ${Math.round(c.workEfficiency() * 100)}%`;
+          if (this.isSulking(c)) tip += ' · sulking';
         } else if (c && c.isHero && c.goldCarried > 0) {
           tip += ` · carrying ${Math.floor(c.goldCarried)} gold`;
         } else if (this.held) {
@@ -1952,7 +1956,11 @@ export class Game {
         hero_archer: 'Hero Archer',
         ashreaver: 'Ashreaver',
       };
-      const jobRaw = typeof c.job === 'string' && c.job.length > 0 ? c.job : 'idle';
+      const jobRaw = this.isSulking(c)
+        ? 'sulking'
+        : typeof c.job === 'string' && c.job.length > 0
+          ? c.job
+          : 'idle';
       const jobLabel = c.held
         ? 'Held'
         : c.isPrisoner
@@ -6066,16 +6074,52 @@ export class Game {
     } else {
       const short = due - this.gold;
       this.gold = 0;
+      const repeat = payees.some((c) => c.sulkFor > 0);
       for (const c of payees) {
         this.safeMood(c, (Number.isFinite(c.mood) ? c.mood : 72) - 32);
         c.leaveWarned = true;
+        c.sulkFor = PAYDAY_SULK_SEC;
       }
       const line = MENTOR_LINES.paydayFail.replace('%g', String(short)).replace('%d', String(due));
       this.hud.sayNow(line);
+      this.hud.say(MENTOR_LINES.paydaySulk);
       const heart = this.grid.tileToWorld(this.grid.heartPos.x, this.grid.heartPos.y);
       this.floatWorld(heart.x, heart.z, `SHORT ${short}g`, '#ff8866');
       this.paydayToastCooldown = 8;
+      if (repeat) {
+        const quitter = payees
+          .filter((c) => c.alive && c.kind !== CreatureKind.Ashreaver)
+          .sort((a, b) => a.mood - b.mood)[0];
+        if (quitter) {
+          const name = quitter.kind.charAt(0).toUpperCase() + quitter.kind.slice(1);
+          this.walkOut(quitter, MENTOR_LINES.paydayWalkout.replace('%n', name));
+        }
+      }
     }
+  }
+
+  private isSulking(c: Creature): boolean {
+    return c.sulkFor > 0;
+  }
+
+  /** A minion leaves the keep. Mesh cleanup matches the low-mood desertion. */
+  private walkOut(c: Creature, line: string): void {
+    c.alive = false;
+    c.sulkFor = 0;
+    try {
+      if (c.mesh) c.mesh.visible = false;
+    } catch { /* ignore */ }
+    if (this.held === c) this.held = null;
+    c.held = false;
+    c.selected = false;
+    this.selectedGroup = this.selectedGroup.filter((x) => x !== c && x.alive);
+    if (this.selected === c) this.selected = null;
+    this.pruneSelection();
+    this.hud.sayNow(line);
+    const heart = this.grid.tileToWorld(this.grid.heartPos.x, this.grid.heartPos.y);
+    this.floatWorld(heart.x, heart.z, 'LEFT', '#ff8866');
+    if (!this.selected) this.hud.hideInspector();
+    else this.refreshInspector();
   }
 
 
@@ -6726,6 +6770,22 @@ export class Game {
     for (const c of this.creatures) {
       if (!c.alive || c.isWorker || c.isHero || c.held || c.stunTimer > 0 || c.knockedOut || c === this.possessed) continue;
       if (
+        this.isSulking(c) &&
+        (c.job === JobType.Train ||
+          c.job === JobType.Research ||
+          c.job === JobType.Pray ||
+          c.job === JobType.Gamble ||
+          c.job === JobType.Guard)
+      ) {
+        const post = c.jobTarget ? this.grid.get(c.jobTarget.x, c.jobTarget.y) : null;
+        const torment = c.kind === CreatureKind.Thornwitch && post?.room === RoomType.Torture;
+        if (!torment) {
+          c.job = JobType.Idle;
+          c.jobTarget = null;
+          c.setPath(null);
+        }
+      }
+      if (
         c.job === JobType.Dig ||
         c.job === JobType.Mine ||
         c.job === JobType.Claim ||
@@ -6894,7 +6954,7 @@ export class Game {
           continue;
         }
       }
-      if (c.mood < 58 && this.grid.countRoom(RoomType.Temple) > 0) {
+      if (!this.isSulking(c) && c.mood < 58 && this.grid.countRoom(RoomType.Temple) > 0) {
         const t = this.findRoomTile(RoomType.Temple, c.x, c.y, c);
         if (t) {
           c.job = JobType.Pray;
@@ -6928,7 +6988,7 @@ export class Game {
         c.job = JobType.Idle;
         c.jobTarget = null;
       }
-      if (isResearcher && this.grid.countRoom(RoomType.Library) > 0 && !invasion) {
+      if (!this.isSulking(c) && isResearcher && this.grid.countRoom(RoomType.Library) > 0 && !invasion) {
         const t = this.findRoomTile(RoomType.Library, c.x, c.y, c);
         if (t) {
           c.job = JobType.Research;
@@ -6941,6 +7001,7 @@ export class Game {
       // Fighters → Combat Pit for levels 4+ (Pass 7.4)
       if (
         isFighter &&
+        !this.isSulking(c) &&
         c.trainNeed > 22 &&
         c.level >= 4 &&
         c.level < 10 &&
@@ -6958,6 +7019,7 @@ export class Game {
       // Fighters → Training Room levels (timer + level-up) up to 4
       if (
         isFighter &&
+        !this.isSulking(c) &&
         c.trainNeed > 28 &&
         this.grid.countRoom(RoomType.Training) > 0 &&
         c.level < 4
@@ -6989,7 +7051,7 @@ export class Game {
       }
 
       // Guard Room — idle fighters hold post when not training
-      if (isFighter && this.grid.countRoom(RoomType.Guard) > 0 && c.trainNeed <= 35) {
+      if (isFighter && !this.isSulking(c) && this.grid.countRoom(RoomType.Guard) > 0 && c.trainNeed <= 35) {
         const t = this.findRoomTile(RoomType.Guard, c.x, c.y, c);
         if (t) {
           c.job = JobType.Guard;
@@ -7006,6 +7068,7 @@ export class Game {
       // Soft train need for non-fighters too (Skitterwing scouts)
       if (
         !isResearcher &&
+        !this.isSulking(c) &&
         c.trainNeed > 45 &&
         c.level < 4 &&
         this.grid.countRoom(RoomType.Training) > 0
@@ -7034,7 +7097,7 @@ export class Game {
         }
       }
       if (c.job === JobType.Idle || (c.job === JobType.Wander && c.path.length === 0)) {
-        if (this.grid.countRoom(RoomType.Casino) > 0 && c.mood < 82 && Math.random() < 0.35) {
+        if (!this.isSulking(c) && this.grid.countRoom(RoomType.Casino) > 0 && c.mood < 82 && Math.random() < 0.35) {
           const den = this.findRoomTile(RoomType.Casino, c.x, c.y, c);
           if (den) {
             c.job = JobType.Gamble;
@@ -7307,6 +7370,7 @@ export class Game {
         try {
           if (!c.alive || c.isHero || c.held) continue;
           c.clampStats();
+          if (c.sulkFor > 0) c.sulkFor = Math.max(0, c.sulkFor - dt);
           let delta = 2.0 * dt; // gentle recover
           if (c.hunger > 45) delta -= 10 * dt * ((c.hunger - 45) / 55);
           if (c.sleepNeed > 40) delta -= 8 * dt * ((c.sleepNeed - 40) / 60);
@@ -7331,6 +7395,7 @@ export class Game {
             this.mentioneOnce('rivalAnger', MENTOR_LINES.rivalAnger);
           }
           if (!Number.isFinite(delta)) delta = 0;
+          if (this.isSulking(c) && delta > 0) delta *= 0.5;
           this.safeMood(c, (Number.isFinite(c.mood) ? c.mood : 72) + delta);
           if (c.mood < 14 && !c.leaveWarned) {
             c.leaveWarned = true;

@@ -46,6 +46,8 @@ export class Creature {
   /** 0–100. Affects work efficiency; very low → leave threat. */
   mood = 72;
   leaveWarned = false;
+  /** Seconds left on a short-payday sulk. 0 means they are working. */
+  sulkFor = 0;
   /** Fired once while workEfficiency is below sluggish threshold. */
   efficiencyWarned = false;
   /** Seconds of slap-driven work haste (workers keep their job). */

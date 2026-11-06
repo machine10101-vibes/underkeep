@@ -799,7 +799,7 @@ export class Grid {
     sy: number,
     gx: number,
     gy: number,
-    opts?: { forHero?: boolean; allowHazard?: boolean }
+    opts?: { forHero?: boolean; allowHazard?: boolean; blocked?: Set<number> }
   ): Vec2[] | null {
     sx = Math.round(sx);
     sy = Math.round(sy);
@@ -817,7 +817,9 @@ export class Grid {
     const h = (x: number, y: number) => Math.abs(x - gx) + Math.abs(y - gy);
     const forHero = !!opts?.forHero;
     const allowHazard = !!opts?.allowHazard;
+    const blocked = opts?.blocked;
     const passable = (nx: number, ny: number): boolean => {
+      if (blocked && blocked.has(key(nx, ny)) && !(nx === gx && ny === gy)) return false;
       if (forHero && this.blocksHero(nx, ny)) return false;
       if (this.isWalkable(nx, ny, { allowHazard })) return true;
       // Allow stepping onto diggable goal only (stand-in for adjacent jobs uses walkable goals)

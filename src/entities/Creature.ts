@@ -38,6 +38,8 @@ export class Creature {
   jobTarget: Vec2 | null = null;
   path: Vec2[] = [];
   pathIndex = 0;
+  /** Seconds spent waiting on a creature in the next tile. */
+  stall = 0;
   workTimer = 0;
   stunTimer = 0;
   speedBuff = 0;

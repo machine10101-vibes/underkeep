@@ -275,6 +275,10 @@ export const PRISON_RANSOM_CAP: Partial<Record<CreatureKind, number>> = {
 export const PRISON_RANSOM_CHAMPION = 140;
 /** Combat Pit levels faster when two minions share the floor. */
 export const PIT_SPAR_MULT = 1.35;
+/** After a Combat Pit level, strikes hit harder for this many seconds. */
+export const PIT_BLOOD_SEC = 20;
+/** Damage multiplier while bloodied from the Combat Pit. */
+export const PIT_BLOOD_MULT = 1.2;
 
 
 export const ROOM_NAMES: Record<RoomType, string> = {

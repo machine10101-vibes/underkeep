@@ -746,6 +746,7 @@ export const MENTOR_LINES = {
   nightleech: "A Nightleech drinks its way out of a hero's grave. No wage. It wants blood.",
   witchTorment: "The Thornwitch has the chamber. Conversion will not be gentle.",
   pitSpar: "Two minions share the pit. The blows come faster.",
+  pitBlood: "Bloodied. The pit's latest lesson rides in their next strikes.",
   starvedBones: "The prisoner starved — bones claim them for the dark.",
   roomSizeBonus: "Room size %n · +%p% efficiency",
   combatPitBuilt: "Combat Pit ready. Veterans past training level 4 fight for glory here.",

@@ -48,6 +48,8 @@ export class Creature {
   leaveWarned = false;
   /** Seconds left on a short-payday sulk. 0 means they are working. */
   sulkFor = 0;
+  /** Seconds left on the Combat Pit bloodied bonus. */
+  bloodedFor = 0;
   /** Fired once while workEfficiency is below sluggish threshold. */
   efficiencyWarned = false;
   /** Seconds of slap-driven work haste (workers keep their job). */

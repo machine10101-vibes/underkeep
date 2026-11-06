@@ -6507,7 +6507,7 @@ export class Game {
       // waiting, keep digging until a full claw-load — don't camp the Heart.
       const haulNeed = digMarks.length + claimMarks.length > 0 ? HAUL_WHEN_DIGGING : HAUL_WHEN_IDLE;
       if (w.goldCarried >= haulNeed && this.vaultRoom() > 0) {
-        const treasury = this.grid.tiles.find((t) => t.room === RoomType.Treasury);
+        const treasury = this.nearestTreasury(w.x, w.y);
         const tx = treasury?.x ?? this.grid.heartPos.x;
         const ty = treasury?.y ?? this.grid.heartPos.y;
         const path = this.pathFor(w, tx, ty);
@@ -6593,7 +6593,7 @@ export class Game {
         this.workshopNeedsKits(false) &&
         !this.creatures.some((c) => c.alive && c.kind === CreatureKind.Forgebrute)
       ) {
-        const shop = this.findRoomTile(RoomType.Workshop);
+        const shop = this.findRoomTile(RoomType.Workshop, w.x, w.y, w);
         if (shop) {
           const crafters = workers.filter((c) => c.job === JobType.Craft).length;
           if (crafters < Math.max(1, Math.min(3, this.grid.countRoom(RoomType.Workshop)))) {
@@ -6704,7 +6704,7 @@ export class Game {
         }
       }
       if (!assigned && w.goldCarried > 0 && this.vaultRoom() > 0 && digMarks.length === 0) {
-        const treasury = this.grid.tiles.find((t) => t.room === RoomType.Treasury);
+        const treasury = this.nearestTreasury(w.x, w.y);
         const tx = treasury?.x ?? this.grid.heartPos.x;
         const ty = treasury?.y ?? this.grid.heartPos.y;
         const path = this.pathFor(w, tx, ty);
@@ -6885,7 +6885,7 @@ export class Game {
         this.prisonerNeedsTorment() &&
         this.grid.countRoom(RoomType.Torture) > 0
       ) {
-        const chamber = this.findRoomTile(RoomType.Torture);
+        const chamber = this.findRoomTile(RoomType.Torture, c.x, c.y, c);
         if (chamber) {
           c.job = JobType.Guard;
           c.jobTarget = chamber;
@@ -6895,7 +6895,7 @@ export class Game {
         }
       }
       if (c.mood < 58 && this.grid.countRoom(RoomType.Temple) > 0) {
-        const t = this.findRoomTile(RoomType.Temple);
+        const t = this.findRoomTile(RoomType.Temple, c.x, c.y, c);
         if (t) {
           c.job = JobType.Pray;
           c.jobTarget = t;
@@ -6914,7 +6914,7 @@ export class Game {
           }
           continue;
         }
-        const shop = this.findRoomTile(RoomType.Workshop);
+        const shop = this.findRoomTile(RoomType.Workshop, c.x, c.y, c);
         if (shop) {
           c.job = JobType.Craft;
           c.jobTarget = shop;
@@ -6929,7 +6929,7 @@ export class Game {
         c.jobTarget = null;
       }
       if (isResearcher && this.grid.countRoom(RoomType.Library) > 0 && !invasion) {
-        const t = this.findRoomTile(RoomType.Library);
+        const t = this.findRoomTile(RoomType.Library, c.x, c.y, c);
         if (t) {
           c.job = JobType.Research;
           c.jobTarget = t;
@@ -6946,7 +6946,7 @@ export class Game {
         c.level < 10 &&
         this.grid.countRoom(RoomType.CombatPit) > 0
       ) {
-        const t = this.findRoomTile(RoomType.CombatPit);
+        const t = this.findRoomTile(RoomType.CombatPit, c.x, c.y, c);
         if (t) {
           c.job = JobType.Train;
           c.jobTarget = t;
@@ -6962,7 +6962,7 @@ export class Game {
         this.grid.countRoom(RoomType.Training) > 0 &&
         c.level < 4
       ) {
-        const t = this.findRoomTile(RoomType.Training);
+        const t = this.findRoomTile(RoomType.Training, c.x, c.y, c);
         if (t) {
           c.job = JobType.Train;
           c.jobTarget = t;
@@ -6990,7 +6990,7 @@ export class Game {
 
       // Guard Room — idle fighters hold post when not training
       if (isFighter && this.grid.countRoom(RoomType.Guard) > 0 && c.trainNeed <= 35) {
-        const t = this.findRoomTile(RoomType.Guard);
+        const t = this.findRoomTile(RoomType.Guard, c.x, c.y, c);
         if (t) {
           c.job = JobType.Guard;
           c.jobTarget = t;
@@ -7010,7 +7010,7 @@ export class Game {
         c.level < 4 &&
         this.grid.countRoom(RoomType.Training) > 0
       ) {
-        const t = this.findRoomTile(RoomType.Training);
+        const t = this.findRoomTile(RoomType.Training, c.x, c.y, c);
         if (t) {
           c.job = JobType.Train;
           c.jobTarget = t;
@@ -7025,7 +7025,7 @@ export class Game {
         c.level < 10 &&
         this.grid.countRoom(RoomType.CombatPit) > 0
       ) {
-        const t = this.findRoomTile(RoomType.CombatPit);
+        const t = this.findRoomTile(RoomType.CombatPit, c.x, c.y, c);
         if (t) {
           c.job = JobType.Train;
           c.jobTarget = t;
@@ -7035,7 +7035,7 @@ export class Game {
       }
       if (c.job === JobType.Idle || (c.job === JobType.Wander && c.path.length === 0)) {
         if (this.grid.countRoom(RoomType.Casino) > 0 && c.mood < 82 && Math.random() < 0.35) {
-          const den = this.findRoomTile(RoomType.Casino);
+          const den = this.findRoomTile(RoomType.Casino, c.x, c.y, c);
           if (den) {
             c.job = JobType.Gamble;
             c.jobTarget = den;
@@ -7148,11 +7148,59 @@ export class Game {
     }
   }
 
-  private findRoomTile(room: RoomType): Vec2 | null {
-    const tiles = this.grid.tiles.filter((t) => t.room === room);
-    if (!tiles.length) return null;
-    const t = tiles[Math.floor(Math.random() * tiles.length)];
-    return { x: t.x, y: t.y };
+  /**
+   * A tile of this room. With a position, the nearest seat nobody is already
+   * walking to. Without one, a random tile (legacy callers).
+   */
+  private findRoomTile(room: RoomType, nearX?: number, nearY?: number, self?: Creature): Vec2 | null {
+    if (nearX === undefined || nearY === undefined) {
+      const tiles = this.grid.tiles.filter((t) => t.room === room);
+      if (!tiles.length) return null;
+      const t = tiles[Math.floor(Math.random() * tiles.length)];
+      return { x: t.x, y: t.y };
+    }
+    let best: Vec2 | null = null;
+    let bestD = Infinity;
+    let fallback: Vec2 | null = null;
+    let fallD = Infinity;
+    for (const t of this.grid.tiles) {
+      if (t.room !== room) continue;
+      const d = Math.abs(t.x - nearX) + Math.abs(t.y - nearY);
+      if (d < fallD) {
+        fallD = d;
+        fallback = { x: t.x, y: t.y };
+      }
+      if (this.roomSeatTaken(t.x, t.y, self)) continue;
+      if (d < bestD) {
+        bestD = d;
+        best = { x: t.x, y: t.y };
+      }
+    }
+    return best ?? fallback;
+  }
+
+  /** Another creature already claimed this tile for a room job. */
+  private roomSeatTaken(x: number, y: number, self?: Creature): boolean {
+    for (const o of this.creatures) {
+      if (o === self || !o.alive || !o.jobTarget) continue;
+      if (
+        o.job !== JobType.Train &&
+        o.job !== JobType.Research &&
+        o.job !== JobType.Pray &&
+        o.job !== JobType.Gamble &&
+        o.job !== JobType.Craft &&
+        o.job !== JobType.Guard &&
+        o.job !== JobType.Eat &&
+        o.job !== JobType.Haul &&
+        o.job !== JobType.Sleep &&
+        o.job !== JobType.DragWounded &&
+        o.job !== JobType.DragPrisoner
+      ) {
+        continue;
+      }
+      if (o.jobTarget.x === x && o.jobTarget.y === y) return true;
+    }
+    return false;
   }
 
   private releaseBed(c: Creature): void {
@@ -7220,7 +7268,7 @@ export class Game {
       // Still walk there — food regenerates; low stock mentor once
       this.mentioneOnce('hatcheryHungry', MENTOR_LINES.hatcheryHungry);
     }
-    const t = this.findRoomTile(RoomType.Hatchery);
+    const t = this.findRoomTile(RoomType.Hatchery, c.x, c.y, c);
     if (!t) return false;
     c.job = JobType.Eat;
     c.jobTarget = t;
@@ -7477,7 +7525,7 @@ export class Game {
           }
           return;
         }
-        const prison = this.findRoomTile(RoomType.Prison);
+        const prison = this.findRoomTile(RoomType.Prison, c.x, c.y, c);
         if (!prison) {
           c.job = JobType.Idle;
           c.jobTarget = null;
@@ -7552,7 +7600,7 @@ export class Game {
           }
           return;
         }
-        const bed = this.findFreeOrOwnedBed(ko) ?? this.findRoomTile(RoomType.Lair);
+        const bed = this.findFreeOrOwnedBed(ko) ?? this.findRoomTile(RoomType.Lair, ko.x, ko.y, ko);
         if (!bed) {
           c.job = JobType.Idle;
           c.jobTarget = null;
@@ -9046,7 +9094,7 @@ export class Game {
   }
 
   private raiseBonewretch(x: number, y: number, mentor: string): void {
-    const gy = this.findRoomTile(RoomType.Graveyard);
+    const gy = this.findRoomTile(RoomType.Graveyard, x, y);
     const sx = gy?.x ?? x;
     const sy = gy?.y ?? y;
     const b = this.spawnCreature(CreatureKind.Bonewretch, sx, sy);
@@ -9063,7 +9111,7 @@ export class Game {
     const leeches = this.creatures.filter((c) => c.alive && c.kind === CreatureKind.Nightleech).length;
     const cap = Math.min(NIGHTLEECH_CAP, Math.floor(yard / GRAVEYARD_LEECH_TILES));
     if (fromHero && yard >= GRAVEYARD_LEECH_TILES && leeches < cap) {
-      const gy = this.findRoomTile(RoomType.Graveyard);
+      const gy = this.findRoomTile(RoomType.Graveyard, x, y);
       const sx = gy?.x ?? x;
       const sy = gy?.y ?? y;
       const n = this.spawnCreature(CreatureKind.Nightleech, sx, sy);
@@ -9145,7 +9193,7 @@ export class Game {
       if (!paying) c.hunger = Math.min(100, c.hunger + 6 * dt);
       if (!onPrison && !onTorture && hasPrison) {
         // Wandered? snap back
-        const p = this.findRoomTile(RoomType.Prison);
+        const p = this.findRoomTile(RoomType.Prison, c.x, c.y, c);
         if (p) {
           c.x = p.x;
           c.y = p.y;

@@ -6318,6 +6318,29 @@ export class Game {
     }
   }
 
+  /** Closest hero in aggro range, with a penalty when other minions already have that tile. */
+  private pickFightTarget(attacker: Creature, leash = 22): Creature | null {
+    let best: Creature | null = null;
+    let bestScore = Infinity;
+    for (const h of this.creatures) {
+      if (!h.alive || !h.isHero || h.knockedOut || h.isPrisoner) continue;
+      const dist = Math.hypot(h.x - attacker.x, h.y - attacker.y);
+      if (dist > leash) continue;
+      let crowd = 0;
+      for (const m of this.creatures) {
+        if (!m.alive || m.isHero || m.isWorker || m === attacker) continue;
+        if (m.job !== JobType.Fight || !m.jobTarget) continue;
+        if (m.jobTarget.x === h.x && m.jobTarget.y === h.y) crowd++;
+      }
+      const score = dist + crowd * 4;
+      if (score < bestScore) {
+        bestScore = score;
+        best = h;
+      }
+    }
+    return best;
+  }
+
   private assignJobs(dt: number): void {
     const workers = this.creatures.filter(
       (c) => c.alive && c.isWorker && !c.held && c.stunTimer <= 0 && c !== this.possessed
@@ -6711,9 +6734,7 @@ export class Game {
         continue;
       }
 
-      const enemy = this.creatures.find(
-        (h) => h.alive && h.isHero && !h.knockedOut && !h.isPrisoner && Math.hypot(h.x - c.x, h.y - c.y) < 22
-      );
+      const enemy = this.pickFightTarget(c);
       if (enemy) {
         if (c.bedKey) this.releaseBed(c);
         c.job = JobType.Fight;
@@ -6759,9 +6780,7 @@ export class Game {
       }
 
       if (c.job === JobType.Fight) {
-        const foe = this.creatures.find(
-          (h) => h.alive && h.isHero && !h.knockedOut && !h.isPrisoner
-        );
+        const foe = this.pickFightTarget(c, 36);
         if (foe) {
           c.jobTarget = { x: foe.x, y: foe.y };
           if (Math.hypot(c.x - foe.x, c.y - foe.y) > 1.2) {

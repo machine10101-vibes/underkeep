@@ -250,6 +250,8 @@ export const GRAVEYARD_LEECH_TILES = 6;
 export const NIGHTLEECH_CAP = 3;
 /** Each Temple tile raises the mana ceiling. Prayer still fills it. */
 export const TEMPLE_MANA_PER_TILE = 8;
+/** Fraction of a Heart blow soaked while a minion stands praying in the Temple. */
+export const TEMPLE_WARD_CUT = 0.3;
 /** Torture conversion % per second when a Thornwitch is in the chamber. */
 export const TORTURE_WITCH_RATE = 15;
 /** Combat Pit levels faster when two minions share the floor. */

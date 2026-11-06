@@ -84,6 +84,7 @@ Pass 16: the Ashreaver has its own silhouette — horned cinder colossus, ember 
 Pass 17: before the first raid, the wave line and the Mission stat name the missing step (claim the Portal, build a Lair, claim more land). The Mission stat stays visible on a phone.
 Pass 18: raids use a formation. Wave 1 is a column, wave 2 a wedge, wave 3 a line. Knights take the front slots, archers the rear.
 Pass 19: minions pick the nearest hero, and a second minion peels off when that hero is already crowded. They no longer all chase whichever hero happens to sit first in the list.
+Pass 20: a minion standing in the Temple wards the Heart. Each blow there loses 30% of its damage, and the strike rings a ward chime.
 
 ## Visual north star (YT X35cKEjvgrc from 2:20)
 Feel targets only — original IP art:

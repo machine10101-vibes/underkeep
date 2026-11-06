@@ -11,6 +11,7 @@ export type SoundId =
   | 'cavein'
   | 'horn'
   | 'heart'
+  | 'ward'
   | 'summon'
   | 'trap'
   | 'win'
@@ -172,6 +173,10 @@ export class KeeperAudio {
         break;
       case 'heart':
         this.tone(70, t, 0.2, 'sine', 0.15, 46);
+        break;
+      case 'ward':
+        this.tone(660, t, 0.12, 'sine', 0.08);
+        this.tone(990, t + 0.06, 0.16, 'triangle', 0.05);
         break;
       case 'summon':
         this.tone(110, t, 0.4, 'sawtooth', 0.09, 55);

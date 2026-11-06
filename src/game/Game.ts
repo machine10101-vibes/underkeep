@@ -34,6 +34,7 @@ import {
   SPIKE_COST,
   SpellId,
   TEMPLE_MANA_PER_TILE,
+  TEMPLE_WARD_CUT,
   TILE_SIZE,
   TRAINING_GOLD_PER_SEC,
   TORTURE_WITCH_RATE,
@@ -1564,6 +1565,7 @@ export class Game {
       }
       if (tile.room === RoomType.Temple) {
         room += ` · praying ${this.templePrayCount} · vault +${this.grid.countRoom(RoomType.Temple) * TEMPLE_MANA_PER_TILE}`;
+        if (this.templeWardActive()) room += ' · Heart ward';
       }
       if (tile.room === RoomType.CombatPit) {
         const pitters = this.creatures.filter(
@@ -3040,6 +3042,15 @@ export class Game {
   /** Research rank 3 — Dread Scholarship — cuts every mana spell by a fifth. */
   private manaPrice(base: number): number {
     return this.researchRank >= 3 ? Math.max(1, Math.round(base * 0.8)) : base;
+  }
+
+  /** A minion standing in the Temple soaks part of the next blow on the Heart. */
+  private templeWardActive(): boolean {
+    for (const c of this.creatures) {
+      if (!c.alive || c.isHero || c.job !== JobType.Pray) continue;
+      if (this.grid.get(c.x, c.y)?.room === RoomType.Temple) return true;
+    }
+    return false;
   }
 
   private maxMana(): number {
@@ -8121,9 +8132,16 @@ export class Game {
     if (Math.hypot(c.x - hx, c.y - hy) <= heartReach) {
       if (c.attackCooldown <= 0) {
         c.attackCooldown = c.kind === CreatureKind.HeroArcher ? 1.15 : 1.2;
-        // damage tracked via heartHp
-        this.heartHp -= c.damage;
-        this.audio.play('heart');
+        const raw = c.damage;
+        const soaked = this.templeWardActive() ? Math.max(1, Math.round(raw * TEMPLE_WARD_CUT)) : 0;
+        const dealt = Math.max(1, raw - soaked);
+        this.heartHp -= dealt;
+        this.audio.play(soaked > 0 ? 'ward' : 'heart');
+        if (soaked > 0) {
+          const hw = this.grid.tileToWorld(hx, hy);
+          this.floatWorld(hw.x, hw.z, `WARD ${soaked}`, '#ffe080');
+          this.mentioneOnce('templeWard', MENTOR_LINES.templeWard);
+        }
         this.renderer.addShake(c.kind === CreatureKind.HeroArcher ? 0.12 : 0.22);
         this.renderer.spawnFx(
           new THREE.Vector3(

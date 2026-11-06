@@ -29,6 +29,8 @@ import {
   PAYDAY_SULK_SEC,
   WAGER_SPIN_SEC,
   WAGER_STAKE,
+  PIT_BLOOD_MULT,
+  PIT_BLOOD_SEC,
   PIT_SPAR_MULT,
   PRISON_RANSOM_CAP,
   PRISON_RANSOM_CHAMPION,
@@ -1643,6 +1645,7 @@ export class Game {
         if (c && !c.isHero) {
           tip += ` · ${c.kind} mood ${Math.floor(c.mood)} · eff ${Math.round(c.workEfficiency() * 100)}%`;
           if (this.isSulking(c)) tip += ' · sulking';
+          if (c.bloodedFor > 0) tip += ' · bloodied';
         } else if (c && c.isHero && c.goldCarried > 0) {
           tip += ` · carrying ${Math.floor(c.goldCarried)} gold`;
         } else if (this.held) {
@@ -7387,6 +7390,7 @@ export class Game {
           if (!c.alive || c.isHero || c.held) continue;
           c.clampStats();
           if (c.sulkFor > 0) c.sulkFor = Math.max(0, c.sulkFor - dt);
+          if (c.bloodedFor > 0) c.bloodedFor = Math.max(0, c.bloodedFor - dt);
           let delta = 2.0 * dt; // gentle recover
           if (c.hunger > 45) delta -= 10 * dt * ((c.hunger - 45) / 55);
           if (c.sleepNeed > 40) delta -= 8 * dt * ((c.sleepNeed - 40) / 60);
@@ -8157,7 +8161,10 @@ export class Game {
         c.maxHp += 18;
         c.hp = c.maxHp;
         c.damage += 4;
+        c.bloodedFor = PIT_BLOOD_SEC;
         c.workTimer = 0;
+        this.floatWorld(c.wx, c.wz, 'BLOODIED', '#ff6040');
+        this.mentioneOnce('pitBlood', MENTOR_LINES.pitBlood);
         this.renderer.spawnFx(new THREE.Vector3(c.wx, 1.15, c.wz), 0xff6040, 0.75);
         this.renderer.spawnFx(new THREE.Vector3(c.wx, 0.7, c.wz), 0xffaa66, 0.45);
         this.hud.sayNow(
@@ -8966,7 +8973,8 @@ export class Game {
     const target = targets[0];
     c.attackPulse = 1;
     c.faceToward(target.wx, target.wz);
-    let dmg = c.damage * (0.95 + Math.random() * 0.25) * levelBonus * prayerMul * taliMul;
+    const bloodMul = !c.isHero && c.bloodedFor > 0 ? PIT_BLOOD_MULT : 1;
+    let dmg = c.damage * (0.95 + Math.random() * 0.25) * levelBonus * prayerMul * taliMul * bloodMul;
     if (c.kind === CreatureKind.Skitterwing) dmg *= 0.72;
     if (c.kind === CreatureKind.Ashreaver) dmg *= 1.05;
     const rival = this.rivalKind(c.kind);

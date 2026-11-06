@@ -94,6 +94,7 @@ Pass 26: minions take the nearest open seat in a room (Training, Pit, Library, T
 Pass 27: a short payday makes paid minions sulk for 40 seconds — no training, prayer, gambling, research, or guard post. Mood climbs at half speed. A second short purse while they are still sulking sends the lowest-mood minion out. Ashreaver stays. A backwards frame step no longer rewinds the clock.
 Pass 28: Library rank 4 is Grave Rite. A Nightleech standing in the Graveyard regains 8 health a second. Scholarship still cuts mana spells from rank 3. Starved captives stay Bonewretches.
 Pass 29: the Wagerden stakes 8 gold a spin. A win pays double and lifts mood. A loss keeps the stake and sours them. An empty purse or a full Treasury closes the table. Mood no longer climbs for free.
+Pass 30: a Combat Pit level leaves the minion bloodied for 20 seconds. Strikes in that window hit 20% harder. The hover reads "bloodied" until it fades.
 
 ## Visual north star (YT X35cKEjvgrc from 2:20)
 Feel targets only — original IP art:

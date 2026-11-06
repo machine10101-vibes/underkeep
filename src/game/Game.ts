@@ -5960,6 +5960,7 @@ export class Game {
       this.renderer.update(dt);
       const hw = this.grid.tileToWorld(this.grid.heartPos.x, this.grid.heartPos.y);
       this.renderer.setHeartGold(this.gold, hw.x, hw.z);
+      this.renderer.setHeartWard(this.templeWardActive());
       this.hud.update(dt);
       // Pass 7.4 — prayer buff decay + temple pray count
       this.templePrayCount = 0;

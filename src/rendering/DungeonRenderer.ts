@@ -97,6 +97,7 @@ export class DungeonRenderer {
     heartLight?: THREE.PointLight;
     heartCrown?: THREE.Group;
   }) | null = null;
+  private heartWardRing: THREE.Mesh | null = null;
   private dust: THREE.Points;
   private markerMesh: THREE.Mesh;
   private selectRing: THREE.Mesh;
@@ -870,6 +871,23 @@ export class DungeonRenderer {
     this.keeperHand.rotation.y = grabbing ? 0.35 : 0.15;
   }
 
+  /** Gold ring around the Heart while a minion stands praying in the Temple. */
+  setHeartWard(active: boolean): void {
+    const heart = this.heartGroup;
+    if (!heart) return;
+    if (!this.heartWardRing || this.heartWardRing.parent !== heart) {
+      const ring = new THREE.Mesh(
+        new THREE.TorusGeometry(1.15, 0.045, 8, 28),
+        new THREE.MeshBasicMaterial({ color: 0xffe080, transparent: true, opacity: 0.8 })
+      );
+      ring.rotation.x = Math.PI / 2;
+      ring.position.y = 0.38;
+      heart.add(ring);
+      this.heartWardRing = ring;
+    }
+    this.heartWardRing.visible = active;
+  }
+
   /** Gold piles around the Heart grow with stored gold — no terrain rebuild. */
   setHeartGold(amount: number, hx: number, hz: number): void {
     if (this.goldHoard.children.length === 0) {
@@ -1138,6 +1156,12 @@ export class DungeonRenderer {
       this.heartGroup.rotation.y += dt * 0.3;
       if (this.heartGroup.heartCrown) {
         this.heartGroup.heartCrown.rotation.y -= dt * 0.45;
+      }
+      if (this.heartWardRing?.visible) {
+        const mat = this.heartWardRing.material as THREE.MeshBasicMaterial;
+        mat.opacity = 0.45 + Math.sin(this.clock * 3.2) * 0.35;
+        const s = 1 + Math.sin(this.clock * 2) * 0.04;
+        this.heartWardRing.scale.setScalar(s);
       }
     }
     this.dust.rotation.y += dt * 0.012;

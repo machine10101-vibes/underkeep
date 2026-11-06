@@ -637,6 +637,7 @@ export const MENTOR_LINES = {
   gateCannotSell: "The Hero Gate is not yours to sell. Meet them in front of it.",
   heroGate: "Heroes pour through the Hero Gate. It is the mouth of every raid.",
   cleft: "This is the Cleft. The Hero Gate stands east of the Heart. The north is shut.",
+  stair: "This is the Stair. The Hero Gate stands south of the Heart. The north is shut.",
   waveShape: "They come in %p.",
   portalClaimed: "The Portal is yours. Beds and chickens decide who crosses. No Lair, and the veil stays shut.",
   portalSack: "Back through the veil. Wasteful — but the Portal does not argue.",

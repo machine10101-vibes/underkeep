@@ -172,7 +172,7 @@ export const WAGER_STAKE = 8;
 export const WAGER_SPIN_SEC = 3.2;
 export const HEART_MAX_HP = 500;
 /** Survive this many hero waves to win (or hit gold threshold). */
-export type MapLayout = 'basin' | 'cleft';
+export type MapLayout = 'basin' | 'cleft' | 'stair';
 
 export const WIN_WAVES = 3;
 /**

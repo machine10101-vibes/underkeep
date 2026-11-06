@@ -9,7 +9,7 @@ export class Grid {
   portalPos: Vec2 = { x: 0, y: 0 };
   /** Approach arch the hero parties march through. */
   gatePos: Vec2 = { x: 0, y: 0 };
-  /** Basin keeps the north road. The Cleft opens east. */
+  /** Basin opens north, the Cleft east, the Stair south. */
   layout: MapLayout = 'basin';
   /** One step from the gate toward the Heart. */
   gateForward: Vec2 = { x: 0, y: 1 };
@@ -72,14 +72,30 @@ export class Grid {
   private pickLayout(): MapLayout {
     try {
       const forced = localStorage.getItem('underkeep-layout');
-      if (forced === 'basin' || forced === 'cleft') {
+      if (forced === 'basin' || forced === 'cleft' || forced === 'stair') {
         localStorage.removeItem('underkeep-layout');
         return forced;
       }
     } catch {
       /* private mode */
     }
-    return Math.random() < 0.5 ? 'cleft' : 'basin';
+    const roll = Math.random();
+    if (roll < 1 / 3) return 'stair';
+    if (roll < 2 / 3) return 'cleft';
+    return 'basin';
+  }
+
+  /** Far tile of the starter road, and the chamber tile that opens onto it. */
+  private approach(): { gate: Vec2; mouthDx: number; mouthDy: number } {
+    const cx = this.heartPos.x;
+    const cy = this.heartPos.y;
+    if (this.layout === 'cleft') {
+      return { gate: { x: Math.min(this.width - 4, cx + 8), y: cy }, mouthDx: 3, mouthDy: 0 };
+    }
+    if (this.layout === 'stair') {
+      return { gate: { x: cx, y: Math.min(this.height - 4, cy + 8) }, mouthDx: 0, mouthDy: 3 };
+    }
+    return { gate: { x: cx, y: Math.max(3, cy - 8) }, mouthDx: 0, mouthDy: -3 };
   }
 
   private generate(): void {
@@ -149,8 +165,8 @@ export class Grid {
           t.kind = TileKind.Claimed;
           t.claimedProgress = 1;
         } else if (dist === 3) {
-          const mouth =
-            this.layout === 'cleft' ? dx === 3 && dy === 0 : dx === 0 && dy === -3;
+          const approach = this.approach();
+          const mouth = dx === approach.mouthDx && dy === approach.mouthDy;
           if (mouth) {
             t.kind = TileKind.Claimed;
             t.claimedProgress = 1;
@@ -159,31 +175,9 @@ export class Grid {
       }
     }
 
-    if (this.layout === 'cleft') {
-      for (let x = cx + 4; x <= cx + 8; x++) {
-        for (let y = cy - 1; y <= cy + 1; y++) {
-          const t = this.get(x, y);
-          if (t && t.kind !== TileKind.Heart) {
-            t.kind = TileKind.Claimed;
-            t.claimedProgress = 1;
-            t.goldAmount = 0;
-            t.fortified = false;
-          }
-        }
-      }
-    } else {
-      for (let y = cy - 8; y < cy - 3; y++) {
-        for (let x = cx - 1; x <= cx + 1; x++) {
-          const t = this.get(x, y);
-          if (t && t.kind !== TileKind.Heart) {
-            t.kind = TileKind.Claimed;
-            t.claimedProgress = 1;
-            t.goldAmount = 0;
-            t.fortified = false;
-          }
-        }
-      }
-    }
+    if (this.layout === 'cleft') this.claimRoad(cx + 4, cy - 1, cx + 8, cy + 1);
+    else if (this.layout === 'stair') this.claimRoad(cx - 1, cy + 4, cx + 1, cy + 8);
+    else this.claimRoad(cx - 1, cy - 8, cx + 1, cy - 4);
 
     // Guaranteed gold vein on diggable faces adjacent to the starting claimed area
     // (south + east of heart) so new games always show bright gold without wandering.
@@ -280,16 +274,33 @@ export class Grid {
     this.portalPos = fallback;
   }
 
+  /** Claim a rectangular starter road, punching rock so the gate cannot be buried. */
+  private claimRoad(x0: number, y0: number, x1: number, y1: number): void {
+    const xa = Math.min(x0, x1);
+    const xb = Math.max(x0, x1);
+    const ya = Math.min(y0, y1);
+    const yb = Math.max(y0, y1);
+    for (let y = ya; y <= yb; y++) {
+      for (let x = xa; x <= xb; x++) {
+        const t = this.get(x, y);
+        if (t && t.kind !== TileKind.Heart) {
+          t.kind = TileKind.Claimed;
+          t.claimedProgress = 1;
+          t.goldAmount = 0;
+          t.fortified = false;
+        }
+      }
+    }
+  }
+
   /**
    * The Hero Gate sits at the mouth of the starter corridor.
-   * Basin: north. The Cleft: east. Waves enter through it.
+   * Basin: north. The Cleft: east. The Stair: south.
    */
   private placeHeroGate(): void {
-    const x =
-      this.layout === 'cleft'
-        ? Math.min(this.width - 4, this.heartPos.x + 8)
-        : this.heartPos.x;
-    const y = this.layout === 'cleft' ? this.heartPos.y : Math.max(3, this.heartPos.y - 8);
+    const { gate } = this.approach();
+    const x = gate.x;
+    const y = gate.y;
     const t = this.get(x, y);
     if (!t || t.kind === TileKind.Heart) {
       this.aimGate();
@@ -318,11 +329,9 @@ export class Grid {
       this.aimGate();
       return;
     }
-    const x =
-      this.layout === 'cleft'
-        ? Math.min(this.width - 4, this.heartPos.x + 8)
-        : this.heartPos.x;
-    const y = this.layout === 'cleft' ? this.heartPos.y : Math.max(3, this.heartPos.y - 8);
+    const { gate } = this.approach();
+    const x = gate.x;
+    const y = gate.y;
     const t = this.get(x, y);
     if (
       t &&

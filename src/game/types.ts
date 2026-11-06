@@ -176,6 +176,64 @@ export const HERO_WAVES: CreatureKind[][] = [
   [CreatureKind.HeroKnight, CreatureKind.HeroArcher, CreatureKind.HeroKnight],
   [CreatureKind.HeroKnight, CreatureKind.HeroArcher, CreatureKind.HeroArcher, CreatureKind.HeroKnight],
 ];
+
+/** Where a party stands at the gate. Offsets are tiles south of the arch, toward the Heart. */
+export interface HeroPattern {
+  id: string;
+  label: string;
+  knight: Array<[number, number]>;
+  archer: Array<[number, number]>;
+}
+
+export const HERO_PATTERNS: HeroPattern[] = [
+  {
+    id: 'column',
+    label: 'a column',
+    knight: [
+      [0, 0],
+      [0, 2],
+      [0, 4],
+    ],
+    archer: [
+      [0, 1],
+      [0, 3],
+      [-1, 2],
+    ],
+  },
+  {
+    id: 'wedge',
+    label: 'a wedge',
+    knight: [
+      [0, 0],
+      [-1, 1],
+      [1, 1],
+    ],
+    archer: [
+      [-1, 2],
+      [1, 2],
+      [0, 2],
+    ],
+  },
+  {
+    id: 'line',
+    label: 'a line',
+    knight: [
+      [-1, 0],
+      [0, 0],
+      [1, 0],
+    ],
+    archer: [
+      [-1, 1],
+      [0, 1],
+      [1, 1],
+    ],
+  },
+];
+
+export function heroPatternForWave(waveNum: number): HeroPattern {
+  const i = Math.min(HERO_PATTERNS.length - 1, Math.max(0, waveNum - 1));
+  return HERO_PATTERNS[i];
+}
 /** First party never before this many seconds, even if the keep is ready. */
 export const FIRST_WAVE_MIN_TIME = 240;
 /** Seconds of warning after the keep is ready (Portal + Lair, or the fallback). */

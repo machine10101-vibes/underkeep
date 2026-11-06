@@ -18,6 +18,7 @@ import {
   GRAVEYARD_LEECH_TILES,
   HEART_MAX_HP,
   HERO_WAVES,
+  heroPatternForWave,
   JobType,
   KIT_CAP,
   MarkType,
@@ -2543,7 +2544,8 @@ export class Game {
     }
     const next = this.wavesCleared + 1;
     const who = next >= WIN_WAVES ? 'Sir Brightbane' : next === 2 ? 'knights & archers' : 'a knight patrol';
-    return `${pace}Next wave ${this.formatWaveClock()} — ${who}`;
+    const shape = heroPatternForWave(next).label;
+    return `${pace}Next wave ${this.formatWaveClock()} — ${who}, ${shape}`;
   }
 
   private waveLineMode(): 'calm' | 'soon' | 'fight' | 'paused' {
@@ -9182,8 +9184,10 @@ export class Game {
     if (this.heroWaveTimer > 0) return;
     this.heroWaveSpawned = true;
     const waveNum = this.wavesCleared + 1;
-    if (waveNum >= WIN_WAVES) this.hud.sayNow(MENTOR_LINES.championWave);
-    else this.hud.sayNow(`${MENTOR_LINES.heroes} (Wave ${waveNum}/${WIN_WAVES})`);
+    const pattern = heroPatternForWave(waveNum);
+    const shapeLine = MENTOR_LINES.waveShape.replace('%p', pattern.label);
+    if (waveNum >= WIN_WAVES) this.hud.sayNow(`${MENTOR_LINES.championWave} ${shapeLine}`);
+    else this.hud.sayNow(`${MENTOR_LINES.heroes} (Wave ${waveNum}/${WIN_WAVES}) ${shapeLine}`);
     this.hud.say(MENTOR_LINES.heroes);
     this.audio.play('horn');
     this.renderer.addShake(waveNum >= WIN_WAVES ? 0.5 : 0.26);
@@ -9250,20 +9254,21 @@ export class Game {
       return h;
     };
     const party = HERO_WAVES[Math.min(HERO_WAVES.length - 1, Math.max(0, waveNum - 1))] ?? HERO_WAVES[0];
-    const slots: Array<[number, number]> = [
-      [0, 0],
-      [-1, 0],
-      [1, 0],
-      [0, 1],
-      [-1, 1],
-      [1, 1],
-    ];
-    party.forEach((kind, i) => {
-      const [ox, oy] = slots[i] ?? [0, 1];
-      spawnHero(kind, sx + ox, sy + oy);
-    });
+    const taken = new Set<string>();
+    const knightSlots = [...pattern.knight];
+    const archerSlots = [...pattern.archer];
+    const place = (kind: CreatureKind, ox: number, oy: number) => {
+      const spot = this.nearestWaveTile(sx + ox, sy + oy, taken);
+      spawnHero(kind, spot.x, spot.y);
+    };
+    for (const kind of party) {
+      const bag = kind === CreatureKind.HeroArcher ? archerSlots : knightSlots;
+      const slot = bag.shift() ?? [0, bag.length];
+      place(kind, slot[0], slot[1]);
+    }
     if (waveNum >= 2 && this.grid.countClaimed() >= 40) {
-      spawnHero(CreatureKind.HeroKnight, sx, sy + 2);
+      const slot = knightSlots.shift() ?? [0, 3];
+      place(CreatureKind.HeroKnight, slot[0], slot[1]);
     }
 
     if (waveNum >= WIN_WAVES) {
@@ -9280,6 +9285,27 @@ export class Game {
         this.hud.sayNow(MENTOR_LINES.championWave);
       }
     }
+  }
+
+  /** A formation slot, or the nearest free walkable tile if that square is walled. */
+  private nearestWaveTile(x: number, y: number, taken: Set<string>): { x: number; y: number } {
+    for (let r = 0; r < 4; r++) {
+      for (let oy = -r; oy <= r; oy++) {
+        for (let ox = -r; ox <= r; ox++) {
+          if (r !== 0 && Math.max(Math.abs(ox), Math.abs(oy)) !== r) continue;
+          const tx = x + ox;
+          const ty = y + oy;
+          const key = `${tx},${ty}`;
+          if (taken.has(key)) continue;
+          if (!this.grid.isWalkable(tx, ty)) continue;
+          taken.add(key);
+          return { x: tx, y: ty };
+        }
+      }
+    }
+    const fallback = { x, y };
+    taken.add(`${x},${y}`);
+    return fallback;
   }
 
   private checkHeart(): void {

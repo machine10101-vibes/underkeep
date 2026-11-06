@@ -82,6 +82,7 @@ Pass 14: the north arch is a Hero Gate. Raids enter through it. It cannot be dug
 Pass 15: Library rank 3 is Dread Scholarship — every mana spell costs a fifth less. A missed payday names the gold still owed.
 Pass 16: the Ashreaver has its own silhouette — horned cinder colossus, ember crown, slow stride.
 Pass 17: before the first raid, the wave line and the Mission stat name the missing step (claim the Portal, build a Lair, claim more land). The Mission stat stays visible on a phone.
+Pass 18: raids use a formation. Wave 1 is a column, wave 2 a wedge, wave 3 a line. Knights take the front slots, archers the rear.
 
 ## Visual north star (YT X35cKEjvgrc from 2:20)
 Feel targets only — original IP art:

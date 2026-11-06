@@ -636,6 +636,7 @@ export const MENTOR_LINES = {
   portalCannotSell: "The Portal cannot be sold or destroyed. It is a wound in the world, not a floor tile.",
   gateCannotSell: "The Hero Gate is not yours to sell. Meet them in front of it.",
   heroGate: "Heroes pour through the north arch. The Hero Gate is the mouth of every raid.",
+  waveShape: "They come in %p.",
   portalClaimed: "The Portal is yours. Beds and chickens decide who crosses. No Lair, and the veil stays shut.",
   portalSack: "Back through the veil. Wasteful — but the Portal does not argue.",
   needLair: "They will not come without a bed. Raise a Lair.",

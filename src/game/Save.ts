@@ -42,6 +42,8 @@ export interface SavedCreature {
   convertProgress?: number;
   /** Gold already paid from a Prison cell. */
   ransomPaid?: number;
+  /** Seconds left on a short-payday sulk. */
+  sulkFor?: number;
   /** Pass 8 — champion hero (Sir Brightbane) and scaled damage. */
   isChampion?: boolean;
   damage?: number;

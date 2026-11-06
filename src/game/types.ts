@@ -164,6 +164,8 @@ export const PORTAL_PER_TILE = PORTAL_EXTRA_CAP;
 export const TRAINING_GOLD_PER_SEC = 4;
 /** Payday interval (seconds). */
 export const PAYDAY_INTERVAL = 48;
+/** After a short purse, paid minions refuse training, prayer, and gambling. */
+export const PAYDAY_SULK_SEC = 40;
 export const HEART_MAX_HP = 500;
 /** Survive this many hero waves to win (or hit gold threshold). */
 export type MapLayout = 'basin' | 'cleft';

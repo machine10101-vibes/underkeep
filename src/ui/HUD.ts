@@ -716,6 +716,8 @@ export const MENTOR_LINES = {
   possessEnd: "Back in the Keeper's seat. The vessel blinks, confused but intact.",
   payday: "Payday! %g gold leaves the Treasury — wages keep moods from mutiny.",
   paydayFail: "Payday short %g gold (owed %d). Moods crash. Mint gold or expect desertions.",
+  paydaySulk: "The purse was short. They will not train, pray, or gamble until the next wage.",
+  paydayWalkout: "%n walked out. A second empty purse, and they were done.",
   heroesSoon: "Footsteps in the dark… heroes approach. Mark walls, set traps, rally fighters.",
   heroesImminent: "Steel at the gate! Heroes arrive any moment.",
   heroEngage: "Heroes clash with your minions — doors and traps earn their keep.",

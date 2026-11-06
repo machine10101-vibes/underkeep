@@ -256,6 +256,13 @@ export const TEMPLE_MANA_PER_TILE = 8;
 export const TEMPLE_WARD_CUT = 0.3;
 /** Torture conversion % per second when a Thornwitch is in the chamber. */
 export const TORTURE_WITCH_RATE = 15;
+/** Gold a captive drips per second while standing in a Prison, not the Torture chamber. */
+export const PRISON_RANSOM_PER_SEC = 4;
+export const PRISON_RANSOM_CAP: Partial<Record<CreatureKind, number>> = {
+  [CreatureKind.HeroKnight]: 80,
+  [CreatureKind.HeroArcher]: 48,
+};
+export const PRISON_RANSOM_CHAMPION = 140;
 /** Combat Pit levels faster when two minions share the floor. */
 export const PIT_SPAR_MULT = 1.35;
 

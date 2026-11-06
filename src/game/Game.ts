@@ -25,6 +25,9 @@ import {
   NIGHTLEECH_CAP,
   PAYDAY_INTERVAL,
   PIT_SPAR_MULT,
+  PRISON_RANSOM_CAP,
+  PRISON_RANSOM_CHAMPION,
+  PRISON_RANSOM_PER_SEC,
   POSSESS_COST,
   RALLY_COST,
   ROOM_COST,
@@ -604,6 +607,7 @@ export class Game {
           knockedOut: c.knockedOut,
           isPrisoner: c.isPrisoner,
           convertProgress: c.convertProgress,
+          ransomPaid: c.ransomPaid || undefined,
           isChampion: c.isChampion || undefined,
           damage: c.damage,
           ward: c.isChampion ? c.ward : undefined,
@@ -747,6 +751,7 @@ export class Game {
       c.knockedOut = !!sc.knockedOut;
       c.isPrisoner = !!sc.isPrisoner;
       c.convertProgress = sc.convertProgress ?? 0;
+      c.ransomPaid = sc.ransomPaid ?? 0;
       const jobs = Object.values(JobType) as string[];
       if (sc.job && jobs.includes(sc.job)) c.job = sc.job as JobType;
       const jt = sc.jobTarget;
@@ -1559,8 +1564,10 @@ export class Game {
         }
       }
       if (tile.room === RoomType.Prison) {
-        const n = this.creatures.filter((c) => c.alive && c.isPrisoner).length;
-        room += ` · prisoners ${n}`;
+        const held = this.creatures.filter((c) => c.alive && c.isPrisoner);
+        room += ` · prisoners ${held.length}`;
+        const owing = held.reduce((sum, c) => sum + Math.max(0, this.ransomCap(c) - c.ransomPaid), 0);
+        if (owing > 0) room += ` · ransom ${owing}g`;
       }
       if (tile.room === RoomType.Graveyard) {
         const yard = this.grid.countRoom(RoomType.Graveyard);
@@ -9082,6 +9089,32 @@ export class Game {
     );
   }
 
+  private ransomCap(c: Creature): number {
+    if (c.isChampion) return PRISON_RANSOM_CHAMPION;
+    return PRISON_RANSOM_CAP[c.kind] ?? 40;
+  }
+
+  /** A captive in a Prison cell pays gold until the purse is empty. Torture stops the drip. */
+  private dripRansom(c: Creature, dt: number): void {
+    const cap = this.ransomCap(c);
+    if (c.ransomPaid >= cap) return;
+    c.ransomAcc += dt;
+    if (c.ransomAcc < 1) return;
+    c.ransomAcc = 0;
+    const want = Math.min(PRISON_RANSOM_PER_SEC, cap - c.ransomPaid);
+    const got = this.addGold(want);
+    if (got <= 0) {
+      this.mentioneOnce('ransomFull', MENTOR_LINES.ransomFull);
+      return;
+    }
+    c.ransomPaid += got;
+    this.floatWorld(c.wx, c.wz, `+${got}g`, '#ffd24a');
+    if (c.ransomPaid >= cap) {
+      this.hud.sayNow(MENTOR_LINES.ransomPaid.replace('%g', String(cap)));
+      this.audio.play('gold');
+    }
+  }
+
   /** Prison hold, Torture conversion, Graveyard corpse → Bonewretch, starve path. */
   private updatePrisonEconomy(dt: number): void {
     const hasPrison = this.grid.countRoom(RoomType.Prison) > 0;
@@ -9101,10 +9134,10 @@ export class Game {
 
     for (const c of this.creatures) {
       if (!c.alive || !c.isPrisoner) continue;
-      // Starve over time in the cell
-      c.hunger = Math.min(100, c.hunger + 6 * dt);
       const onTorture = this.grid.get(c.x, c.y)?.room === RoomType.Torture;
       const onPrison = this.grid.get(c.x, c.y)?.room === RoomType.Prison;
+      const paying = onPrison && !onTorture && c.ransomPaid < this.ransomCap(c);
+      if (!paying) c.hunger = Math.min(100, c.hunger + 6 * dt);
       if (!onPrison && !onTorture && hasPrison) {
         // Wandered? snap back
         const p = this.findRoomTile(RoomType.Prison);
@@ -9116,6 +9149,7 @@ export class Game {
           c.wz = w.z;
         }
       }
+      if (onPrison && !onTorture) this.dripRansom(c, dt);
       // Conversion when Torture exists
       if (hasTorture) {
         const witch = onTorture && this.thornwitchInTorture();

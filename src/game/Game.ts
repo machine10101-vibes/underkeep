@@ -6091,7 +6091,10 @@ export class Game {
     const sx = Number.isFinite(c.x) ? c.x : tx;
     const sy = Number.isFinite(c.y) ? c.y : ty;
     if (!Number.isFinite(tx) || !Number.isFinite(ty)) return null;
-    return this.grid.findPath(sx, sy, tx, ty, this.pathOptsFor(c));
+    return (
+      this.grid.findPath(sx, sy, tx, ty, this.pathOptsFor(c)) ??
+      this.grid.findPathAdjacent(sx, sy, tx, ty, this.pathOptsFor(c))
+    );
   }
 
   private pathAdjacentFor(c: Creature, tx: number, ty: number): Vec2[] | null {

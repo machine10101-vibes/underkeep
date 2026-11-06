@@ -63,6 +63,8 @@ export class Creature {
   ransomPaid = 0;
   /** Seconds toward the next ransom coin. Not saved. */
   ransomAcc = 0;
+  /** Show the carry bag while a Prison purse still has coins. */
+  purseVisible = false;
   fleeTimer = 0;
   /** Temple prayer buff timer (seconds) — mood floor / soft combat edge. */
   prayerBuff = 0;
@@ -221,7 +223,7 @@ export class Creature {
         }
         if (this.pickaxe) this.pickaxe.visible = false;
         this.updateHealthFlower(time);
-        if (this.goldBag) this.goldBag.visible = this.goldCarried > 0;
+        if (this.goldBag) this.goldBag.visible = this.goldCarried > 0 || this.purseVisible;
         this.updateHpBar();
         return;
       }
@@ -235,6 +237,7 @@ export class Creature {
           this.selectRing.rotation.z = time * 1.2;
         }
         if (this.pickaxe) this.pickaxe.visible = false;
+        if (this.goldBag) this.goldBag.visible = this.goldCarried > 8 || this.purseVisible;
         this.updateHpBar();
         return;
       }
@@ -312,7 +315,7 @@ export class Creature {
       this.selectRing.visible = digging || this.held || this.selected;
       this.selectRing.rotation.z = time * 1.5;
     }
-    if (this.goldBag) this.goldBag.visible = this.goldCarried > 8;
+    if (this.goldBag) this.goldBag.visible = this.goldCarried > 8 || this.purseVisible;
     this.updateHealthFlower(time);
     if (this.tintPulse > 0) {
       this.tintPulse = Math.max(0, this.tintPulse - dt);

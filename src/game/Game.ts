@@ -9123,6 +9123,7 @@ export class Game {
     const hasPrison = this.grid.countRoom(RoomType.Prison) > 0;
     const hasTorture = this.grid.countRoom(RoomType.Torture) > 0;
     const hasGrave = this.grid.countRoom(RoomType.Graveyard) > 0;
+    for (const c of this.creatures) c.purseVisible = false;
 
     // Auto-snap nearby KO heroes onto Prison if standing on a Prison tile
     for (const c of this.creatures) {
@@ -9140,6 +9141,7 @@ export class Game {
       const onTorture = this.grid.get(c.x, c.y)?.room === RoomType.Torture;
       const onPrison = this.grid.get(c.x, c.y)?.room === RoomType.Prison;
       const paying = onPrison && !onTorture && c.ransomPaid < this.ransomCap(c);
+      c.purseVisible = paying;
       if (!paying) c.hunger = Math.min(100, c.hunger + 6 * dt);
       if (!onPrison && !onTorture && hasPrison) {
         // Wandered? snap back

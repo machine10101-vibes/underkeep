@@ -639,6 +639,7 @@ export const MENTOR_LINES = {
   cleft: "This is the Cleft. The Hero Gate stands east of the Heart. The north is shut.",
   stair: "This is the Stair. The Hero Gate stands south of the Heart. The north is shut.",
   waveShape: "They come in %p.",
+  flank: "A flanker peels off the Hero Gate. They are not in the formation.",
   portalClaimed: "The Portal is yours. Beds and chickens decide who crosses. No Lair, and the veil stays shut.",
   portalSack: "Back through the veil. Wasteful — but the Portal does not argue.",
   needLair: "They will not come without a bed. Raise a Lair.",

@@ -96,6 +96,7 @@ Pass 28: Library rank 4 is Grave Rite. A Nightleech standing in the Graveyard re
 Pass 29: the Wagerden stakes 8 gold a spin. A win pays double and lifts mood. A loss keeps the stake and sours them. An empty purse or a full Treasury closes the table. Mood no longer climbs for free.
 Pass 30: a Combat Pit level leaves the minion bloodied for 20 seconds. Strikes in that window hit 20% harder. The hover reads "bloodied" until it fades.
 Pass 31: new games may be the Stair. The Hero Gate stands south of the Heart and the north road is shut. Basin and the Cleft are unchanged. Old saves stay the layout they were made with.
+Pass 32: a developed keep (40 claimed tiles, wave 2 or later) sends one extra knight as a flanker, off the formation and to the party's right. Sir Brightbane is still a knight from the main party. The wave line names the flanker.
 
 ## Visual north star (YT X35cKEjvgrc from 2:20)
 Feel targets only — original IP art:

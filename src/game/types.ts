@@ -242,6 +242,12 @@ export function heroPatternForWave(waveNum: number): HeroPattern {
   const i = Math.min(HERO_PATTERNS.length - 1, Math.max(0, waveNum - 1));
   return HERO_PATTERNS[i];
 }
+
+/**
+ * Where a developed keep's extra knight stands. On the party's right, two
+ * steps toward the Heart — beside the road, not in the front rank.
+ */
+export const FLANK_SLOT: [number, number] = [1, 2];
 /** First party never before this many seconds, even if the keep is ready. */
 export const FIRST_WAVE_MIN_TIME = 240;
 /** Seconds of warning after the keep is ready (Portal + Lair, or the fallback). */

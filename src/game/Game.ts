@@ -20,6 +20,7 @@ import {
   RESEARCH_CAP,
   HEART_MAX_HP,
   HERO_WAVES,
+  FLANK_SLOT,
   heroPatternForWave,
   JobType,
   KIT_CAP,
@@ -2585,7 +2586,8 @@ export class Game {
     const next = this.wavesCleared + 1;
     const who = next >= WIN_WAVES ? 'Sir Brightbane' : next === 2 ? 'knights & archers' : 'a knight patrol';
     const shape = heroPatternForWave(next).label;
-    return `${pace}Next wave ${this.formatWaveClock()} — ${who}, ${shape}`;
+    const flank = next >= 2 && this.grid.countClaimed() >= 40 ? ', plus a flanker' : '';
+    return `${pace}Next wave ${this.formatWaveClock()} — ${who}, ${shape}${flank}`;
   }
 
   private waveLineMode(): 'calm' | 'soon' | 'fight' | 'paused' {
@@ -9540,13 +9542,34 @@ export class Game {
       const slot = bag.shift() ?? [0, bag.length];
       place(kind, slot[0], slot[1]);
     }
+    const partyKnights = this.creatures.filter(
+      (h) => h.alive && h.isHero && h.kind === CreatureKind.HeroKnight
+    );
     if (waveNum >= 2 && this.grid.countClaimed() >= 40) {
-      const slot = knightSlots.shift() ?? [0, 3];
-      place(CreatureKind.HeroKnight, slot[0], slot[1]);
+      const at = this.formationTile(sx, sy, FLANK_SLOT[0], FLANK_SLOT[1]);
+      const flankTile = this.grid.get(at.x, at.y);
+      if (
+        flankTile &&
+        !flankTile.fortified &&
+        flankTile.kind !== TileKind.Heart &&
+        flankTile.kind !== TileKind.Rock &&
+        flankTile.kind !== TileKind.HeroGate &&
+        (flankTile.kind === TileKind.Earth || flankTile.kind === TileKind.Gold || flankTile.kind === TileKind.Wall)
+      ) {
+        flankTile.kind = TileKind.Dirt;
+        flankTile.goldAmount = 0;
+        flankTile.digProgress = 0;
+        flankTile.mark = MarkType.None;
+        this.gridDirty = true;
+      }
+      place(CreatureKind.HeroKnight, FLANK_SLOT[0], FLANK_SLOT[1]);
+      this.hud.say(MENTOR_LINES.flank);
     }
 
     if (waveNum >= WIN_WAVES) {
-      const champ = [...this.creatures].reverse().find((h) => h.alive && h.isHero && h.kind === CreatureKind.HeroKnight);
+      const champ =
+        [...partyKnights].reverse().find((h) => h.alive && h.kind === CreatureKind.HeroKnight) ??
+        [...this.creatures].reverse().find((h) => h.alive && h.isHero && h.kind === CreatureKind.HeroKnight);
       if (champ && !champ.isChampion) {
         champ.isChampion = true;
         champ.level = Math.max(champ.level, 4);

@@ -739,6 +739,7 @@ export const MENTOR_LINES = {
   templeBuilt: "Temple raised. Its stones raise your mana ceiling, and prayer wards the Heart.",
   templeWard: "The Temple drinks the blow. Prayer soaks part of every strike on the Heart.",
   ransomPaid: "The captive's purse is empty. %g gold, and not a coin more. Torture them if you want a minion.",
+  confess: "The captive breaks. The next raid waits %s seconds longer.",
   ransomFull: "The Treasury cannot hold the ransom. Spend gold, or the captive keeps it.",
   heroKnocked: "Hero knocked out! Drag them to Prison before they fade.",
   prisonerHeld: "Captive secured in the Prison. Starve them… or convert them.",

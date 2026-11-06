@@ -97,6 +97,7 @@ Pass 29: the Wagerden stakes 8 gold a spin. A win pays double and lifts mood. A 
 Pass 30: a Combat Pit level leaves the minion bloodied for 20 seconds. Strikes in that window hit 20% harder. The hover reads "bloodied" until it fades.
 Pass 31: new games may be the Stair. The Hero Gate stands south of the Heart and the north road is shut. Basin and the Cleft are unchanged. Old saves stay the layout they were made with.
 Pass 32: a developed keep (40 claimed tiles, wave 2 or later) sends one extra knight as a flanker, off the formation and to the party's right. Sir Brightbane is still a knight from the main party. The wave line names the flanker.
+Pass 33: a Thornwitch in the Torture chamber breaks a captive in 4 seconds. The next raid waits 20 seconds longer. Each captive does it once. Prison ransom is unchanged, and conversion still finishes.
 
 ## Visual north star (YT X35cKEjvgrc from 2:20)
 Feel targets only — original IP art:

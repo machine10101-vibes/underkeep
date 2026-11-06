@@ -35,6 +35,8 @@ import {
   PIT_SPAR_MULT,
   PRISON_RANSOM_CAP,
   PRISON_RANSOM_CHAMPION,
+  CONFESS_DELAY,
+  CONFESS_SEC,
   PRISON_RANSOM_PER_SEC,
   POSSESS_COST,
   RALLY_COST,
@@ -439,6 +441,7 @@ export class Game {
     this.won = false;
     this.mentored = new Set();
     this.wageAcc = 0;
+    this.raidDelay = 0;
     this.heartHp = HEART_MAX_HP;
     this.restoredFromSave = false;
     this.hatcheryFood = 0;
@@ -618,6 +621,7 @@ export class Game {
           isPrisoner: c.isPrisoner,
           convertProgress: c.convertProgress,
           ransomPaid: c.ransomPaid || undefined,
+          confessed: c.confessed || undefined,
           sulkFor: c.sulkFor > 0 ? c.sulkFor : undefined,
           isChampion: c.isChampion || undefined,
           damage: c.damage,
@@ -634,6 +638,7 @@ export class Game {
       portalCooldown: this.portalCooldown,
       time: this.time,
       wageAcc: this.wageAcc,
+      raidDelay: this.raidDelay || undefined,
       mentored: [...this.mentored],
       gameOver: this.gameOver,
       won: this.won,
@@ -704,6 +709,7 @@ export class Game {
     this.portalCooldown = data.portalCooldown ?? 0;
     this.time = data.time ?? 0;
     this.wageAcc = data.wageAcc ?? 0;
+    this.raidDelay = data.raidDelay ?? 0;
     this.mentored = new Set(data.mentored ?? []);
     this.gameOver = !!data.gameOver;
     this.won = !!data.won;
@@ -763,6 +769,7 @@ export class Game {
       c.isPrisoner = !!sc.isPrisoner;
       c.convertProgress = sc.convertProgress ?? 0;
       c.ransomPaid = sc.ransomPaid ?? 0;
+      c.confessed = !!sc.confessed;
       c.sulkFor = sc.sulkFor ?? 0;
       const jobs = Object.values(JobType) as string[];
       if (sc.job && jobs.includes(sc.job)) c.job = sc.job as JobType;
@@ -1586,6 +1593,12 @@ export class Game {
         room += ` · prisoners ${held.length}`;
         const owing = held.reduce((sum, c) => sum + Math.max(0, this.ransomCap(c) - c.ransomPaid), 0);
         if (owing > 0) room += ` · ransom ${owing}g`;
+      }
+      if (tile.room === RoomType.Torture) {
+        const breaking = this.creatures.filter(
+          (c) => c.alive && c.isPrisoner && !c.confessed && this.grid.get(c.x, c.y)?.room === RoomType.Torture
+        ).length;
+        if (breaking > 0) room += ` · breaking ${breaking}`;
       }
       if (tile.room === RoomType.Casino) {
         room += ` · stake ${WAGER_STAKE}g`;
@@ -6072,6 +6085,8 @@ export class Game {
   }
 
   private wageAcc = 0;
+  /** Seconds to add to the raid clock once no heroes are in the halls. */
+  private raidDelay = 0;
   private payWages(dt: number): void {
     this.wageAcc += dt;
     if (this.paydayToastCooldown > 0) this.paydayToastCooldown -= dt;
@@ -9290,6 +9305,22 @@ export class Game {
     }
   }
 
+  /** A broken captive pushes the next raid back. The clock takes it between waves. */
+  private grantConfession(c: Creature): void {
+    if (c.confessed) return;
+    c.confessed = true;
+    this.raidDelay += CONFESS_DELAY;
+    this.floatWorld(c.wx, c.wz, `+${CONFESS_DELAY}s`, '#c080ff');
+    this.hud.sayNow(MENTOR_LINES.confess.replace('%s', String(CONFESS_DELAY)));
+    this.audio.play('spell');
+  }
+
+  private applyRaidDelay(): void {
+    if (this.heroWaveSpawned || this.raidDelay <= 0) return;
+    this.heroWaveTimer += this.raidDelay;
+    this.raidDelay = 0;
+  }
+
   /** Rank 4 — a Nightleech on Graveyard tiles closes their own wounds. */
   private updateGraveRite(dt: number): void {
     if (this.researchRank < RESEARCH_CAP || dt <= 0) return;
@@ -9346,6 +9377,10 @@ export class Game {
         }
       }
       if (onPrison && !onTorture) this.dripRansom(c, dt);
+      if (onTorture && !c.confessed && this.thornwitchInTorture()) {
+        c.confessAcc += dt;
+        if (c.confessAcc >= CONFESS_SEC) this.grantConfession(c);
+      }
       // Conversion when Torture exists
       if (hasTorture) {
         const witch = onTorture && this.thornwitchInTorture();
@@ -9396,6 +9431,7 @@ export class Game {
         return c.timer < 40;
       });
     }
+    this.applyRaidDelay();
   }
 
   /** First raid waits for a real keep (or a long fallback), not the opening excavate. */

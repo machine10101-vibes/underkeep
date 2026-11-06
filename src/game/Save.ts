@@ -42,6 +42,8 @@ export interface SavedCreature {
   convertProgress?: number;
   /** Gold already paid from a Prison cell. */
   ransomPaid?: number;
+  /** Captive already confessed and delayed a raid. */
+  confessed?: boolean;
   /** Seconds left on a short-payday sulk. */
   sulkFor?: number;
   /** Pass 8 — champion hero (Sir Brightbane) and scaled damage. */
@@ -116,6 +118,8 @@ export interface SaveData {
   goldStolen?: number;
   /** Basin (north gate), the Cleft (east), or the Stair (south). Old saves are the Basin. */
   layout?: 'basin' | 'cleft' | 'stair';
+  /** Seconds of raid delay waiting for the clock, if a wave is in the halls. */
+  raidDelay?: number;
 }
 
 function finiteNum(n: unknown): n is number {

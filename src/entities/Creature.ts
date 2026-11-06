@@ -50,6 +50,10 @@ export class Creature {
   sulkFor = 0;
   /** Seconds left on the Combat Pit bloodied bonus. */
   bloodedFor = 0;
+  /** Seconds a Thornwitch has worked this captive. Not saved. */
+  confessAcc = 0;
+  /** This captive already delayed a raid. */
+  confessed = false;
   /** Fired once while workEfficiency is below sluggish threshold. */
   efficiencyWarned = false;
   /** Seconds of slap-driven work haste (workers keep their job). */

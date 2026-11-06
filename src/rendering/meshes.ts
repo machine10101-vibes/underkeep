@@ -634,6 +634,13 @@ export function makeCreatureMesh(color: number, scale: number, kind: string): TH
     bag.visible = false;
     g.add(bag);
     (g as THREE.Group & { goldBag?: THREE.Object3D }).goldBag = bag;
+  } else {
+    const bag = makeGoldBag();
+    bag.position.set(0.22, 0.42, -0.18);
+    bag.scale.setScalar(0.85);
+    bag.visible = false;
+    g.add(bag);
+    (g as THREE.Group & { goldBag?: THREE.Object3D }).goldBag = bag;
   }
 
   g.scale.setScalar(scale);

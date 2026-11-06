@@ -89,6 +89,7 @@ Pass 21: the ward is a gold ring around the Heart while that prayer holds. It fa
 Pass 22: new games are the Basin (Hero Gate north) or the Cleft (Hero Gate east, the north walled). Formations face the Heart either way. Old saves stay the Basin.
 Pass 23: a captive standing in the Prison drips a ransom (knights 80, archers 48, Sir Brightbane 140) and does not starve until the purse is empty. Torture stops the coins. A full Treasury holds the purse.
 Pass 24: when the goal tile itself cannot be reached, a creature walks to the nearest open neighbor instead of standing still.
+Pass 25: anyone carrying gold wears a bag, and a Prison captive wears it while the ransom purse still has coins.
 
 ## Visual north star (YT X35cKEjvgrc from 2:20)
 Feel targets only — original IP art:

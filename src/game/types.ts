@@ -272,6 +272,10 @@ export const TEMPLE_MANA_PER_TILE = 8;
 export const TEMPLE_WARD_CUT = 0.3;
 /** Torture conversion % per second when a Thornwitch is in the chamber. */
 export const TORTURE_WITCH_RATE = 15;
+/** Seconds a Thornwitch needs on a Torture tile to break one captive. */
+export const CONFESS_SEC = 4;
+/** Seconds added to the next raid clock when a captive breaks. */
+export const CONFESS_DELAY = 20;
 /** Gold a captive drips per second while standing in a Prison, not the Torture chamber. */
 export const PRISON_RANSOM_PER_SEC = 4;
 export const PRISON_RANSOM_CAP: Partial<Record<CreatureKind, number>> = {

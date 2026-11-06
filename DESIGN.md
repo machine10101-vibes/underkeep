@@ -85,6 +85,7 @@ Pass 17: before the first raid, the wave line and the Mission stat name the miss
 Pass 18: raids use a formation. Wave 1 is a column, wave 2 a wedge, wave 3 a line. Knights take the front slots, archers the rear.
 Pass 19: minions pick the nearest hero, and a second minion peels off when that hero is already crowded. They no longer all chase whichever hero happens to sit first in the list.
 Pass 20: a minion standing in the Temple wards the Heart. Each blow there loses 30% of its damage, and the strike rings a ward chime.
+Pass 21: the ward is a gold ring around the Heart while that prayer holds. It fades when the minion leaves the Temple.
 
 ## Visual north star (YT X35cKEjvgrc from 2:20)
 Feel targets only — original IP art:

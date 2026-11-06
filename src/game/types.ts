@@ -248,6 +248,10 @@ export const FIRST_WAVE_FALLBACK = 480;
 export const GOLD_WIN_THRESHOLD = 2500;
 /** Max manufactured kits stored from Workshop. */
 export const KIT_CAP = 5;
+/** Library research stops here. Rank 4 is Grave Rite. */
+export const RESEARCH_CAP = 4;
+/** HP per second a Nightleech regains on a Graveyard tile once Grave Rite is known. */
+export const GRAVE_RITE_HEAL = 8;
 /** Hero corpses in a yard this large rise as Nightleeches. Smaller yards still make Bonewretches. */
 export const GRAVEYARD_LEECH_TILES = 6;
 /** One Nightleech per mature yard, never more than this. */

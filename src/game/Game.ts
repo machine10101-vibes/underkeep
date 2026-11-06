@@ -15,7 +15,9 @@ import {
   DOOR_COST,
   DoorState,
   GOLD_WIN_THRESHOLD,
+  GRAVE_RITE_HEAL,
   GRAVEYARD_LEECH_TILES,
+  RESEARCH_CAP,
   HEART_MAX_HP,
   HERO_WAVES,
   heroPatternForWave,
@@ -224,6 +226,7 @@ export class Game {
   /** Research progress 0–100 per rank; unlocks spell potency. */
   private researchProgress = 0;
   private researchRank = 0;
+  private graveRiteAcc = 0;
   private healUnlocked = false;
   private studio: ModelStudio | null = null;
 
@@ -1563,7 +1566,13 @@ export class Game {
           if (bonus > 0) room += ` · +${Math.round(bonus * 100)}% eff`;
         }
         if (tile.room === RoomType.Library) {
-          room += ` · rank ${this.researchRank}${this.researchRank >= 3 ? ' · spells −20%' : ''}`;
+          room += ` · rank ${this.researchRank}${
+            this.researchRank >= RESEARCH_CAP
+              ? ' · grave rite'
+              : this.researchRank >= 3
+                ? ' · spells −20%'
+                : ''
+          }`;
         }
       }
       if (tile.room === RoomType.Prison) {
@@ -1576,6 +1585,7 @@ export class Game {
         const yard = this.grid.countRoom(RoomType.Graveyard);
         room += ` · corpses ${this.corpses.length}`;
         room += yard >= GRAVEYARD_LEECH_TILES ? ' · drinks heroes' : ` · ${GRAVEYARD_LEECH_TILES - yard} to drink`;
+        if (this.researchRank >= RESEARCH_CAP) room += ' · rite mends leeches';
       }
       if (tile.room === RoomType.Temple) {
         room += ` · praying ${this.templePrayCount} · vault +${this.grid.countRoom(RoomType.Temple) * TEMPLE_MANA_PER_TILE}`;
@@ -5926,6 +5936,7 @@ export class Game {
         try { this.payWages(sim); } catch (e) { console.warn('[underkeep] wages', e); }
         try { this.updateHazards(sim); } catch (e) { console.warn('[underkeep] hazards', e); }
         try { this.updatePrisonEconomy(sim); } catch (e) { console.warn('[underkeep] prison', e); }
+        try { this.updateGraveRite(sim); } catch (e) { console.warn('[underkeep] grave rite', e); }
         try { this.checkMissionWin(); } catch (e) { console.warn('[underkeep] mission', e); }
         this.saveAcc += sim;
         if (this.saveAcc >= 4) {
@@ -8026,16 +8037,19 @@ export class Game {
       if (this.researchProgress >= 100) {
         this.researchProgress = 0;
         const prevRank = this.researchRank;
-        this.researchRank = Math.min(3, this.researchRank + 1);
-        if (prevRank >= 3) {
+        this.researchRank = Math.min(RESEARCH_CAP, this.researchRank + 1);
+        if (prevRank >= RESEARCH_CAP) {
           this.hud.sayNow(MENTOR_LINES.researchCapped);
         } else if (this.researchRank >= 1 && !this.healUnlocked) {
           this.healUnlocked = true;
           this.hud.sayNow(MENTOR_LINES.researchHeal);
         } else if (this.researchRank === 2) {
           this.hud.sayNow(MENTOR_LINES.tempered);
-        } else if (this.researchRank >= 3) {
+        } else if (this.researchRank === 3) {
           this.hud.sayNow(MENTOR_LINES.scholarship);
+        } else if (this.researchRank >= RESEARCH_CAP) {
+          this.hud.sayNow(MENTOR_LINES.graveRite);
+          this.audio.play('spell');
         } else {
           this.hud.sayNow(
             MENTOR_LINES.researchDone.replace('%r', String(this.researchRank))
@@ -9228,6 +9242,25 @@ export class Game {
     if (c.ransomPaid >= cap) {
       this.hud.sayNow(MENTOR_LINES.ransomPaid.replace('%g', String(cap)));
       this.audio.play('gold');
+    }
+  }
+
+  /** Rank 4 — a Nightleech on Graveyard tiles closes their own wounds. */
+  private updateGraveRite(dt: number): void {
+    if (this.researchRank < RESEARCH_CAP || dt <= 0) return;
+    this.graveRiteAcc += dt;
+    const ping = this.graveRiteAcc >= 1;
+    if (ping) this.graveRiteAcc -= 1;
+    for (const c of this.creatures) {
+      if (!c.alive || c.held || c.kind !== CreatureKind.Nightleech) continue;
+      if (this.grid.get(c.x, c.y)?.room !== RoomType.Graveyard) continue;
+      const wounded = c.hp < c.maxHp;
+      c.hp = Math.min(c.maxHp, c.hp + GRAVE_RITE_HEAL * dt);
+      this.safeMood(c, (Number.isFinite(c.mood) ? c.mood : 72) + 4 * dt);
+      if (ping && wounded) {
+        c.pulseTint('heal', 0.6);
+        this.floatWorld(c.wx, c.wz, `+${GRAVE_RITE_HEAL}`, '#ff4060');
+      }
     }
   }
 

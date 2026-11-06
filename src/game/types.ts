@@ -13,7 +13,7 @@ export enum TileKind {
   BridgeWood = 9,
   BridgeStone = 10,
   Gem = 11,      // infinite gold seam — never depletes
-  HeroGate = 12, // north arch — heroes enter here; cannot be dug or sold
+  HeroGate = 12, // approach arch — heroes enter here; cannot be dug or sold
 }
 
 export enum RoomType {
@@ -166,6 +166,8 @@ export const TRAINING_GOLD_PER_SEC = 4;
 export const PAYDAY_INTERVAL = 48;
 export const HEART_MAX_HP = 500;
 /** Survive this many hero waves to win (or hit gold threshold). */
+export type MapLayout = 'basin' | 'cleft';
+
 export const WIN_WAVES = 3;
 /**
  * Hero parties by cleared-wave index. The last living knight of the final

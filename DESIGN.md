@@ -86,6 +86,7 @@ Pass 18: raids use a formation. Wave 1 is a column, wave 2 a wedge, wave 3 a lin
 Pass 19: minions pick the nearest hero, and a second minion peels off when that hero is already crowded. They no longer all chase whichever hero happens to sit first in the list.
 Pass 20: a minion standing in the Temple wards the Heart. Each blow there loses 30% of its damage, and the strike rings a ward chime.
 Pass 21: the ward is a gold ring around the Heart while that prayer holds. It fades when the minion leaves the Temple.
+Pass 22: new games are the Basin (Hero Gate north) or the Cleft (Hero Gate east, the north walled). Formations face the Heart either way. Old saves stay the Basin.
 
 ## Visual north star (YT X35cKEjvgrc from 2:20)
 Feel targets only — original IP art:

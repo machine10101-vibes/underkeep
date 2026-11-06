@@ -110,6 +110,8 @@ export interface SaveData {
   doorsBroken?: number;
   /** Gold heroes carried out of the dungeon. */
   goldStolen?: number;
+  /** Basin (north gate) or the Cleft (east gate). Old saves are the Basin. */
+  layout?: 'basin' | 'cleft';
 }
 
 function finiteNum(n: unknown): n is number {

@@ -87,6 +87,7 @@ Pass 19: minions pick the nearest hero, and a second minion peels off when that 
 Pass 20: a minion standing in the Temple wards the Heart. Each blow there loses 30% of its damage, and the strike rings a ward chime.
 Pass 21: the ward is a gold ring around the Heart while that prayer holds. It fades when the minion leaves the Temple.
 Pass 22: new games are the Basin (Hero Gate north) or the Cleft (Hero Gate east, the north walled). Formations face the Heart either way. Old saves stay the Basin.
+Pass 23: a captive standing in the Prison drips a ransom (knights 80, archers 48, Sir Brightbane 140) and does not starve until the purse is empty. Torture stops the coins. A full Treasury holds the purse.
 
 ## Visual north star (YT X35cKEjvgrc from 2:20)
 Feel targets only — original IP art:

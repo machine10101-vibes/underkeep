@@ -59,6 +59,10 @@ export class Creature {
   isPrisoner = false;
   /** 0–100 conversion progress while imprisoned. */
   convertProgress = 0;
+  /** Gold already squeezed from this captive in the Prison. */
+  ransomPaid = 0;
+  /** Seconds toward the next ransom coin. Not saved. */
+  ransomAcc = 0;
   fleeTimer = 0;
   /** Temple prayer buff timer (seconds) — mood floor / soft combat edge. */
   prayerBuff = 0;

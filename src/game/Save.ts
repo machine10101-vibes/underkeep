@@ -40,6 +40,8 @@ export interface SavedCreature {
   knockedOut?: boolean;
   isPrisoner?: boolean;
   convertProgress?: number;
+  /** Gold already paid from a Prison cell. */
+  ransomPaid?: number;
   /** Pass 8 — champion hero (Sir Brightbane) and scaled damage. */
   isChampion?: boolean;
   damage?: number;

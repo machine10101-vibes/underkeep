@@ -7476,6 +7476,39 @@ export class Game {
     }
   }
 
+  /** Wait on a body in the next tile, then path around it. Walk through if there is no way around. */
+  private stepOrSidestep(c: Creature, dt: number): boolean {
+    const next = c.pathIndex < c.path.length ? c.path[c.pathIndex] : null;
+    const goal = c.path.length ? c.path[c.path.length - 1] : null;
+    const nextIsGoal = !!next && !!goal && next.x === goal.x && next.y === goal.y;
+    if (!next || nextIsGoal || !this.tileBlockedBy(next.x, next.y, c)) {
+      c.stall = 0;
+      return c.moveAlongPath(dt, this.grid);
+    }
+    c.stall += dt;
+    c.moving = false;
+    if (c.stall < 0.55) return false;
+    c.stall = 0;
+    const blocked = new Set<number>([next.y * this.grid.width + next.x]);
+    const alt = goal
+      ? this.grid.findPath(c.x, c.y, goal.x, goal.y, { ...this.pathOptsFor(c), blocked })
+      : null;
+    if (alt && alt.length > 1) {
+      c.setPath(alt);
+      this.renderer.spawnFx(new THREE.Vector3(c.wx, 0.35, c.wz), 0xc8c0b0, 0.35);
+      return false;
+    }
+    return c.moveAlongPath(dt, this.grid);
+  }
+
+  private tileBlockedBy(x: number, y: number, self: Creature): boolean {
+    for (const o of this.creatures) {
+      if (o === self || !o.alive || o.held || o.knockedOut || o.isPrisoner) continue;
+      if (Math.round(o.x) === x && Math.round(o.y) === y) return true;
+    }
+    return false;
+  }
+
   private updateCreatures(dt: number): void {
     for (const c of this.creatures) {
       if (!c.alive || c.held) continue;
@@ -7490,7 +7523,7 @@ export class Game {
       if (c.fleeTimer > 0) c.fleeTimer -= dt;
       if (c.attackCooldown > 0) c.attackCooldown -= dt;
 
-      const arrived = c.moveAlongPath(dt, this.grid);
+      const arrived = this.stepOrSidestep(c, dt);
 
       // Friendlies shoulder a closed door. It shuts once they leave. A latched-open door stays open.
       if (!c.isHero) {

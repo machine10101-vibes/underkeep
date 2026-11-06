@@ -93,6 +93,7 @@ Pass 25: anyone carrying gold wears a bag, and a Prison captive wears it while t
 Pass 26: minions take the nearest open seat in a room (Training, Pit, Library, Temple, Workshop, Guard, Wagerden, Hatchery, Prison, Graveyard). A second body takes the next seat. Gold hauls to the nearest Treasury.
 Pass 27: a short payday makes paid minions sulk for 40 seconds — no training, prayer, gambling, research, or guard post. Mood climbs at half speed. A second short purse while they are still sulking sends the lowest-mood minion out. Ashreaver stays. A backwards frame step no longer rewinds the clock.
 Pass 28: Library rank 4 is Grave Rite. A Nightleech standing in the Graveyard regains 8 health a second. Scholarship still cuts mana spells from rank 3. Starved captives stay Bonewretches.
+Pass 29: the Wagerden stakes 8 gold a spin. A win pays double and lifts mood. A loss keeps the stake and sours them. An empty purse or a full Treasury closes the table. Mood no longer climbs for free.
 
 ## Visual north star (YT X35cKEjvgrc from 2:20)
 Feel targets only — original IP art:

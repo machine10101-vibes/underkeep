@@ -166,6 +166,10 @@ export const TRAINING_GOLD_PER_SEC = 4;
 export const PAYDAY_INTERVAL = 48;
 /** After a short purse, paid minions refuse training, prayer, and gambling. */
 export const PAYDAY_SULK_SEC = 40;
+/** Gold a Wagerden spin puts on the table. A win pays double. */
+export const WAGER_STAKE = 8;
+/** Seconds between Wagerden spins. */
+export const WAGER_SPIN_SEC = 3.2;
 export const HEART_MAX_HP = 500;
 /** Survive this many hero waves to win (or hit gold threshold). */
 export type MapLayout = 'basin' | 'cleft';

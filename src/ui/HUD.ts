@@ -771,6 +771,8 @@ export const MENTOR_LINES = {
   portalFull: "The Portal is crowded. Sack a minion, or find another gateway.",
   casinoBuilt: "Wagerden opens. Idle minions will gamble their moods into shape.",
   gambling: "Dice clatter in the Wagerden. Fortune is a cheap friend.",
+  wagerDry: "The tables are dry. No stake, no dice. Fill the Treasury.",
+  wagerFull: "The Treasury cannot hold a win. Spend gold, or the Wagerden stays shut.",
   heartDefend: "Scrabblers defend the Heart! Even workers have teeth when home burns.",
   caveInArm: "Cave-In armed. Click earth, a gold seam, or a fortified wall. It crushes friend and foe — and buries the seam.",
   caveIn: "The ceiling answers. Heroes learn what 'unsupported' means.",

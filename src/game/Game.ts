@@ -27,6 +27,8 @@ import {
   NIGHTLEECH_CAP,
   PAYDAY_INTERVAL,
   PAYDAY_SULK_SEC,
+  WAGER_SPIN_SEC,
+  WAGER_STAKE,
   PIT_SPAR_MULT,
   PRISON_RANSOM_CAP,
   PRISON_RANSOM_CHAMPION,
@@ -1580,6 +1582,9 @@ export class Game {
         room += ` · prisoners ${held.length}`;
         const owing = held.reduce((sum, c) => sum + Math.max(0, this.ransomCap(c) - c.ransomPaid), 0);
         if (owing > 0) room += ` · ransom ${owing}g`;
+      }
+      if (tile.room === RoomType.Casino) {
+        room += ` · stake ${WAGER_STAKE}g`;
       }
       if (tile.room === RoomType.Graveyard) {
         const yard = this.grid.countRoom(RoomType.Graveyard);
@@ -7930,6 +7935,34 @@ export class Game {
     }
   }
 
+  /** One Wagerden spin. The stake leaves the purse before the dice land. */
+  private spinWager(c: Creature): void {
+    const mood = Number.isFinite(c.mood) ? c.mood : 72;
+    if (this.gold < WAGER_STAKE) {
+      this.safeMood(c, mood - 4);
+      c.job = JobType.Idle;
+      c.jobTarget = null;
+      this.mentioneOnce('wagerDry', MENTOR_LINES.wagerDry);
+      return;
+    }
+    if (this.vaultCap() - this.gold < WAGER_STAKE) {
+      c.job = JobType.Idle;
+      c.jobTarget = null;
+      this.mentioneOnce('wagerFull', MENTOR_LINES.wagerFull);
+      return;
+    }
+    this.gold -= WAGER_STAKE;
+    if (Math.random() < 0.5) {
+      const got = this.addGold(WAGER_STAKE * 2);
+      this.safeMood(c, mood + 8);
+      this.floatWorld(c.wx, c.wz, `+${got - WAGER_STAKE}g`, '#ffd24a');
+      this.audio.play('gold');
+    } else {
+      this.safeMood(c, mood - 6);
+      this.floatWorld(c.wx, c.wz, `-${WAGER_STAKE}g`, '#ff8866');
+    }
+  }
+
   private updateMinionJob(c: Creature, dt: number, arrived: boolean): void {
     if (c.job === JobType.Eat) {
       if (!arrived && c.pathIndex < c.path.length) return;
@@ -8215,19 +8248,20 @@ export class Game {
         if (path) c.setPath(path);
         return;
       }
+      const den = this.grid.get(c.x, c.y);
+      if (!den || den.room !== RoomType.Casino) {
+        c.job = JobType.Idle;
+        c.jobTarget = null;
+        return;
+      }
       c.setPath(null);
-      this.safeMood(c, (Number.isFinite(c.mood) ? c.mood : 72) + 8 * dt);
       c.workTimer += dt;
       if (Math.random() < dt * 0.8) {
         this.renderer.spawnFx(new THREE.Vector3(c.wx, 0.7, c.wz), 0xf0c040, 0.25);
       }
-      if (c.workTimer >= 3.2) {
+      if (c.workTimer >= WAGER_SPIN_SEC) {
         c.workTimer = 0;
-        if (Math.random() < 0.32) {
-          this.addGold(6);
-        } else if (this.gold >= 2) {
-          this.gold -= 2;
-        }
+        this.spinWager(c);
       }
       if (c.mood >= 88) {
         c.job = JobType.Idle;

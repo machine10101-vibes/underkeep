@@ -1,4 +1,4 @@
-import { DoorState, MarkType, RoomType, TILE_SIZE, Tile, TileKind, TrapType, Vec2, isDiggableKind } from './types';
+import { DoorState, MapLayout, MarkType, RoomType, TILE_SIZE, Tile, TileKind, TrapType, Vec2, isDiggableKind } from './types';
 
 export class Grid {
   readonly width: number;
@@ -7,8 +7,12 @@ export class Grid {
   heartPos: Vec2 = { x: 0, y: 0 };
   /** Center of the map-placed Portal chamber (DK2: found, not built). */
   portalPos: Vec2 = { x: 0, y: 0 };
-  /** North arch the hero parties march through. */
+  /** Approach arch the hero parties march through. */
   gatePos: Vec2 = { x: 0, y: 0 };
+  /** Basin keeps the north road. The Cleft opens east. */
+  layout: MapLayout = 'basin';
+  /** One step from the gate toward the Heart. */
+  gateForward: Vec2 = { x: 0, y: 1 };
 
   constructor(width = 48, height = 48) {
     this.width = width;
@@ -34,6 +38,7 @@ export class Grid {
         });
       }
     }
+    this.layout = this.pickLayout();
     this.generate();
   }
 
@@ -62,6 +67,19 @@ export class Grid {
       x: (x - this.width / 2 + 0.5) * TILE_SIZE,
       z: (y - this.height / 2 + 0.5) * TILE_SIZE,
     };
+  }
+
+  private pickLayout(): MapLayout {
+    try {
+      const forced = localStorage.getItem('underkeep-layout');
+      if (forced === 'basin' || forced === 'cleft') {
+        localStorage.removeItem('underkeep-layout');
+        return forced;
+      }
+    } catch {
+      /* private mode */
+    }
+    return Math.random() < 0.5 ? 'cleft' : 'basin';
   }
 
   private generate(): void {
@@ -131,10 +149,9 @@ export class Grid {
           t.kind = TileKind.Claimed;
           t.claimedProgress = 1;
         } else if (dist === 3) {
-          // leave earth walls around chamber, carve a corridor north
-          if (!(dx === 0 && dy === -3)) {
-            // keep as earth (wall of chamber)
-          } else {
+          const mouth =
+            this.layout === 'cleft' ? dx === 3 && dy === 0 : dx === 0 && dy === -3;
+          if (mouth) {
             t.kind = TileKind.Claimed;
             t.claimedProgress = 1;
           }
@@ -142,13 +159,28 @@ export class Grid {
       }
     }
 
-    // Open corridor toward north for hero path later
-    for (let y = cy - 8; y < cy - 3; y++) {
-      for (let x = cx - 1; x <= cx + 1; x++) {
-        const t = this.get(x, y);
-        if (t && t.kind !== TileKind.Rock && t.kind !== TileKind.Heart) {
-          t.kind = TileKind.Claimed;
-          t.claimedProgress = 1;
+    if (this.layout === 'cleft') {
+      for (let x = cx + 4; x <= cx + 8; x++) {
+        for (let y = cy - 1; y <= cy + 1; y++) {
+          const t = this.get(x, y);
+          if (t && t.kind !== TileKind.Heart) {
+            t.kind = TileKind.Claimed;
+            t.claimedProgress = 1;
+            t.goldAmount = 0;
+            t.fortified = false;
+          }
+        }
+      }
+    } else {
+      for (let y = cy - 8; y < cy - 3; y++) {
+        for (let x = cx - 1; x <= cx + 1; x++) {
+          const t = this.get(x, y);
+          if (t && t.kind !== TileKind.Heart) {
+            t.kind = TileKind.Claimed;
+            t.claimedProgress = 1;
+            t.goldAmount = 0;
+            t.fortified = false;
+          }
         }
       }
     }
@@ -249,14 +281,20 @@ export class Grid {
   }
 
   /**
-   * The Hero Gate sits at the north mouth of the starter corridor.
-   * It is a walkable arch, not a room, and waves enter through it.
+   * The Hero Gate sits at the mouth of the starter corridor.
+   * Basin: north. The Cleft: east. Waves enter through it.
    */
   private placeHeroGate(): void {
-    const x = this.heartPos.x;
-    const y = Math.max(3, this.heartPos.y - 8);
+    const x =
+      this.layout === 'cleft'
+        ? Math.min(this.width - 4, this.heartPos.x + 8)
+        : this.heartPos.x;
+    const y = this.layout === 'cleft' ? this.heartPos.y : Math.max(3, this.heartPos.y - 8);
     const t = this.get(x, y);
-    if (!t || t.kind === TileKind.Heart || t.kind === TileKind.Rock) return;
+    if (!t || t.kind === TileKind.Heart) {
+      this.aimGate();
+      return;
+    }
     t.kind = TileKind.HeroGate;
     t.room = RoomType.None;
     t.fortified = false;
@@ -266,9 +304,10 @@ export class Grid {
     t.trap = TrapType.None;
     t.explored = true;
     this.gatePos = { x, y };
+    this.aimGate();
   }
 
-  /** Old saves have no arch. Stamp the north mouth when that tile is still open floor. */
+  /** Old saves have no arch. Stamp the approach mouth when that tile is still open floor. */
   restoreHeroGate(): void {
     const existing = this.tiles.find((t) => t.kind === TileKind.HeroGate);
     if (existing) {
@@ -276,10 +315,14 @@ export class Grid {
       existing.fortified = false;
       existing.explored = true;
       this.gatePos = { x: existing.x, y: existing.y };
+      this.aimGate();
       return;
     }
-    const x = this.heartPos.x;
-    const y = Math.max(3, this.heartPos.y - 8);
+    const x =
+      this.layout === 'cleft'
+        ? Math.min(this.width - 4, this.heartPos.x + 8)
+        : this.heartPos.x;
+    const y = this.layout === 'cleft' ? this.heartPos.y : Math.max(3, this.heartPos.y - 8);
     const t = this.get(x, y);
     if (
       t &&
@@ -291,9 +334,22 @@ export class Grid {
       t.goldAmount = 0;
       t.explored = true;
       this.gatePos = { x, y };
+      this.aimGate();
       return;
     }
     this.gatePos = { x: 0, y: 0 };
+    this.aimGate();
+  }
+
+  private aimGate(): void {
+    const dx = this.heartPos.x - this.gatePos.x;
+    const dy = this.heartPos.y - this.gatePos.y;
+    if (this.gatePos.x === 0 && this.gatePos.y === 0) {
+      this.gateForward = { x: 0, y: 1 };
+      return;
+    }
+    if (Math.abs(dx) >= Math.abs(dy)) this.gateForward = { x: Math.sign(dx) || 1, y: 0 };
+    else this.gateForward = { x: 0, y: Math.sign(dy) || 1 };
   }
 
   private portalChamberFits(cx: number, cy: number): boolean {

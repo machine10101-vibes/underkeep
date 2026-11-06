@@ -532,6 +532,7 @@ export class Game {
     this.renderer.camera.lookAt(this.camTarget);
 
     this.hud.say(MENTOR_LINES.start);
+    if (this.grid.layout === 'cleft') this.hud.say(MENTOR_LINES.cleft);
     if (showIntro) {
       this.hud.showOverlay(
         'Mission Briefing',
@@ -633,6 +634,7 @@ export class Game {
       digFinds: this.digFinds,
       doorsBroken: this.doorsBroken,
       goldStolen: this.goldStolen,
+      layout: this.grid.layout,
       cam: {
         tx: this.camTarget.x,
         tz: this.camTarget.z,
@@ -657,6 +659,8 @@ export class Game {
     unpackTiles(this.grid.tiles, data.tiles);
     this.grid.heartPos = { x: data.heartPos.x, y: data.heartPos.y };
     this.grid.restorePortalPos();
+    const savedLayout = (data as SaveData & { layout?: string }).layout;
+    if (savedLayout === 'basin' || savedLayout === 'cleft') this.grid.layout = savedLayout;
     this.grid.restoreHeroGate();
     // Pre-6.5 saves lack explored flags — seed from claimed territory once
     if (!this.grid.tiles.some((tile) => tile.explored)) {
@@ -9250,24 +9254,27 @@ export class Game {
         }
       }
     }
-    // Carve 3-wide dirt corridor from spawn toward heart for readable approach
-    for (let y = sy; y <= Math.min(sy + 4, hy - 2); y++) {
-      for (let x = cx - 1; x <= cx + 1; x++) {
-        const tile = this.grid.get(x, y);
-        if (!tile || tile.kind === TileKind.Heart || tile.kind === TileKind.Rock || tile.kind === TileKind.HeroGate) continue;
-        if (tile.fortified) continue;
-        if (tile.kind === TileKind.Gold) {
-          tile.goldAmount = 0;
-          tile.kind = TileKind.Dirt;
-          tile.digProgress = 0;
-          tile.mark = MarkType.None;
-          this.gridDirty = true;
-          continue;
-        }
-        if (tile.kind === TileKind.Earth || tile.kind === TileKind.Wall) {
-          tile.kind = TileKind.Dirt;
-          tile.digProgress = 0;
-          this.gridDirty = true;
+    if (throughGate) {
+      this.carveWaveApproach(sx, sy);
+    } else {
+      for (let y = sy; y <= Math.min(sy + 4, hy - 2); y++) {
+        for (let x = cx - 1; x <= cx + 1; x++) {
+          const tile = this.grid.get(x, y);
+          if (!tile || tile.kind === TileKind.Heart || tile.kind === TileKind.Rock || tile.kind === TileKind.HeroGate) continue;
+          if (tile.fortified) continue;
+          if (tile.kind === TileKind.Gold) {
+            tile.goldAmount = 0;
+            tile.kind = TileKind.Dirt;
+            tile.digProgress = 0;
+            tile.mark = MarkType.None;
+            this.gridDirty = true;
+            continue;
+          }
+          if (tile.kind === TileKind.Earth || tile.kind === TileKind.Wall) {
+            tile.kind = TileKind.Dirt;
+            tile.digProgress = 0;
+            this.gridDirty = true;
+          }
         }
       }
     }
@@ -9296,7 +9303,8 @@ export class Game {
     const knightSlots = [...pattern.knight];
     const archerSlots = [...pattern.archer];
     const place = (kind: CreatureKind, ox: number, oy: number) => {
-      const spot = this.nearestWaveTile(sx + ox, sy + oy, taken);
+      const at = this.formationTile(sx, sy, ox, oy);
+      const spot = this.nearestWaveTile(at.x, at.y, taken);
       spawnHero(kind, spot.x, spot.y);
     };
     for (const kind of party) {
@@ -9321,6 +9329,43 @@ export class Game {
         champ.ward = CHAMPION_WARD;
         champ.mesh.scale.multiplyScalar(1.2);
         this.hud.sayNow(MENTOR_LINES.championWave);
+      }
+    }
+  }
+
+  /** Formation offsets: ox is to the party's right, oy is a step toward the Heart. */
+  private formationTile(sx: number, sy: number, ox: number, oy: number): { x: number; y: number } {
+    const f = this.grid.gateForward;
+    const rx = f.y;
+    const ry = -f.x;
+    return { x: sx + ox * rx + oy * f.x, y: sy + ox * ry + oy * f.y };
+  }
+
+  /** Open earth in front of the gate so a walled approach does not trap the raid. */
+  private carveWaveApproach(sx: number, sy: number): void {
+    const f = this.grid.gateForward;
+    const rx = f.y;
+    const ry = -f.x;
+    for (let step = 0; step <= 4; step++) {
+      for (let side = -1; side <= 1; side++) {
+        const x = sx + f.x * step + rx * side;
+        const y = sy + f.y * step + ry * side;
+        const tile = this.grid.get(x, y);
+        if (!tile || tile.kind === TileKind.Heart || tile.kind === TileKind.Rock || tile.kind === TileKind.HeroGate) continue;
+        if (tile.fortified) continue;
+        if (tile.kind === TileKind.Gold) {
+          tile.goldAmount = 0;
+          tile.kind = TileKind.Dirt;
+          tile.digProgress = 0;
+          tile.mark = MarkType.None;
+          this.gridDirty = true;
+          continue;
+        }
+        if (tile.kind === TileKind.Earth || tile.kind === TileKind.Wall) {
+          tile.kind = TileKind.Dirt;
+          tile.digProgress = 0;
+          this.gridDirty = true;
+        }
       }
     }
   }

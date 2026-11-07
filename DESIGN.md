@@ -96,9 +96,10 @@ Pass 28: Library rank 4 is Grave Rite. A Nightleech standing in the Graveyard re
 Pass 29: the Wagerden stakes 8 gold a spin. A win pays double and lifts mood. A loss keeps the stake and sours them. An empty purse or a full Treasury closes the table. Mood no longer climbs for free.
 Pass 30: a Combat Pit level leaves the minion bloodied for 20 seconds. Strikes in that window hit 20% harder. The hover reads "bloodied" until it fades.
 Pass 31: new games may be the Stair. The Hero Gate stands south of the Heart and the north road is shut. Basin and the Cleft are unchanged. Old saves stay the layout they were made with.
-Pass 32: a developed keep (40 claimed tiles, wave 2 or later) sends one extra knight as a flanker, off the formation and to the party's right. Sir Brightbane is still a knight from the main party. The wave line names the flanker.
+Pass 32: a developed keep (wave 2 or later, once claimed land is past the starter dig) sends one extra knight as a flanker, off the formation and to the party's right. Sir Brightbane is still a knight from the main party. The wave line names the flanker.
 Pass 33: a Thornwitch in the Torture chamber breaks a captive in 4 seconds. The next raid waits 20 seconds longer. Each captive does it once. Prison ransom is unchanged, and conversion still finishes.
 Pass 34: a creature whose next step is occupied waits, then paths around that body. If there is no way around, they walk through. The last step onto a goal is never held.
+Pass 35: fighters, guards, and heroes actually walk. A job that rebuilt the same path every frame was spending the whole step arriving on the tile they already stood on, so chases, guard posts, and gold escapes never left the spot. A door that shuts in front of a hero still gets bashed. The extra flanker waits until 64 claimed tiles, because a fresh keep already sits at about 40.
 
 ## Visual north star (YT X35cKEjvgrc from 2:20)
 Feel targets only — original IP art:

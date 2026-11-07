@@ -436,28 +436,35 @@ export class Creature {
       this.moving = false;
       return true;
     }
-    const target = this.path[this.pathIndex];
-    const w = grid.tileToWorld(target.x, target.y);
-    const slow = this.slowTimer > 0 ? 0.55 : 1;
-    const spd = this.speed * (this.speedBuff > 0 ? 1.8 : 1) * slow * TILE_SIZE;
-    const dx = w.x - this.wx;
-    const dz = w.z - this.wz;
-    const dist = Math.hypot(dx, dz);
-    // Arrive threshold — slightly soft to reduce corner jitter
-    if (dist < 0.1) {
+    // A fresh path starts on the tile we already occupy. Skip those nodes in
+    // this same step so a job that rebuilds the path cannot pin us in place.
+    let guard = 0;
+    while (this.pathIndex < this.path.length && guard++ < 6) {
+      const target = this.path[this.pathIndex]!;
+      const w = grid.tileToWorld(target.x, target.y);
+      const dx = w.x - this.wx;
+      const dz = w.z - this.wz;
+      const dist = Math.hypot(dx, dz);
+      if (dist >= 0.1) {
+        const slow = this.slowTimer > 0 ? 0.55 : 1;
+        const spd = this.speed * (this.speedBuff > 0 ? 1.8 : 1) * slow * TILE_SIZE;
+        const step = Math.min(dist, spd * dt);
+        this.wx += (dx / dist) * step;
+        this.wz += (dz / dist) * step;
+        this.moving = true;
+        this.faceToward(w.x, w.z);
+        break;
+      }
       this.wx = w.x;
       this.wz = w.z;
       this.x = target.x;
       this.y = target.y;
       this.pathIndex++;
-      this.moving = this.pathIndex < this.path.length;
-      return this.pathIndex >= this.path.length;
     }
-    const step = Math.min(dist, spd * dt);
-    this.wx += (dx / dist) * step;
-    this.wz += (dz / dist) * step;
-    this.moving = true;
-    this.faceToward(w.x, w.z);
+    if (this.pathIndex >= this.path.length) {
+      this.moving = false;
+      return true;
+    }
     // Smooth facing in sync with dt
     let d = this.facingTarget - this.facing;
     while (d > Math.PI) d -= Math.PI * 2;

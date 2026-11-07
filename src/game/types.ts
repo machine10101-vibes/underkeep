@@ -248,6 +248,8 @@ export function heroPatternForWave(waveNum: number): HeroPattern {
  * steps toward the Heart — beside the road, not in the front rank.
  */
 export const FLANK_SLOT: [number, number] = [1, 2];
+/** A fresh keep already claims about 40 tiles. The flanker waits until the keeper has expanded. */
+export const FLANK_CLAIMED = 64;
 /** First party never before this many seconds, even if the keep is ready. */
 export const FIRST_WAVE_MIN_TIME = 240;
 /** Seconds of warning after the keep is ready (Portal + Lair, or the fallback). */

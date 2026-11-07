@@ -20,6 +20,7 @@ import {
   RESEARCH_CAP,
   HEART_MAX_HP,
   HERO_WAVES,
+  FLANK_CLAIMED,
   FLANK_SLOT,
   heroPatternForWave,
   JobType,
@@ -2599,7 +2600,7 @@ export class Game {
     const next = this.wavesCleared + 1;
     const who = next >= WIN_WAVES ? 'Sir Brightbane' : next === 2 ? 'knights & archers' : 'a knight patrol';
     const shape = heroPatternForWave(next).label;
-    const flank = next >= 2 && this.grid.countClaimed() >= 40 ? ', plus a flanker' : '';
+    const flank = next >= 2 && this.grid.countClaimed() >= FLANK_CLAIMED ? ', plus a flanker' : '';
     return `${pace}Next wave ${this.formatWaveClock()} — ${who}, ${shape}${flank}`;
   }
 
@@ -6167,6 +6168,31 @@ export class Game {
     };
   }
 
+  /**
+   * Keep a path that already ends on this tile. Rebuilding it every frame
+   * pins the creature: the fresh path starts where they stand, and the step
+   * is spent arriving there again.
+   */
+  private aimPath(c: Creature, tx: number, ty: number, forHero = false): boolean {
+    const gx = Math.round(tx);
+    const gy = Math.round(ty);
+    const goal = c.path.length ? c.path[c.path.length - 1] : null;
+    if (goal && goal.x === gx && goal.y === gy && c.pathIndex < c.path.length) {
+      // A door that shut after the path was built has to be bashed, not walked through.
+      const blocked = forHero && c.path.slice(c.pathIndex).some((p) => this.grid.get(p.x, p.y)?.door === DoorState.Closed);
+      if (!blocked) return true;
+    }
+    const path = forHero
+      ? this.grid.findPath(c.x, c.y, gx, gy, { forHero: true, allowHazard: true })
+      : this.pathFor(c, gx, gy);
+    if (!path) {
+      if (forHero) c.setPath(null);
+      return false;
+    }
+    c.setPath(path);
+    return true;
+  }
+
   /** Path that respects flyer / lava-walker / hero rules. */
   private pathFor(c: Creature, tx: number, ty: number): Vec2[] | null {
     const sx = Number.isFinite(c.x) ? c.x : tx;
@@ -6473,8 +6499,7 @@ export class Game {
           w.job = JobType.Fight;
           w.jobTarget = { x: threat.x, y: threat.y };
           if (Math.hypot(w.x - threat.x, w.y - threat.y) > 1.2) {
-            const path = this.pathFor(w, threat.x, threat.y);
-            if (path) w.setPath(path);
+            this.aimPath(w, threat.x, threat.y);
           } else {
             w.setPath(null);
           }
@@ -6496,7 +6521,7 @@ export class Game {
             }
           }
         }
-        if (best) w.setPath(this.pathFor(w, best.x, best.y));
+        if (best) this.aimPath(w, best.x, best.y);
         continue;
       }
     }
@@ -6841,8 +6866,7 @@ export class Game {
         if (enemy) {
           if (c.bedKey) this.releaseBed(c);
           if (Math.hypot(c.x - enemy.x, c.y - enemy.y) > this.strikeRange(c) * 0.82) {
-            const path = this.pathFor(c, enemy.x, enemy.y);
-            if (path) c.setPath(path);
+            this.aimPath(c, enemy.x, enemy.y);
           } else {
             c.setPath(null);
           }
@@ -6863,8 +6887,7 @@ export class Game {
         c.job = JobType.Fight;
         c.jobTarget = { x: enemy.x, y: enemy.y };
         if (Math.hypot(c.x - enemy.x, c.y - enemy.y) > this.strikeRange(c) * 0.82) {
-          const path = this.pathFor(c, enemy.x, enemy.y);
-          if (path) c.setPath(path);
+          this.aimPath(c, enemy.x, enemy.y);
         } else {
           c.setPath(null);
         }
@@ -6907,8 +6930,7 @@ export class Game {
         if (foe) {
           c.jobTarget = { x: foe.x, y: foe.y };
           if (Math.hypot(c.x - foe.x, c.y - foe.y) > 1.2) {
-            const path = this.pathFor(c, foe.x, foe.y);
-            if (path) c.setPath(path);
+            this.aimPath(c, foe.x, foe.y);
           } else {
             c.setPath(null);
           }
@@ -7080,7 +7102,7 @@ export class Game {
         c.job = JobType.Guard;
         c.jobTarget = { x: rallyTile.x, y: rallyTile.y };
         if (c.x !== rallyTile.x || c.y !== rallyTile.y) {
-          c.setPath(this.pathFor(c, rallyTile.x, rallyTile.y));
+          this.aimPath(c, rallyTile.x, rallyTile.y);
         } else {
           c.setPath(null);
         }
@@ -7094,7 +7116,7 @@ export class Game {
           c.job = JobType.Guard;
           c.jobTarget = t;
           if (c.x !== t.x || c.y !== t.y) {
-            c.setPath(this.pathFor(c, t.x, t.y));
+            this.aimPath(c, t.x, t.y);
           } else {
             c.setPath(null);
           }
@@ -7170,9 +7192,7 @@ export class Game {
         h.job = JobType.Flee;
         h.jobTarget = esc;
         if (Math.hypot(h.x - esc.x, h.y - esc.y) > 1.05) {
-          const path = this.grid.findPath(h.x, h.y, esc.x, esc.y, { forHero: true, allowHazard: true });
-          if (path) h.setPath(path);
-          else this.bashAdjacentDoor(h, esc);
+          if (!this.aimPath(h, esc.x, esc.y, true)) this.bashAdjacentDoor(h, esc);
         } else h.setPath(null);
         continue;
       }
@@ -7207,9 +7227,7 @@ export class Game {
           h.job = JobType.Fight;
           h.jobTarget = treas;
           if (Math.hypot(h.x - treas.x, h.y - treas.y) > 0.8) {
-            const path = this.grid.findPath(h.x, h.y, treas.x, treas.y, { forHero: true, allowHazard: true });
-            if (path) h.setPath(path);
-            else this.bashAdjacentDoor(h, treas);
+            if (!this.aimPath(h, treas.x, treas.y, true)) this.bashAdjacentDoor(h, treas);
           } else h.setPath(null);
           continue;
         }
@@ -7218,18 +7236,14 @@ export class Game {
         h.job = JobType.Fight;
         h.jobTarget = { x: minion.x, y: minion.y };
         if (Math.hypot(h.x - minion.x, h.y - minion.y) > this.strikeRange(h) * 0.82) {
-          const path = this.grid.findPath(h.x, h.y, minion.x, minion.y, { forHero: true, allowHazard: true });
-          if (path) h.setPath(path);
-          else this.bashAdjacentDoor(h, { x: minion.x, y: minion.y });
+          if (!this.aimPath(h, minion.x, minion.y, true)) this.bashAdjacentDoor(h, { x: minion.x, y: minion.y });
         } else h.setPath(null);
       } else {
         h.job = JobType.Fight;
         const hx = this.grid.heartPos.x;
         const hy = this.grid.heartPos.y;
-        if (h.path.length === 0 || Math.random() < 0.045) {
-          const path = this.grid.findPath(h.x, h.y, hx, hy, { forHero: true, allowHazard: true });
-          if (path) h.setPath(path);
-          else if (!this.bashAdjacentDoor(h)) {
+        if (Math.hypot(h.x - hx, h.y - hy) > 1.2) {
+          if (!this.aimPath(h, hx, hy, true) && !this.bashAdjacentDoor(h)) {
             let bestTile: Vec2 | null = null;
             let bestD = Infinity;
             for (const t of this.grid.tiles) {
@@ -7241,9 +7255,9 @@ export class Game {
                 bestTile = { x: t.x, y: t.y };
               }
             }
-            if (bestTile) h.setPath(this.grid.findPath(h.x, h.y, bestTile.x, bestTile.y, { forHero: true, allowHazard: true }));
+            if (bestTile) this.aimPath(h, bestTile.x, bestTile.y, true);
           }
-        }
+        } else h.setPath(null);
       }
     }
   }
@@ -7478,6 +7492,13 @@ export class Game {
 
   /** Wait on a body in the next tile, then path around it. Walk through if there is no way around. */
   private stepOrSidestep(c: Creature, dt: number): boolean {
+    // Paths start on the tile underfoot. Look at the first step we have not reached.
+    while (c.pathIndex < c.path.length - 1) {
+      const here = c.path[c.pathIndex]!;
+      const w = this.grid.tileToWorld(here.x, here.y);
+      if (Math.hypot(w.x - c.wx, w.z - c.wz) >= 0.1) break;
+      c.pathIndex++;
+    }
     const next = c.pathIndex < c.path.length ? c.path[c.pathIndex] : null;
     const goal = c.path.length ? c.path[c.path.length - 1] : null;
     const nextIsGoal = !!next && !!goal && next.x === goal.x && next.y === goal.y;
@@ -9614,7 +9635,7 @@ export class Game {
     const partyKnights = this.creatures.filter(
       (h) => h.alive && h.isHero && h.kind === CreatureKind.HeroKnight
     );
-    if (waveNum >= 2 && this.grid.countClaimed() >= 40) {
+    if (waveNum >= 2 && this.grid.countClaimed() >= FLANK_CLAIMED) {
       const at = this.formationTile(sx, sy, FLANK_SLOT[0], FLANK_SLOT[1]);
       const flankTile = this.grid.get(at.x, at.y);
       if (

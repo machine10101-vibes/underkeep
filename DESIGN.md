@@ -101,6 +101,7 @@ Pass 33: a Thornwitch in the Torture chamber breaks a captive in 4 seconds. The 
 Pass 34: a creature whose next step is occupied waits, then paths around that body. If there is no way around, they walk through. The last step onto a goal is never held.
 Pass 35: fighters, guards, and heroes actually walk. A job that rebuilt the same path every frame was spending the whole step arriving on the tile they already stood on, so chases, guard posts, and gold escapes never left the spot. A door that shuts in front of a hero still gets bashed. The extra flanker waits until 64 claimed tiles, because a fresh keep already sits at about 40.
 Pass 36: a melee strike lands on the body that fighter is chasing, so a split fight stays split. Possessed minions strike. Heal wakes a downed ally and does not spend mana on a healthy keep. The Ashreaver answers Call to Arms. Bounties, dig finds, cave-ins, and gold in a dead claw respect the vault.
+Pass 37: a rebuilt path no longer pulls a creature back to a tile they have already left. A body that is only crossing a tile, or already walking off it, does not stall the mob behind them. An idle body still makes them wait, then sidestep.
 
 ## Visual north star (YT X35cKEjvgrc from 2:20)
 Feel targets only — original IP art:

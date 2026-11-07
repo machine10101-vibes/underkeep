@@ -7560,13 +7560,7 @@ export class Game {
 
   /** Wait on a body in the next tile, then path around it. Walk through if there is no way around. */
   private stepOrSidestep(c: Creature, dt: number): boolean {
-    // Paths start on the tile underfoot. Look at the first step we have not reached.
-    while (c.pathIndex < c.path.length - 1) {
-      const here = c.path[c.pathIndex]!;
-      const w = this.grid.tileToWorld(here.x, here.y);
-      if (Math.hypot(w.x - c.wx, w.z - c.wz) >= 0.1) break;
-      c.pathIndex++;
-    }
+    c.skipPassedWaypoints(this.grid);
     const next = c.pathIndex < c.path.length ? c.path[c.pathIndex] : null;
     const goal = c.path.length ? c.path[c.path.length - 1] : null;
     const nextIsGoal = !!next && !!goal && next.x === goal.x && next.y === goal.y;
@@ -7591,9 +7585,16 @@ export class Game {
   }
 
   private tileBlockedBy(x: number, y: number, self: Creature): boolean {
+    const center = this.grid.tileToWorld(x, y);
     for (const o of this.creatures) {
       if (o === self || !o.alive || o.held || o.knockedOut || o.isPrisoner) continue;
-      if (Math.round(o.x) === x && Math.round(o.y) === y) return true;
+      if (Math.round(o.x) !== x || Math.round(o.y) !== y) continue;
+      // A body that has only crossed the edge, or is already walking off, is not a wall.
+      const dist = Math.hypot(center.x - o.wx, center.z - o.wz);
+      if (dist > TILE_SIZE * 0.42) continue;
+      const step = o.pathIndex < o.path.length ? o.path[o.pathIndex] : null;
+      if (step && (step.x !== x || step.y !== y) && o.moving) continue;
+      return true;
     }
     return false;
   }

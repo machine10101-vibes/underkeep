@@ -1025,6 +1025,8 @@ export class Game {
         this.possessArmed = false;
         this.sightArmed = false;
         this.callArmed = false;
+        this.hud.setSpellArmed('sight', false);
+        this.hud.setSpellArmed('callToArms', false);
         if (this.caveInArmed) {
           this.caveInArmed = false;
           this.hud.setSpellArmed('caveIn', false);
@@ -1495,11 +1497,15 @@ export class Game {
 
   private handleSecondaryAt(tx: number, ty: number, worldHit?: THREE.Vector3): void {
     try {
-      if (this.caveInArmed || this.revealArmed) {
+      if (this.caveInArmed || this.revealArmed || this.sightArmed || this.callArmed) {
         this.caveInArmed = false;
         this.revealArmed = false;
+        this.sightArmed = false;
+        this.callArmed = false;
         this.hud.setSpellArmed('caveIn', false);
         this.hud.setSpellArmed('reveal', false);
+        this.hud.setSpellArmed('sight', false);
+        this.hud.setSpellArmed('callToArms', false);
         this.hud.say('Spell dispelled.');
         return;
       }
@@ -1655,7 +1661,8 @@ export class Game {
                         : TileKind[tile.kind];
       let tip = `(${tp.x},${tp.y}) ${kindLabel}${tile.fortified ? ' [fortified]' : ''}${room}${dig}`;
       if (this.caveInArmed) tip = `CAVE-IN · click earth, gold, or a fortified wall · ${tip}`;
-      if (this.revealArmed) tip = `SIGHT · click to peel fog · ${tip}`;
+      if (this.revealArmed || this.sightArmed) tip = `SIGHT · click the dark to peel fog · ${tip}`;
+      if (this.callArmed) tip = `CALL TO ARMS · click claimed land · ${tip}`;
       if (this.tool === 'select') {
         const c = this.creatureAt(tp.x, tp.y);
         if (c && !c.isHero) {
@@ -2151,7 +2158,10 @@ export class Game {
           this.saveNow();
           return;
         }
-        if (this.gold < RALLY_COST) return;
+        if (this.gold < RALLY_COST) {
+          this.hud.sayNow(`A banner costs ${RALLY_COST} gold.`);
+          return;
+        }
         this.gold -= RALLY_COST;
         // Single rally: clear others
         for (const t of this.grid.tiles) t.rally = false;
@@ -2718,6 +2728,18 @@ export class Game {
     return added;
   }
 
+  /** Bank a payout. A full vault keeps the rest out and says so once. */
+  private depositGold(amount: number, wx: number, wz: number, label: string): number {
+    const n = Math.max(0, Math.floor(amount));
+    const got = this.addGold(n);
+    if (got > 0) {
+      this.floatWorld(wx, wz, label.replace('%g', String(got)), '#ffd24a');
+      this.audio.play('gold');
+    }
+    if (got < n) this.mentioneOnce('treasuryFull', MENTOR_LINES.treasuryFull);
+    return got;
+  }
+
   private paydayDueNow(): number {
     let due = 0;
     for (const c of this.creatures) {
@@ -2792,9 +2814,12 @@ export class Game {
       return;
     }
     this.mana -= this.manaPrice(SIGHT_COST);
+    this.sightArmed = false;
+    this.hud.setSpellArmed('sight', false);
     const changed = this.grid.revealAround(x, y, 4);
     if (changed) this.fogDirty = true;
     const w = this.grid.tileToWorld(x, y);
+    this.audio.play('spell');
     this.renderer.spawnFx(new THREE.Vector3(w.x, 1.4, w.z), 0x88ddff, 1.1);
     this.renderer.spawnFx(new THREE.Vector3(w.x, 0.4, w.z), 0x4060c0, 0.7);
     this.hud.sayNow(MENTOR_LINES.sightCast);
@@ -2809,7 +2834,8 @@ export class Game {
       c.kind === CreatureKind.Bonewretch ||
       c.kind === CreatureKind.Nightleech ||
       c.kind === CreatureKind.Forgebrute ||
-      c.kind === CreatureKind.Ironhide
+      c.kind === CreatureKind.Ironhide ||
+      c.kind === CreatureKind.Ashreaver
     );
   }
 
@@ -2826,6 +2852,8 @@ export class Game {
       return;
     }
     this.mana -= this.manaPrice(CALL_TO_ARMS_COST);
+    this.callArmed = false;
+    this.hud.setSpellArmed('callToArms', false);
     for (const t of this.grid.tiles) t.rally = false;
     if (tile && tile.kind === TileKind.Claimed) tile.rally = true;
     this.requestStructuralRebuild();
@@ -2940,7 +2968,10 @@ export class Game {
       return;
     }
     if (spell === 'speed') {
-      if (this.mana < this.manaPrice(SPEED_COST)) return;
+      if (this.mana < this.manaPrice(SPEED_COST)) {
+        this.hud.sayNow(`Speed needs ${this.manaPrice(SPEED_COST)} mana.`);
+        return;
+      }
       this.mana -= this.manaPrice(SPEED_COST);
       for (const c of this.creatures) {
         if (c.alive && !c.isHero) c.speedBuff = Math.max(c.speedBuff, 6);
@@ -2950,11 +2981,17 @@ export class Game {
       return;
     }
     if (spell === 'lightning') {
-      if (this.mana < this.manaPrice(LIGHTNING_COST)) return;
+      if (this.mana < this.manaPrice(LIGHTNING_COST)) {
+        this.hud.sayNow(`Lightning needs ${this.manaPrice(LIGHTNING_COST)} mana.`);
+        return;
+      }
       const heroes = this.creatures.filter(
         (c) => c.alive && c.isHero && !c.knockedOut && !c.isPrisoner
       );
-      if (!heroes.length) return;
+      if (!heroes.length) {
+        this.hud.sayNow('No heroes in the halls.');
+        return;
+      }
       this.mana -= this.manaPrice(LIGHTNING_COST);
       const target = heroes.reduce((a, b) => {
         const da = Math.hypot(a.x - this.grid.heartPos.x, a.y - this.grid.heartPos.y);
@@ -2979,17 +3016,32 @@ export class Game {
         return;
       }
       const cost = this.manaPrice(30);
-      if (this.mana < cost) return;
+      if (this.mana < cost) {
+        this.hud.sayNow(`Heal needs ${cost} mana.`);
+        return;
+      }
+      const wounded = this.creatures.some(
+        (c) => c.alive && !c.isHero && !c.isPrisoner && !c.held && (c.hp < c.maxHp || c.knockedOut)
+      );
+      if (!wounded) {
+        this.hud.say('No wounds to mend — for now.');
+        return;
+      }
       this.mana -= cost;
       let healed = 0;
       for (const c of this.creatures) {
-        if (!c.alive || c.isHero) continue;
-        if (c.hp < c.maxHp) {
-          c.hp = Math.min(c.maxHp, c.hp + 35 + this.researchRank * 8);
-          c.pulseTint('heal', 1.1);
-          this.renderer.spawnCareSparks(c.wx, c.wz, 'heal', false);
-          healed++;
+        if (!c.alive || c.isHero || c.isPrisoner || c.held) continue;
+        if (c.hp >= c.maxHp && !c.knockedOut) continue;
+        c.hp = Math.min(c.maxHp, c.hp + 35 + this.researchRank * 8);
+        if (c.knockedOut) {
+          c.knockedOut = false;
+          c.job = JobType.Idle;
+          c.jobTarget = null;
+          c.setPath(null);
         }
+        c.pulseTint('heal', 1.1);
+        this.renderer.spawnCareSparks(c.wx, c.wz, 'heal', false);
+        healed++;
       }
       if (healed) this.audio.play('spell');
       this.hud.say(healed ? MENTOR_LINES.heal : 'No wounds to mend — for now.');
@@ -3070,24 +3122,40 @@ export class Game {
       return;
     }
     if (spell === 'sight') {
+      if (this.sightArmed) {
+        this.sightArmed = false;
+        this.hud.setSpellArmed('sight', false);
+        this.hud.say('Sight dispelled.');
+        return;
+      }
       if (this.mana < this.manaPrice(SIGHT_COST)) {
         this.hud.sayNow('Not enough mana for Sight of Evil.');
         return;
       }
       this.sightArmed = true;
       this.callArmed = false;
+      this.hud.setSpellArmed('callToArms', false);
       this.possessArmed = false;
+      this.hud.setSpellArmed('sight', true);
       this.hud.sayNow(MENTOR_LINES.sightArm);
       return;
     }
     if (spell === 'callToArms') {
+      if (this.callArmed) {
+        this.callArmed = false;
+        this.hud.setSpellArmed('callToArms', false);
+        this.hud.say('Call to Arms dispelled.');
+        return;
+      }
       if (this.mana < this.manaPrice(CALL_TO_ARMS_COST)) {
         this.hud.sayNow('Not enough mana to Call to Arms.');
         return;
       }
       this.callArmed = true;
       this.sightArmed = false;
+      this.hud.setSpellArmed('sight', false);
       this.possessArmed = false;
+      this.hud.setSpellArmed('callToArms', true);
       this.hud.sayNow('Call to Arms armed — click claimed land to plant the banner.');
       return;
     }
@@ -7563,7 +7631,10 @@ export class Game {
         this.triggerTrapsForHero(c);
       }
 
-      if (c === this.possessed) continue;
+      if (c === this.possessed) {
+        this.doCombat(c, dt);
+        continue;
+      }
       if (c.isWorker) {
         this.updateWorkerJob(c, dt, arrived);
       } else if (!c.isHero) {
@@ -8631,10 +8702,7 @@ export class Game {
       }
     }
     const gold = kind === 'blade' ? 24 : 18 + Math.floor(Math.random() * 28);
-    this.gold += gold;
-    this.floatWorld(w.x, w.z, `+${gold}g`, '#ffd24a');
-    this.audio.play('gold');
-    this.mentioneOnce('findGold', MENTOR_LINES.findGold);
+    if (this.depositGold(gold, w.x, w.z, '+%gg') > 0) this.mentioneOnce('findGold', MENTOR_LINES.findGold);
   }
 
   private nearestBladeBearer(x: number, y: number): Creature | null {
@@ -8660,9 +8728,7 @@ export class Game {
     const n = this.heroDownTimes.length;
     if (n < 2) return;
     const bonus = 25 * (n - 1);
-    this.gold += bonus;
-    this.floatWorld(target.wx, target.wz, `STREAK +${bonus}g`, '#ffe080');
-    this.audio.play('gold');
+    this.depositGold(bonus, target.wx, target.wz, 'STREAK +%gg');
     if (n === 2) this.hud.sayNow(MENTOR_LINES.streak2);
     else if (n === 3) this.hud.sayNow(MENTOR_LINES.streak3);
   }
@@ -8743,20 +8809,16 @@ export class Game {
   }
 
   private resolveDown(target: Creature): void {
-    if (target.isHero && target.goldCarried > 0) {
+    if (target.goldCarried > 0) {
       const sack = Math.floor(target.goldCarried);
       target.goldCarried = 0;
-      this.gold += sack;
-      this.floatWorld(target.wx, target.wz, `RECOVERED +${sack}g`, '#ffd24a');
-      this.audio.play('gold');
-      this.hud.sayNow(MENTOR_LINES.lootRecover);
+      const got = this.depositGold(sack, target.wx, target.wz, target.isHero ? 'RECOVERED +%gg' : '+%gg');
+      if (target.isHero && got > 0) this.hud.sayNow(MENTOR_LINES.lootRecover);
     }
     if (target.isHero && !target.bountyPaid) {
       target.bountyPaid = true;
       const bounty = target.isChampion ? 90 : target.kind === CreatureKind.HeroArcher ? 24 : 36;
-      this.gold += bounty;
-      this.floatWorld(target.wx, target.wz, `+${bounty}g`, '#ffd24a');
-      this.audio.play('gold');
+      this.depositGold(bounty, target.wx, target.wz, '+%gg');
       if (target.isChampion) this.hud.sayNow(MENTOR_LINES.championDown);
     }
     if (target.isHero && !target.knockedOut) this.noteHeroDown(target);
@@ -8897,8 +8959,8 @@ export class Game {
     for (const n of this.grid.neighbors4(tx, ty)) n.explored = true;
     this.noteFogChange(this.grid.revealFromTerritory());
     if (nugget) {
-      this.gold += nugget;
-      this.audio.play('gold');
+      const w = this.grid.tileToWorld(tx, ty);
+      this.depositGold(nugget, w.x, w.z, '+%gg');
     }
     this.requestStructuralRebuild();
     this.fogDirty = true;
@@ -8919,7 +8981,6 @@ export class Game {
       this.applyDamage(c, scaled);
       crushed++;
     }
-    if (nugget) this.floatWorld(w.x, w.z, `+${nugget}g`, '#ffd24a');
     this.hud.sayNow(
       wasGold
         ? MENTOR_LINES.caveInGold
@@ -9007,6 +9068,32 @@ export class Game {
     }
   }
 
+  /** Hit the body this creature is chasing. Otherwise the nearest one in reach. */
+  private pickStrike(c: Creature, targets: Creature[]): Creature {
+    if (c.jobTarget) {
+      let aimed: Creature | null = null;
+      let best = 1.25;
+      for (const t of targets) {
+        const d = Math.hypot(t.x - c.jobTarget.x, t.y - c.jobTarget.y);
+        if (d < best) {
+          best = d;
+          aimed = t;
+        }
+      }
+      if (aimed) return aimed;
+    }
+    let nearest = targets[0]!;
+    let bestD = Infinity;
+    for (const t of targets) {
+      const d = Math.hypot(t.x - c.x, t.y - c.y);
+      if (d < bestD) {
+        bestD = d;
+        nearest = t;
+      }
+    }
+    return nearest;
+  }
+
   private doCombat(c: Creature, _dt: number): void {
     try {
     const reach = this.strikeRange(c);
@@ -9029,6 +9116,7 @@ export class Game {
         : [];
     const targets = foes.length ? foes : extra;
     if (!targets.length) return;
+    const target = this.pickStrike(c, targets);
     if (!this.heroEngageAnnounced && (c.isHero || targets.some((t) => t.isHero))) {
       this.heroEngageAnnounced = true;
       this.hud.say(MENTOR_LINES.heroEngage);
@@ -9042,7 +9130,6 @@ export class Game {
     else if (c.kind === CreatureKind.Gravemage || c.kind === CreatureKind.HeroArcher) cd = 1.05;
     else if (c.kind === CreatureKind.Ashreaver) cd = 0.95;
     c.attackCooldown = cd;
-    const target = targets[0];
     c.attackPulse = 1;
     c.faceToward(target.wx, target.wz);
     const bloodMul = !c.isHero && c.bloodedFor > 0 ? PIT_BLOOD_MULT : 1;

@@ -427,11 +427,42 @@ export class Creature {
     this.facingTarget = Math.atan2(dx, dz);
   }
 
+  /**
+   * A rebuilt path starts on the tile we already occupy. Skip that node, and
+   * any waypoint we are already closer to passing, so we never walk backward
+   * to a tile center we have left.
+   */
+  skipPassedWaypoints(grid: Grid): void {
+    if (this.pathIndex === 0 && this.path.length > 1) {
+      const here = this.path[0]!;
+      const w = grid.tileToWorld(here.x, here.y);
+      const dh = Math.hypot(w.x - this.wx, w.z - this.wz);
+      if (Math.round(this.x) === here.x && Math.round(this.y) === here.y && dh > 0.2) {
+        this.pathIndex = 1;
+      }
+    }
+    while (this.pathIndex < this.path.length - 1) {
+      const here = this.path[this.pathIndex]!;
+      const nxt = this.path[this.pathIndex + 1]!;
+      const w = grid.tileToWorld(here.x, here.y);
+      const n = grid.tileToWorld(nxt.x, nxt.y);
+      const dh = Math.hypot(w.x - this.wx, w.z - this.wz);
+      const dn = Math.hypot(n.x - this.wx, n.z - this.wz);
+      if (dh < 0.12 || dn < dh) this.pathIndex++;
+      else break;
+    }
+  }
+
   moveAlongPath(dt: number, grid: Grid): boolean {
     if (this.stunTimer > 0 || this.held || this.knockedOut || this.isPrisoner) {
       this.moving = false;
       return false;
     }
+    if (this.pathIndex >= this.path.length) {
+      this.moving = false;
+      return true;
+    }
+    this.skipPassedWaypoints(grid);
     if (this.pathIndex >= this.path.length) {
       this.moving = false;
       return true;
